@@ -546,14 +546,14 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create a message in the database with the generated image
-    // Note: These standalone AI-generated images don't have an aiFriendId
+    // Note: User-initiated /image commands are credited to the user who submitted them
     const { data: message, error: insertError } = await db
       .from("message")
       .insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: null, // AI-generated messages have null userId
+        userId: userId, // Credit to the user who submitted the command
         chatId: chatId,
         aiFriendId: null, // No specific AI friend for these standalone images
       })
@@ -803,14 +803,14 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create a message in the database with the generated meme
-    // Note: These standalone AI-generated memes don't have an aiFriendId
+    // Note: User-initiated /meme commands are credited to the user who submitted them
     const { data: message, error: insertError } = await db
       .from("message")
       .insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: null, // AI-generated messages have null userId
+        userId: userId, // Credit to the user who submitted the command
         chatId: chatId,
         aiFriendId: null, // No specific AI friend for these standalone memes
       })
