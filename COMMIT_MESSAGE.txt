@@ -1,0 +1,35 @@
+Fix: Complete AI friend messaging implementation
+
+This commit fixes all issues preventing AI friends from sending messages:
+
+Backend Changes:
+- Remove dependency on non-existent ai-assistant user
+- Set userId to null for AI friend messages  
+- Use aiFriendId to identify AI message senders
+- Return aiFriend data in message responses
+
+Database Changes:
+- Made message.userId nullable to support AI friends
+- Updated foreign key constraint to allow NULL userId values
+- Migration: make_message_user_id_nullable
+
+Frontend Changes:
+- Add getSenderName() helper to safely get sender name from user or AI friend
+- Fix all 8 instances of message.user.name access to handle null user
+- Update ProfileImage component to handle null user images
+- Fix Smart Replies schema to allow null userId in message history
+
+iOS Permissions:
+- Add NSCalendarsUsageDescription and NSCalendarsFullAccessUsageDescription
+- Add NSRemindersUsageDescription and NSRemindersFullAccessUsageDescription  
+- Add camera, microphone, and photo library permissions
+
+Result: AI friends (like Gridley) can now successfully respond to @mentions!
+
+Files changed:
+- backend/src/routes/ai.ts
+- src/screens/ChatScreen.tsx
+- shared/contracts.ts
+- app.json
+- current_supabase_schema.sql
+

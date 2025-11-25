@@ -3898,7 +3898,7 @@ const ChatScreen = () => {
               className="text-xs font-medium mb-1 ml-2"
               style={{ color: isAI ? aiColor : "#6B7280", fontSize: 13, fontWeight: isAI ? "600" : "500" }}
             >
-              {isAI ? aiName : message.user.name}
+              {isAI ? aiName : getSenderName(message)}
             </Text>
           )}
           {/* Reply Preview */}
