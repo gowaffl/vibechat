@@ -932,7 +932,8 @@ const GroupSettingsScreen = () => {
     if (!allMessages) return [];
     const userMap = new Map();
     allMessages.forEach((msg) => {
-      if (msg.user && msg.userId !== "ai-assistant") {
+      // Filter out AI messages (userId is null for AI messages)
+      if (msg.user && msg.userId !== null) {
         userMap.set(msg.userId, msg.user);
       }
     });

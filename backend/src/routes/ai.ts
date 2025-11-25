@@ -81,17 +81,6 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    // Get the AI user from database
-    const { data: aiUser } = await db
-      .from("user")
-      .select("*")
-      .eq("id", "ai-assistant")
-      .single();
-
-    if (!aiUser) {
-      return c.json({ error: "AI friend not found" }, 500);
-    }
-
     // Get the specific AI friend (or default to first one if not specified)
     let aiFriend;
     if (aiFriendId) {

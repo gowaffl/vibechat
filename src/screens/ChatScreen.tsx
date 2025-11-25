@@ -2852,13 +2852,17 @@ const ChatScreen = () => {
       return false;
     }
 
+    // Check if this is an AI message (has aiFriendId and userId is null)
+    const isAIMessage = message.aiFriendId && message.userId === null;
+
     console.log("[ChatScreen] canDeleteMessage check:", {
       messageId: message.id,
       messageUserId: message.userId,
       currentUserId: user.id,
       chatCreatorId: chat.creatorId,
       isOwnMessage: message.userId === user.id,
-      isAIMessage: message.userId === "ai" || message.userId === "ai-assistant",
+      isAIMessage,
+      aiFriendId: message.aiFriendId,
       isCreator: chat.creatorId === user.id,
     });
 
@@ -2868,8 +2872,8 @@ const ChatScreen = () => {
       return true;
     }
 
-    // Chat creator can delete AI messages (both "ai" and "ai-assistant")
-    if ((message.userId === "ai" || message.userId === "ai-assistant") && chat.creatorId === user.id) {
+    // Chat creator can delete AI messages (messages with aiFriendId and null userId)
+    if (isAIMessage && chat.creatorId === user.id) {
       console.log("[ChatScreen] Creator can delete AI message");
       return true;
     }
@@ -2886,7 +2890,8 @@ const ChatScreen = () => {
     if (message.userId !== user.id) return false;
 
     // System messages and AI messages cannot be edited
-    if (message.messageType === "system" || message.userId === "ai-assistant") return false;
+    const isAIMessage = message.aiFriendId && message.userId === null;
+    if (message.messageType === "system" || isAIMessage) return false;
 
     // Check if message is within 15 minute window
     const messageAge = Date.now() - new Date(message.createdAt).getTime();
@@ -2903,7 +2908,8 @@ const ChatScreen = () => {
     if (message.userId !== user.id) return false;
 
     // System messages and AI messages cannot be unsent
-    if (message.messageType === "system" || message.userId === "ai-assistant") return false;
+    const isAIMessage = message.aiFriendId && message.userId === null;
+    if (message.messageType === "system" || isAIMessage) return false;
 
     // Already unsent messages cannot be unsent again
     if (message.isUnsent) return false;
@@ -3434,15 +3440,14 @@ const ChatScreen = () => {
 
     const message = item as Message;
     const isCurrentUser = message.userId === user?.id;
-    const isAI = message.userId === "ai-assistant";
+    // AI messages have userId: null and aiFriendId set
+    const isAI = message.aiFriendId && message.userId === null;
     const isSystem = message.messageType === "system" || message.userId === "system";
     
     // Get AI friend information if this is an AI message
-    // First try to use the aiFriend data from the message itself (if available)
-    const aiFriend = isAI && message.aiFriendId 
-      ? aiFriends.find(f => f.id === message.aiFriendId)
-      : isAI && aiFriends.length > 0
-      ? aiFriends[0]  // Fallback for messages without aiFriendId
+    // Use the aiFriend data from the message itself, or from the aiFriends list
+    const aiFriend = message.aiFriendId 
+      ? (message.aiFriend || aiFriends.find(f => f.id === message.aiFriendId))
       : null;
     const aiColor = aiFriend?.color || "#34C759";
     const aiName = aiFriend?.name || "AI Friend";
@@ -3911,7 +3916,11 @@ const ChatScreen = () => {
 
         {/* Profile Photo for others */}
         {!isCurrentUser && (
-          <ProfileImage imageUri={message.user?.image} isAI={isAI} userName={message.user?.name || "Unknown"} />
+          <ProfileImage 
+            imageUri={isAI ? null : message.user?.image} 
+            isAI={isAI} 
+            userName={isAI ? aiName : (message.user?.name || "Unknown")} 
+          />
         )}
 
         {/* Message Content */}
