@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "ios": {
-        "resourceClass": "m1-medium"
+        "resourceClass": "m-medium"
       }
     },
     "preview": {
