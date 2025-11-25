@@ -1,9 +1,8 @@
-import * as fs from "fs/promises";
-import * as path from "path";
 import type { ResponseImageResult } from "./gpt-responses";
+import { uploadFileToStorage } from "./storage";
 
 /**
- * Persist base64-encoded images returned from GPT Responses API into /uploads.
+ * Persist base64-encoded images returned from GPT Responses API into Supabase Storage.
  * Returns the public URLs for any successfully saved images.
  */
 export async function saveResponseImages(
@@ -13,9 +12,6 @@ export async function saveResponseImages(
   if (!images || images.length === 0) {
     return [];
   }
-
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  await fs.mkdir(uploadsDir, { recursive: true });
 
   const saved: string[] = [];
   for (let index = 0; index < images.length; index++) {
@@ -29,12 +25,14 @@ export async function saveResponseImages(
       : image.base64;
     const buffer = Buffer.from(payload, "base64");
     const fileName = `${prefix}-${Date.now()}-${index}.png`;
-    const filePath = path.join(uploadsDir, fileName);
 
-    await fs.writeFile(filePath, buffer);
-    saved.push(`/uploads/${fileName}`);
+    try {
+      const publicUrl = await uploadFileToStorage(fileName, buffer, "image/png");
+      saved.push(publicUrl);
+    } catch (error) {
+      console.error(`[Image Storage] Failed to upload image ${fileName}:`, error);
+    }
   }
 
   return saved;
 }
-

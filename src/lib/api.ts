@@ -15,13 +15,16 @@ import { authClient } from "./authClient";
 /**
  * Backend URL Configuration
  *
- * The backend URL is dynamically set by the Vibecode environment at runtime.
- * Format: https://[UNIQUE_ID].share.sandbox.dev/
- * This allows the app to connect to different backend instances without code changes.
+ * The backend URL should be set in your .env file as EXPO_PUBLIC_API_URL.
+ * If not set, it falls back to localhost for development.
+ * 
+ * Note: For physical devices, you must use your computer's local IP address
+ * (e.g., http://192.168.1.x:3000) instead of localhost.
  */
-const BACKEND_URL = process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL;
-if (!BACKEND_URL) {
-  throw new Error("Backend URL setup has failed. Please contact support@vibecodeapp.com for help.");
+const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL || "http://localhost:3000";
+
+if (!process.env.EXPO_PUBLIC_API_URL && !process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL) {
+  console.warn("⚠️ Backend URL not set in env. using default:", BACKEND_URL);
 }
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";

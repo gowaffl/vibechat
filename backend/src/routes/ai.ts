@@ -262,17 +262,19 @@ Respond naturally and concisely based on the conversation.`;
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create the AI's message in the database with aiFriendId
-    const aiMessage = await db.message.create({
-      data: {
+    const { data: aiMessage, error: createError } = await db.from("message").insert({
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
         userId: "ai-assistant",
         chatId: chatId,
         aiFriendId: aiFriendId,
-      },
-      include: { user: true },
-    });
+    }).select("*, user(*)").single();
+
+    if (createError || !aiMessage) {
+      console.error("[AI] Failed to create message:", createError);
+      throw new Error("Failed to create message in database");
+    }
 
     // Auto-tag AI message for smart threads (fire-and-forget, immediate)
     if (aiResponseText && aiResponseText.trim().length > 0) {
@@ -562,24 +564,24 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create a message in the database with the generated image
-    const aiUser = await db.user.findUnique({
-      where: { id: "ai-assistant" },
-    });
+    const { data: aiUser } = await db.from("user").select("*").eq("id", "ai-assistant").single();
 
     if (!aiUser) {
       return c.json({ error: "AI friend user not found" }, 500);
     }
 
-    const message = await db.message.create({
-      data: {
+    const { data: message, error: createError } = await db.from("message").insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
         userId: "ai-assistant",
         chatId: chatId,
-      },
-      include: { user: true },
-    });
+    }).select("*, user(*)").single();
+
+    if (createError || !message) {
+       console.error("[AI Image] Failed to create message:", createError);
+       return c.json({ error: "Failed to save generated image message" }, 500);
+    }
 
     return c.json({
       id: message.id,
@@ -835,24 +837,24 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create a message in the database with the generated meme
-    const aiUser = await db.user.findUnique({
-      where: { id: "ai-assistant" },
-    });
+    const { data: aiUser } = await db.from("user").select("*").eq("id", "ai-assistant").single();
 
     if (!aiUser) {
       return c.json({ error: "AI friend user not found" }, 500);
     }
 
-    const message = await db.message.create({
-      data: {
+    const { data: message, error: createError } = await db.from("message").insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
         userId: "ai-assistant",
         chatId: chatId,
-      },
-      include: { user: true },
-    });
+    }).select("*, user(*)").single();
+
+    if (createError || !message) {
+       console.error("[AI Meme] Failed to create message:", createError);
+       return c.json({ error: "Failed to save generated meme message" }, 500);
+    }
 
     return c.json({
       id: message.id,
@@ -899,9 +901,7 @@ ai.post("/generate-group-avatar", async (c) => {
     console.log("[AI Avatar] GOOGLE_API_KEY length:", process.env.GOOGLE_API_KEY?.length);
 
     // Get chat
-    const chat = await db.chat.findUnique({
-      where: { id: chatId },
-    });
+    const { data: chat } = await db.from("chat").select("*").eq("id", chatId).single();
 
     if (!chat) {
       return c.json({ error: "Chat not found" }, 404);
@@ -1053,14 +1053,11 @@ ai.post("/generate-group-avatar", async (c) => {
     console.log("[AI Avatar] Avatar saved successfully:", imageUrl);
 
     // Update chat with new avatar
-    await db.chat.update({
-      where: { id: chatId },
-      data: {
+    await db.from("chat").update({
         image: imageUrl,
         lastAvatarGenDate: new Date(),
         avatarPromptUsed: prompt,
-      },
-    });
+    }).eq("id", chatId);
 
     console.log("[AI Avatar] Chat updated with new avatar");
 

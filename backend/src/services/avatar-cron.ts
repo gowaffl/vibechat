@@ -22,9 +22,11 @@ export async function checkAndGenerateAvatar() {
     console.log("[Avatar Cron] Checking if new avatar should be generated...");
 
     // Get group settings
-    const groupSettings = await db.groupSettings.findUnique({
-      where: { id: "global-chat" },
-    });
+    const { data: groupSettings } = await db
+      .from("group_settings")
+      .select("*")
+      .eq("id", "global-chat")
+      .single();
 
     if (!groupSettings) {
       console.log("[Avatar Cron] No group settings found, skipping avatar generation");

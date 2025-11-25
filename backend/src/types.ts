@@ -1,4 +1,4 @@
-import { auth } from "./auth";
+import type { User, Session } from "@supabase/supabase-js";
 
 // ============================================
 // AppType - Shared Hono context type
@@ -14,7 +14,7 @@ import { auth } from "./auth";
 // All routers should use this type: new Hono<AppType>()
 export type AppType = {
   Variables: {
-    user: typeof auth.$Infer.Session.user | null;
-    session: typeof auth.$Infer.Session.session | null;
+    user: User | null;
+    session: Session | null;
   };
 };

@@ -1,23 +1,10 @@
 import { Hono } from "hono";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
-import { type AppType } from "../types";
+import { type AppType } from "../index";
 import { zValidator } from "@hono/zod-validator";
-import { uploadImageRequestSchema, type UploadImageResponse } from "@/shared/contracts";
-
-// ============================================
-// Uploads directory setup
-// ============================================
-// Creates uploads/ directory if it doesn't exist
-// All uploaded images are stored here and served via /uploads/* endpoint
-const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(UPLOADS_DIR)) {
-  console.log("📁 [Upload] Creating uploads directory:", UPLOADS_DIR);
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-} else {
-  console.log("📁 [Upload] Uploads directory exists:", UPLOADS_DIR);
-}
+import { uploadImageRequestSchema, type UploadImageResponse } from "../../../shared/contracts";
+import { uploadFileToStorage } from "../services/storage";
 
 const uploadRouter = new Hono<AppType>();
 
@@ -83,18 +70,16 @@ uploadRouter.post("/image", zValidator("form", uploadImageRequestSchema), async 
     // Generate unique filename to prevent collisions
     const fileExtension = path.extname(image.name);
     const uniqueFilename = `${randomUUID()}${fileExtension}`;
-    const filePath = path.join(UPLOADS_DIR, uniqueFilename);
     console.log(`🔑 [Upload] Generated unique filename: ${uniqueFilename}`);
 
-    // Save file to disk
-    console.log(`💾 [Upload] Saving file to: ${filePath}`);
+    // Save file to Supabase Storage
+    console.log(`💾 [Upload] Uploading file to Supabase Storage...`);
     const arrayBuffer = await image.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    fs.writeFileSync(filePath, buffer);
-    console.log(`✅ [Upload] File saved successfully`);
-
-    // Return the URL to access the uploaded image
-    const imageUrl = `/uploads/${uniqueFilename}`;
+    
+    const imageUrl = await uploadFileToStorage(uniqueFilename, buffer, image.type);
+    console.log(`✅ [Upload] File uploaded successfully`);
+    
     console.log(`🎉 [Upload] Upload complete! Image URL: ${imageUrl}`);
 
     return c.json({

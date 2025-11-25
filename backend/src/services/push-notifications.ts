@@ -20,13 +20,11 @@ export async function sendPushNotification(params: SendPushNotificationParams): 
 
   try {
     // Get the user's push token and notification preferences
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: {
-        pushToken: true,
-        pushNotificationsEnabled: true,
-      },
-    });
+    const { data: user } = await db
+      .from('user')
+      .select('pushToken, pushNotificationsEnabled')
+      .eq('id', userId)
+      .single();
 
     // Check if user has push notifications enabled and has a valid token
     if (!user || !user.pushNotificationsEnabled || !user.pushToken) {
@@ -77,10 +75,11 @@ export async function sendPushNotification(params: SendPushNotificationParams): 
         console.error(`[Push] Error in ticket: ${ticket.message}`);
         if (ticket.details?.error === "DeviceNotRegistered") {
           // Clear the invalid push token
-          await db.user.update({
-            where: { id: userId },
-            data: { pushToken: null },
-          });
+          await db
+            .from('user')
+            .update({ pushToken: null })
+            .eq('id', userId);
+            
           console.log(`[Push] Cleared invalid push token for user ${userId}`);
         }
       }
@@ -102,17 +101,17 @@ export async function sendChatPushNotifications(params: {
 }): Promise<void> {
   try {
     // Get all members of the chat except the sender
-    const members = await db.chatMember.findMany({
-      where: {
-        chatId: params.chatId,
-        userId: { not: params.senderId },
-      },
-      select: { userId: true },
-    });
+    const { data: members } = await db
+      .from('chat_member')
+      .select('userId')
+      .eq('chatId', params.chatId)
+      .neq('userId', params.senderId);
+
+    if (!members) return;
 
     // Send notification to each member
     await Promise.all(
-      members.map((member) =>
+      members.map((member: any) =>
         sendPushNotification({
           userId: member.userId,
           chatId: params.chatId,

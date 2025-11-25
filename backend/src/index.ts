@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 
 import { env } from "./env";
+export type { AppType } from "./types";
 import { uploadRouter } from "./routes/upload";
 import usersRouter from "./routes/users";
 import messagesRouter from "./routes/messages";
