@@ -1,0 +1,1255 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import type { AppType } from "../types";
+import { db } from "../db";
+import { openai } from "../env";
+import { z } from "zod";
+import * as fs from "fs/promises";
+import * as path from "path";
+import {
+  acquireAIResponseLock,
+  releaseAIResponseLock,
+  isAIResponseLocked,
+} from "../services/ai-locks";
+import { executeGPT51Response } from "../services/gpt-responses";
+import { saveResponseImages } from "../services/image-storage";
+import { smartRepliesRequestSchema } from "../../../shared/contracts";
+import { tagMessage } from "../services/message-tagger";
+
+const ai = new Hono<AppType>();
+
+// Request schema for AI chat
+const aiChatRequestSchema = z.object({
+  userId: z.string(),
+  userMessage: z.string(),
+  chatId: z.string(),
+  aiFriendId: z.string().optional(), // Optional AI friend ID to specify which AI to use
+});
+
+// Request schema for image generation
+const generateImageRequestSchema = z.object({
+  prompt: z.string(),
+  userId: z.string(),
+  chatId: z.string(),
+  aspectRatio: z.string().optional().default("1:1"),
+  referenceImageUrls: z.array(z.string()).optional(), // Optional reference images to use as basis
+});
+
+// Request schema for meme generation
+const generateMemeRequestSchema = z.object({
+  prompt: z.string(),
+  userId: z.string(),
+  chatId: z.string(),
+  referenceImageUrl: z.string().optional(), // Optional reference image for meme
+});
+
+// POST /api/ai/chat - Get AI response
+ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
+  const { userId, userMessage, chatId, aiFriendId } = c.req.valid("json");
+
+  try {
+    const requestId = `${chatId}-${Date.now()}`;
+    console.log(`[AI] [${requestId}] Processing AI chat request for chat ${chatId} from user ${userId} with AI friend ${aiFriendId}`);
+    
+    // RACE CONDITION PREVENTION: Acquire lock using shared lock module
+    // This ensures the auto-engagement service and API endpoint can't both respond simultaneously
+    if (!acquireAIResponseLock(chatId)) {
+      console.log(`[AI] [${requestId}] ❌ BLOCKED: Lock already held for chat ${chatId} - response already in progress`);
+      return c.json({
+        error: "AI is already responding to this chat. Please wait.",
+        blocked: true
+      }, 429); // 429 Too Many Requests
+    }
+
+    console.log(`[AI] [${requestId}] ✅ Lock acquired successfully for chat ${chatId}`);
+
+    // NOTE: We intentionally DO NOT check if last message is from AI here.
+    // @ai is a USER-INITIATED command - users should be able to call the AI
+    // even if the AI just responded. The lock ensures we don't interfere with
+    // ongoing AI responses, and prevents duplicate processing.
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Get the AI user from database
+    const { data: aiUser } = await db
+      .from("user")
+      .select("*")
+      .eq("id", "ai-assistant")
+      .single();
+
+    if (!aiUser) {
+      return c.json({ error: "AI friend not found" }, 500);
+    }
+
+    // Get the specific AI friend (or default to first one if not specified)
+    let aiFriend;
+    if (aiFriendId) {
+      const { data: foundFriend } = await db
+        .from("ai_friend")
+        .select("*, chat:chat(*)")
+        .eq("id", aiFriendId)
+        .single();
+      aiFriend = foundFriend;
+
+      if (!aiFriend) {
+        return c.json({ error: "AI friend not found" }, 404);
+      }
+
+      // Verify the AI friend belongs to this chat
+      if (aiFriend.chatId !== chatId) {
+        return c.json({ error: "AI friend does not belong to this chat" }, 400);
+      }
+    } else {
+      // If no aiFriendId specified, use the first AI friend in the chat
+      const { data: foundFriend } = await db
+        .from("ai_friend")
+        .select("*, chat:chat(*)")
+        .eq("chatId", chatId)
+        .order("sortOrder", { ascending: true })
+        .limit(1)
+        .single();
+      aiFriend = foundFriend;
+
+      if (!aiFriend) {
+        return c.json({ error: "No AI friends found in this chat" }, 404);
+      }
+    }
+
+    const chat = aiFriend.chat;
+
+    // Fetch last 100 messages from this chat
+    const { data: allMessages = [] } = await db
+      .from("message")
+      .select("*, user:user(*)")
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: false })
+      .limit(100);
+
+    // Reverse to get chronological order
+    const messagesInOrder = allMessages.reverse();
+
+    // Get last 10 messages for recent context, last 5 for immediate context
+    const recentMessages = messagesInOrder.slice(-10);
+    const lastFiveMessages = messagesInOrder.slice(-5);
+
+    // Analyze conversation timing
+    const now = new Date();
+
+    // Get AI name from AI friend
+    const aiName = aiFriend.name || "AI Friend";
+
+    // Format immediate context (last 5 messages) with time awareness
+    const recentContextText = lastFiveMessages
+      .map((msg) => {
+        const timeAgo = Math.floor((now.getTime() - new Date(msg.createdAt).getTime()) / 1000);
+        const timeDesc = timeAgo < 60 ? "just now" : timeAgo < 300 ? "a few minutes ago" : "earlier";
+
+        if (msg.messageType === "image" && msg.imageDescription) {
+          return `${msg.user.name} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}`;
+        } else if (msg.messageType === "image") {
+          return `${msg.user.name} (${timeDesc}): [shared an image]${msg.content ? ` ${msg.content}"` : ""}`;
+        }
+        return `${msg.user.name} (${timeDesc}): "${msg.content}"`;
+      })
+      .join("\n");
+
+    // Format earlier context for recall (messages 5-10 back)
+    const earlierContext = recentMessages.slice(0, -5);
+    const earlierContextText = earlierContext.length > 0
+      ? earlierContext
+          .map((msg) => `${msg.user.name}: "${msg.content}"`)
+          .join("\n")
+      : "";
+
+    // Extract unique participant names (exclude AI name)
+    const uniqueParticipants = Array.from(
+      new Set(messagesInOrder.map((msg) => msg.user.name).filter((name) => name !== aiName && name !== "AI Friend"))
+    );
+    const participantList = uniqueParticipants.join(", ");
+
+    // Build custom personality instruction if provided
+    let personalityInstruction = "";
+    if (aiFriend.personality) {
+      personalityInstruction = `\n\nYour personality traits: ${aiFriend.personality}`;
+    }
+
+    // Build tone instruction if provided
+    let toneInstruction = "";
+    if (aiFriend.tone) {
+      toneInstruction = `\nYour conversational tone: ${aiFriend.tone}`;
+    }
+
+    // Create an enhanced, natural system prompt
+    const systemPrompt = `You are ${aiName}, a friend in this group chat. Someone just mentioned you (@${aiName}), so they're asking for your input directly.
+
+# Chat Context
+Group: "${chat.name}"${chat.bio ? `\nAbout: ${chat.bio}` : ""}
+Friends in chat: ${participantList}${personalityInstruction}${toneInstruction}
+
+# How to Respond Naturally
+
+**Be conversational:**
+- Talk like a friend texting, not a formal assistant
+- Be concise (1-2 sentences usually, like texting)
+- Use natural language: contractions, casual phrasing
+- Match the group's energy and tone
+- Reference what people just said
+
+**Response style:**
+- Keep it short unless they clearly want detail
+- Start naturally: "oh yeah," "hmm," "totally," "wait," "nah"
+- Be direct and helpful when answering questions
+- Show personality - react authentically
+- If you're not certain, be honest
+
+# Current Conversation
+
+${earlierContextText ? `Earlier:\n${earlierContextText}\n\n` : ""}Recent messages:
+${recentContextText}
+
+Someone mentioned you. Respond naturally like a friend would.`;
+
+    // Construct the user input
+    const userInput = `${userMessage}
+
+Respond naturally and concisely based on the conversation.`;
+
+    const tools = [
+      { type: "web_search" },
+      { type: "image_generation" },
+      { type: "code_interpreter", container: { type: "auto" } },
+    ];
+
+    console.log("[AI] Calling GPT-5.1 Responses API with hosted tools...");
+    const response = await executeGPT51Response({
+      systemPrompt,
+      userPrompt: userInput,
+      tools,
+      reasoningEffort: "none",
+      temperature: 1,
+      maxTokens: 2048,
+    });
+
+    console.log(
+      "[AI] Response received successfully with status:",
+      response.status,
+      "and",
+      response.images.length,
+      "image(s)"
+    );
+
+    const savedImageUrls = await saveResponseImages(response.images, "ai-chat");
+    const primaryImageUrl = savedImageUrls[0] ?? null;
+    const aiResponseText = response.content?.trim() || "";
+
+    if (!aiResponseText && !primaryImageUrl) {
+      console.error("[AI] No text or image found in response");
+      return c.json({ error: "No response from AI" }, 500);
+    }
+
+    // NOTE: No final check here because this is a USER-INITIATED @ai callout.
+    // Users should be able to request AI responses even if AI just responded.
+    // The lock ensures we don't interfere with ongoing AI responses.
+
+    // Create the AI's message in the database with aiFriendId
+    const aiMessage = await db.message.create({
+      data: {
+        content: aiResponseText || "Generated image attached.",
+        messageType: primaryImageUrl ? "image" : "text",
+        imageUrl: primaryImageUrl,
+        userId: "ai-assistant",
+        chatId: chatId,
+        aiFriendId: aiFriendId,
+      },
+      include: { user: true },
+    });
+
+    // Auto-tag AI message for smart threads (fire-and-forget, immediate)
+    if (aiResponseText && aiResponseText.trim().length > 0) {
+      tagMessage(aiMessage.id, aiResponseText).catch(error => {
+        console.error(`[AI] Failed to tag message ${aiMessage.id}:`, error);
+      });
+    }
+
+    // Return the AI message
+    return c.json({
+      id: aiMessage.id,
+      content: aiMessage.content,
+      userId: aiMessage.userId,
+      chatId: aiMessage.chatId,
+      createdAt: aiMessage.createdAt.toISOString(),
+      user: {
+        id: aiUser.id,
+        name: aiUser.name,
+        bio: aiUser.bio,
+        image: aiUser.image,
+        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
+        createdAt: aiUser.createdAt.toISOString(),
+        updatedAt: aiUser.updatedAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("[AI] Error during chat:", error);
+
+    // Log detailed error information
+    if (error instanceof Error) {
+      console.error("[AI] Error name:", error.name);
+      console.error("[AI] Error message:", error.message);
+      console.error("[AI] Error stack:", error.stack);
+    }
+
+    // Check if it's an OpenAI API error
+    if (error && typeof error === 'object' && 'response' in error) {
+      const apiError = error as any;
+      console.error("[AI] API Error response:", JSON.stringify(apiError.response, null, 2));
+    }
+
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return c.json({
+      error: "Failed to get AI response",
+      details: errorMessage
+    }, 500);
+  } finally {
+    // Always release the lock, even if there was an error
+    releaseAIResponseLock(chatId);
+  }
+});
+
+// POST /api/ai/generate-image - Generate image with NANO-BANANA
+ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async (c) => {
+  const { prompt, userId, chatId, aspectRatio, referenceImageUrls } = c.req.valid("json");
+
+  try {
+    const requestId = `img-${chatId}-${Date.now()}`;
+    console.log(`[AI Image] [${requestId}] Generating image for chat ${chatId}`);
+    if (referenceImageUrls && referenceImageUrls.length > 0) {
+      console.log(`[AI Image] [${requestId}] Using ${referenceImageUrls.length} reference image(s):`, referenceImageUrls);
+    }
+
+    // RACE CONDITION PREVENTION: Acquire lock
+    if (!acquireAIResponseLock(chatId)) {
+      console.log(`[AI Image] [${requestId}] ❌ BLOCKED: Lock already held for chat ${chatId}`);
+      return c.json({
+        error: "AI is already responding to this chat. Please wait.",
+        blocked: true
+      }, 429);
+    }
+
+    console.log(`[AI Image] [${requestId}] ✅ Lock acquired successfully`);
+
+    // NOTE: We intentionally DO NOT check if last message is from AI here.
+    // This is a user-initiated command - they should be able to generate images
+    // even if the AI just responded. The FINAL check before saving will still
+    // prevent actual duplicate AI messages in case of race conditions.
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    console.log("[AI Image] Generating image with NANO-BANANA:", prompt);
+    console.log("[AI Image] API Key available:", !!process.env.GOOGLE_API_KEY);
+    console.log("[AI Image] API Key length:", process.env.GOOGLE_API_KEY?.length);
+
+    // If reference images are provided, read them and include in the request
+    const referenceImages: Array<{ base64: string; mimeType: string }> = [];
+
+    if (referenceImageUrls && referenceImageUrls.length > 0) {
+      console.log(`[AI Image] Processing ${referenceImageUrls.length} reference image URL(s)...`);
+      for (const referenceImageUrl of referenceImageUrls) {
+        console.log(`[AI Image] Processing URL: ${referenceImageUrl}`);
+        const imagePath = referenceImageUrl.startsWith('http') 
+          ? null 
+          : `./uploads/${referenceImageUrl.split('/uploads/')[1]}`;
+        
+        console.log(`[AI Image] Resolved image path: ${imagePath}`);
+        
+        if (imagePath) {
+          try {
+            console.log(`[AI Image] Reading image from: ${imagePath}`);
+            const imageBuffer = await fs.readFile(imagePath);
+            const base64 = imageBuffer.toString('base64');
+            
+            // Determine mime type from file extension
+            let mimeType: string;
+            if (imagePath.endsWith('.png')) {
+              mimeType = 'image/png';
+            } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
+              mimeType = 'image/jpeg';
+            } else if (imagePath.endsWith('.webp')) {
+              mimeType = 'image/webp';
+            } else {
+              mimeType = 'image/png'; // default
+            }
+            
+            referenceImages.push({ base64, mimeType });
+            console.log("[AI Image] ✅ Reference image loaded successfully! Size:", imageBuffer.length, "bytes, type:", mimeType);
+          } catch (readError) {
+            console.error("[AI Image] ❌ Failed to read reference image:", readError);
+            // Continue with other images
+          }
+        } else {
+          console.log("[AI Image] ⚠️ Skipping external/http image URL");
+        }
+      }
+    } else {
+      console.log("[AI Image] No reference images provided");
+    }
+
+    // Build the parts array for the API request
+    const parts: any[] = [];
+    
+    // Add all reference images first
+    for (const img of referenceImages) {
+      parts.push({
+        inlineData: {
+          mimeType: img.mimeType,
+          data: img.base64
+        }
+      });
+    }
+    
+    if (referenceImages.length > 0) {
+      console.log(`[AI Image] ✅ Including ${referenceImages.length} reference image(s) in request`);
+    } else {
+      console.log(`[AI Image] ℹ️ No reference images to include, generating from text prompt only`);
+    }
+    
+    // Build the text prompt with explicit instructions about reference images
+    const finalPrompt = referenceImages.length > 0
+      ? `Using the provided reference image(s) as the PRIMARY BASIS and starting point, ${prompt}. IMPORTANT: You MUST use the reference image(s) as the foundation. Keep the main elements, composition, and style from the reference image(s) and apply the requested modifications.`
+      : prompt;
+    
+    // Add the text prompt
+    parts.push({ text: finalPrompt });
+    
+    console.log(`[AI Image] Final prompt:`, finalPrompt);
+    console.log(`[AI Image] Final parts array has ${parts.length} parts (${referenceImages.length} images + 1 text prompt)`);
+
+    // Call NANO-BANANA API
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': process.env.GOOGLE_API_KEY!,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: parts
+          }],
+          generationConfig: {
+            responseModalities: ["Image"],
+            imageConfig: { aspectRatio: aspectRatio || "1:1" }
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[AI Image] NANO-BANANA API error:", errorText);
+
+      // Try to parse error as JSON for better error handling
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use raw text
+        return c.json({ error: "Failed to generate image", details: errorText }, response.status);
+      }
+
+      // Check for rate limiting (429)
+      if (errorData.error?.code === 429 || errorData.error?.status === "RESOURCE_EXHAUSTED") {
+        console.error("[AI Image] Rate limit exceeded");
+        const retryDelay = errorData.error?.details?.find((d: any) => d["@type"]?.includes("RetryInfo"))?.retryDelay;
+
+        return c.json({
+          error: "Image generation rate limit reached",
+          details: `Google Gemini API quota exceeded. ${retryDelay ? `Please retry in ${retryDelay}.` : 'Please try again later.'}`,
+          retryAfter: retryDelay
+        }, 429);
+      }
+
+      // Check for authentication errors
+      if (errorData.error?.code === 401 || errorData.error?.code === 403) {
+        console.error("[AI Image] Authentication error");
+        return c.json({
+          error: "Image generation authentication failed",
+          details: "API key is invalid or missing. Please check your Google API configuration."
+        }, 403);
+      }
+
+      return c.json({
+        error: "Failed to generate image",
+        details: errorData.error?.message || errorText
+      }, response.status);
+    }
+
+    const data = await response.json();
+    console.log("[AI Image] Response data:", JSON.stringify(data, null, 2));
+
+    const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+
+    if (!imagePart) {
+      console.error("[AI Image] No image generated in response");
+      console.error("[AI Image] Full response:", JSON.stringify(data, null, 2));
+
+      // Check finish reason
+      const finishReason = data.candidates?.[0]?.finishReason;
+      console.error("[AI Image] Finish reason:", finishReason);
+
+      // Check if content was blocked
+      if (data.promptFeedback?.blockReason) {
+        console.error("[AI Image] Content blocked:", data.promptFeedback.blockReason);
+        return c.json({
+          error: "Image generation blocked by safety filters. Try a different prompt.",
+          details: data.promptFeedback.blockReason
+        }, 400);
+      }
+
+      // Check if NO_IMAGE finish reason
+      if (finishReason === "NO_IMAGE") {
+        console.error("[AI Image] Model refused to generate image");
+        return c.json({
+          error: "Unable to generate image for this prompt. Try simplifying or changing your request.",
+          details: "Model declined to generate image"
+        }, 400);
+      }
+
+      return c.json({
+        error: "Failed to generate image. Please try a different prompt.",
+        details: finishReason || "Unknown error"
+      }, 500);
+    }
+
+    const base64Image = imagePart.inlineData.data;
+
+    // Save the image to uploads directory
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    const filename = `nano-banana-${Date.now()}.png`;
+    const filepath = path.join(uploadsDir, filename);
+
+    // Write base64 to file
+    await fs.writeFile(filepath, base64Image, { encoding: 'base64' });
+
+    const imageUrl = `/uploads/${filename}`;
+
+    console.log("[AI Image] Image saved successfully:", imageUrl);
+
+    // NOTE: No final check here because this is a USER-INITIATED command.
+    // Users should be able to generate images even if AI just responded.
+    // The lock ensures we don't interfere with ongoing AI responses.
+
+    // Create a message in the database with the generated image
+    const aiUser = await db.user.findUnique({
+      where: { id: "ai-assistant" },
+    });
+
+    if (!aiUser) {
+      return c.json({ error: "AI friend user not found" }, 500);
+    }
+
+    const message = await db.message.create({
+      data: {
+        content: prompt,
+        messageType: "image",
+        imageUrl: imageUrl,
+        userId: "ai-assistant",
+        chatId: chatId,
+      },
+      include: { user: true },
+    });
+
+    return c.json({
+      id: message.id,
+      content: message.content,
+      messageType: message.messageType,
+      imageUrl: message.imageUrl,
+      userId: message.userId,
+      chatId: message.chatId,
+      createdAt: message.createdAt.toISOString(),
+      user: {
+        id: aiUser.id,
+        name: aiUser.name,
+        bio: aiUser.bio,
+        image: aiUser.image,
+        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
+        createdAt: aiUser.createdAt.toISOString(),
+        updatedAt: aiUser.updatedAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("[AI Image] Error generating image:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return c.json({
+      error: "Failed to generate image",
+      details: errorMessage
+    }, 500);
+  } finally {
+    releaseAIResponseLock(chatId);
+  }
+});
+
+// POST /api/ai/generate-meme - Generate meme with NANO-BANANA
+ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (c) => {
+  const { prompt, userId, chatId, referenceImageUrl } = c.req.valid("json");
+
+  try {
+    const requestId = `meme-${chatId}-${Date.now()}`;
+    console.log(`[AI Meme] [${requestId}] Generating meme for chat ${chatId}`);
+
+    // RACE CONDITION PREVENTION: Acquire lock
+    if (!acquireAIResponseLock(chatId)) {
+      console.log(`[AI Meme] [${requestId}] ❌ BLOCKED: Lock already held for chat ${chatId}`);
+      return c.json({
+        error: "AI is already responding to this chat. Please wait.",
+        blocked: true
+      }, 429);
+    }
+
+    console.log(`[AI Meme] [${requestId}] ✅ Lock acquired successfully`);
+
+    // NOTE: We intentionally DO NOT check if last message is from AI here.
+    // This is a user-initiated command - they should be able to generate memes
+    // even if the AI just responded. The FINAL check before saving will still
+    // prevent actual duplicate AI messages in case of race conditions.
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    console.log("[AI Meme] Generating meme with NANO-BANANA:", prompt);
+
+    // Load reference image if provided
+    let referenceImageBase64: string | undefined;
+    let referenceMimeType: string | undefined;
+
+    if (referenceImageUrl) {
+      console.log(`[AI Meme] Processing reference image URL: ${referenceImageUrl}`);
+      const imagePath = referenceImageUrl.startsWith('http') 
+        ? null 
+        : `./uploads/${referenceImageUrl.split('/uploads/')[1]}`;
+      
+      console.log(`[AI Meme] Resolved image path: ${imagePath}`);
+      
+      if (imagePath) {
+        try {
+          console.log(`[AI Meme] Reading image from: ${imagePath}`);
+          const imageBuffer = await fs.readFile(imagePath);
+          referenceImageBase64 = imageBuffer.toString('base64');
+          
+          if (imagePath.endsWith('.png')) {
+            referenceMimeType = 'image/png';
+          } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
+            referenceMimeType = 'image/jpeg';
+          } else if (imagePath.endsWith('.webp')) {
+            referenceMimeType = 'image/webp';
+          } else {
+            referenceMimeType = 'image/png'; // default
+          }
+          console.log("[AI Meme] ✅ Reference image loaded successfully! Size:", imageBuffer.length, "bytes, type:", referenceMimeType);
+        } catch (readError) {
+          console.error("[AI Meme] ❌ Failed to read reference image:", readError);
+          referenceImageBase64 = undefined;
+        }
+      } else {
+        console.log("[AI Meme] ⚠️ Skipping external/http image URL");
+      }
+    } else {
+      console.log("[AI Meme] No reference image provided");
+    }
+
+    // Enhance the prompt for meme generation
+    const memePrompt = referenceImageBase64 
+      ? `IMPORTANT: Use the provided image as the EXACT BASE. Keep this image completely intact and recognizable. ${prompt}. Add ONLY meme-style text overlays in bold impact font style on top of this existing image to make it funny and meme-like. DO NOT change or regenerate the base image - only add text to it.`
+      : `Create a funny meme image with bold text overlay. ${prompt}. Make it humorous and internet meme style with impact font text.`;
+
+    // Build parts array with optional reference image
+    const parts: any[] = [];
+    
+    // CRITICAL: Add the reference image FIRST in the parts array if it exists
+    // The model pays most attention to the first part for image-to-image generation
+    if (referenceImageBase64 && referenceMimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: referenceMimeType,
+          data: referenceImageBase64
+        }
+      });
+      console.log("[AI Meme] ✅ Including reference image in request (FIRST part)");
+    } else {
+      console.log("[AI Meme] ℹ️ No reference image to include, generating from text prompt only");
+    }
+    
+    // Add the text prompt as the second part
+    parts.push({ text: memePrompt });
+    
+    console.log(`[AI Meme] Final parts array has ${parts.length} parts`);
+    console.log(`[AI Meme] Meme prompt: ${memePrompt}`);
+
+    // Call NANO-BANANA API with meme-specific prompt
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': process.env.GOOGLE_API_KEY!,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts
+          }],
+          generationConfig: {
+            responseModalities: ["Image"],
+            imageConfig: { aspectRatio: "1:1" }
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[AI Meme] NANO-BANANA API error:", errorText);
+
+      // Try to parse error as JSON for better error handling
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use raw text
+        return c.json({ error: "Failed to generate meme", details: errorText }, response.status);
+      }
+
+      // Check for rate limiting (429)
+      if (errorData.error?.code === 429 || errorData.error?.status === "RESOURCE_EXHAUSTED") {
+        console.error("[AI Meme] Rate limit exceeded");
+        const retryDelay = errorData.error?.details?.find((d: any) => d["@type"]?.includes("RetryInfo"))?.retryDelay;
+
+        return c.json({
+          error: "Meme generation rate limit reached",
+          details: `Google Gemini API quota exceeded. ${retryDelay ? `Please retry in ${retryDelay}.` : 'Please try again later.'}`,
+          retryAfter: retryDelay
+        }, 429);
+      }
+
+      // Check for authentication errors
+      if (errorData.error?.code === 401 || errorData.error?.code === 403) {
+        console.error("[AI Meme] Authentication error");
+        return c.json({
+          error: "Meme generation authentication failed",
+          details: "API key is invalid or missing. Please check your Google API configuration."
+        }, 403);
+      }
+
+      return c.json({
+        error: "Failed to generate meme",
+        details: errorData.error?.message || errorText
+      }, response.status);
+    }
+
+    const data = await response.json();
+    console.log("[AI Meme] Response data:", JSON.stringify(data, null, 2));
+
+    const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+
+    if (!imagePart) {
+      console.error("[AI Meme] No image generated in response");
+      console.error("[AI Meme] Full response:", JSON.stringify(data, null, 2));
+
+      // Check finish reason
+      const finishReason = data.candidates?.[0]?.finishReason;
+      console.error("[AI Meme] Finish reason:", finishReason);
+
+      // Check if content was blocked
+      if (data.promptFeedback?.blockReason) {
+        console.error("[AI Meme] Content blocked:", data.promptFeedback.blockReason);
+        return c.json({
+          error: "Image generation blocked by safety filters. Try a different prompt.",
+          details: data.promptFeedback.blockReason
+        }, 400);
+      }
+
+      // Check if NO_IMAGE finish reason
+      if (finishReason === "NO_IMAGE") {
+        console.error("[AI Meme] Model refused to generate image");
+        return c.json({
+          error: "Unable to generate meme for this prompt. Try simplifying or changing your request.",
+          details: "Model declined to generate image"
+        }, 400);
+      }
+
+      return c.json({
+        error: "Failed to generate meme. Please try a different prompt.",
+        details: finishReason || "Unknown error"
+      }, 500);
+    }
+
+    const base64Image = imagePart.inlineData.data;
+
+    // Save the meme to uploads directory
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    const filename = `meme-${Date.now()}.png`;
+    const filepath = path.join(uploadsDir, filename);
+
+    // Write base64 to file
+    await fs.writeFile(filepath, base64Image, { encoding: 'base64' });
+
+    const imageUrl = `/uploads/${filename}`;
+
+    console.log("[AI Meme] Meme saved successfully:", imageUrl);
+
+    // NOTE: No final check here because this is a USER-INITIATED command.
+    // Users should be able to generate memes even if AI just responded.
+    // The lock ensures we don't interfere with ongoing AI responses.
+
+    // Create a message in the database with the generated meme
+    const aiUser = await db.user.findUnique({
+      where: { id: "ai-assistant" },
+    });
+
+    if (!aiUser) {
+      return c.json({ error: "AI friend user not found" }, 500);
+    }
+
+    const message = await db.message.create({
+      data: {
+        content: prompt,
+        messageType: "image",
+        imageUrl: imageUrl,
+        userId: "ai-assistant",
+        chatId: chatId,
+      },
+      include: { user: true },
+    });
+
+    return c.json({
+      id: message.id,
+      content: message.content,
+      messageType: message.messageType,
+      imageUrl: message.imageUrl,
+      userId: message.userId,
+      chatId: message.chatId,
+      createdAt: message.createdAt.toISOString(),
+      user: {
+        id: aiUser.id,
+        name: aiUser.name,
+        bio: aiUser.bio,
+        image: aiUser.image,
+        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
+        createdAt: aiUser.createdAt.toISOString(),
+        updatedAt: aiUser.updatedAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("[AI Meme] Error generating meme:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return c.json({
+      error: "Failed to generate meme",
+      details: errorMessage
+    }, 500);
+  } finally {
+    releaseAIResponseLock(chatId);
+  }
+});
+
+// POST /api/ai/generate-group-avatar - Generate chat avatar based on messages
+ai.post("/generate-group-avatar", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { chatId } = body;
+
+    if (!chatId) {
+      return c.json({ error: "chatId is required" }, 400);
+    }
+
+    console.log("[AI Avatar] Starting chat avatar generation for chat:", chatId);
+    console.log("[AI Avatar] GOOGLE_API_KEY available:", !!process.env.GOOGLE_API_KEY);
+    console.log("[AI Avatar] GOOGLE_API_KEY length:", process.env.GOOGLE_API_KEY?.length);
+
+    // Get chat
+    const chat = await db.chat.findUnique({
+      where: { id: chatId },
+    });
+
+    if (!chat) {
+      return c.json({ error: "Chat not found" }, 404);
+    }
+
+    // Check if avatar was already generated today (Eastern time)
+    const getEasternDate = (date: Date = new Date()): string => {
+      return date.toLocaleDateString("en-US", { 
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      });
+    };
+
+    const todayEastern = getEasternDate();
+
+    if (chat.lastAvatarGenDate) {
+      const lastGenDateEastern = getEasternDate(new Date(chat.lastAvatarGenDate));
+
+      if (lastGenDateEastern === todayEastern) {
+        console.log("[AI Avatar] Avatar already generated today (Eastern time)");
+        return c.json({
+          message: "Avatar already generated today. Come back tomorrow!",
+          imageUrl: chat.image,
+          alreadyGenerated: true
+        });
+      }
+    }
+
+    // Fetch last 100 messages from this chat
+    const { data: recentMessages = [] } = await db
+      .from("message")
+      .select("*, user:user(*)")
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: false })
+      .limit(100);
+
+    let prompt: string;
+
+    if (recentMessages.length === 0) {
+      // No messages, generate based on chat name
+      prompt = `Create a beautiful, modern, and vibrant group chat avatar image for a chat group named "${chat.name}". ${chat.bio ? `The group is about: ${chat.bio}. ` : ""}Make it colorful, friendly, and welcoming. The image should represent community and conversation.`;
+      console.log("[AI Avatar] No messages found, generating based on chat name");
+    } else {
+      // Analyze messages to create prompt
+      const messagesInOrder = recentMessages.reverse();
+
+      // Collect key themes and topics from messages
+      const messageContents = messagesInOrder
+        .map(msg => {
+          if (msg.messageType === "image" && msg.imageDescription) {
+            return msg.imageDescription;
+          }
+          return msg.content;
+        })
+        .filter(content => content && content.trim().length > 0)
+        .join(" ");
+
+      prompt = `Analyze the following conversation and determine the main topic, theme, and overall sentiment. Then create a beautiful, modern group chat avatar image that represents that primary theme and sentiment. Do not try to combine multiple elements or create a mashup. Focus on creating a clean, cohesive image that captures the essence of what the conversation was mainly about. Conversation: "${messageContents.substring(0, 800)}". Make the avatar colorful, modern, and visually appealing.`;
+      console.log("[AI Avatar] Generating based on message content");
+    }
+
+    console.log("[AI Avatar] Using prompt:", prompt.substring(0, 100) + "...");
+
+    // Call NANO-BANANA API to generate avatar
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': process.env.GOOGLE_API_KEY!,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            responseModalities: ["Image"],
+            imageConfig: { aspectRatio: "1:1" }
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[AI Avatar] NANO-BANANA API error:", errorText);
+
+      // Try to parse error as JSON for better error handling
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use raw text
+        return c.json({ error: "Failed to generate avatar", details: errorText }, response.status);
+      }
+
+      // Check for rate limiting (429)
+      if (errorData.error?.code === 429 || errorData.error?.status === "RESOURCE_EXHAUSTED") {
+        console.error("[AI Avatar] Rate limit exceeded");
+        const retryDelay = errorData.error?.details?.find((d: any) => d["@type"]?.includes("RetryInfo"))?.retryDelay;
+
+        return c.json({
+          error: "Avatar generation rate limit reached",
+          details: `Google Gemini API quota exceeded. ${retryDelay ? `Please retry in ${retryDelay}.` : 'Please try again later.'}`,
+          retryAfter: retryDelay
+        }, 429);
+      }
+
+      // Check for authentication errors
+      if (errorData.error?.code === 401 || errorData.error?.code === 403) {
+        console.error("[AI Avatar] Authentication error");
+        return c.json({
+          error: "Avatar generation authentication failed",
+          details: "API key is invalid or missing. Please check your Google API configuration."
+        }, 403);
+      }
+
+      return c.json({
+        error: "Failed to generate avatar",
+        details: errorData.error?.message || errorText
+      }, response.status);
+    }
+
+    const data = await response.json();
+    const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+
+    if (!imagePart) {
+      console.error("[AI Avatar] No image generated in response");
+      return c.json({ error: "No avatar generated" }, 500);
+    }
+
+    const base64Image = imagePart.inlineData.data;
+
+    // Save the avatar to uploads directory
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    const filename = `group-avatar-${Date.now()}.png`;
+    const filepath = path.join(uploadsDir, filename);
+
+    // Write base64 to file
+    await fs.writeFile(filepath, base64Image, { encoding: 'base64' });
+
+    const imageUrl = `/uploads/${filename}`;
+
+    console.log("[AI Avatar] Avatar saved successfully:", imageUrl);
+
+    // Update chat with new avatar
+    await db.chat.update({
+      where: { id: chatId },
+      data: {
+        image: imageUrl,
+        lastAvatarGenDate: new Date(),
+        avatarPromptUsed: prompt,
+      },
+    });
+
+    console.log("[AI Avatar] Chat updated with new avatar");
+
+    return c.json({
+      message: "Avatar generated successfully",
+      imageUrl: imageUrl,
+      prompt: prompt,
+      alreadyGenerated: false
+    });
+  } catch (error) {
+    console.error("[AI Avatar] Error generating avatar:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return c.json({
+      error: "Failed to generate avatar",
+      details: errorMessage
+    }, 500);
+  }
+});
+
+// POST /api/ai/smart-replies - Generate contextual smart replies
+ai.post("/smart-replies", zValidator("json", smartRepliesRequestSchema), async (c) => {
+  const { chatId, userId, lastMessages } = c.req.valid("json");
+
+  try {
+    console.log("=== [Smart Replies] Starting generation ===");
+    console.log("[Smart Replies] Chat ID:", chatId);
+    console.log("[Smart Replies] User ID:", userId);
+    console.log("[Smart Replies] Last messages count:", lastMessages.length);
+    console.log("[Smart Replies] Last messages:", JSON.stringify(lastMessages, null, 2));
+
+    // Don't generate if the last message is from the current user
+    const lastMessage = lastMessages[lastMessages.length - 1];
+    if (lastMessages.length > 0 && lastMessage?.isCurrentUser) {
+      console.log("[Smart Replies] Last message is from current user, skipping");
+      return c.json({ replies: [] });
+    }
+
+    // Build conversation context with emphasis on the most recent message
+    const conversationLines = lastMessages.map((msg, index) => {
+      const isLast = index === lastMessages.length - 1;
+      const prefix = isLast ? ">>> MOST RECENT" : "Earlier";
+      return `${prefix} - ${msg.userName}: ${msg.content}`;
+    });
+    const conversationContext = conversationLines.join("\n");
+
+    console.log("[Smart Replies] Conversation context:", conversationContext);
+    console.log("[Smart Replies] Calling OpenAI with model: gpt-5-mini");
+
+    // Call GPT-5 mini to generate smart replies with optimized parameters
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert at generating contextual quick reply suggestions for chat conversations.
+
+YOUR TASK:
+Generate exactly 3 natural, contextually relevant quick reply suggestions that directly respond to the MOST RECENT message in the conversation.
+
+CRITICAL RULES:
+1. Focus primarily on the MOST RECENT message (marked with >>>) - this is what you're replying to
+2. Use earlier messages ONLY for additional context about tone and relationship
+3. Each reply must be SHORT (2-6 words maximum)
+4. Replies must sound NATURAL and CONVERSATIONAL
+5. Match the tone: casual, friendly, professional, humorous, etc.
+6. Vary the replies - give different types of responses (agreement, question, statement, emoji-enhanced)
+7. Make replies ACTIONABLE - things a real person would actually send
+
+OUTPUT FORMAT (CRITICAL):
+- Generate EXACTLY 3 replies
+- One reply per line
+- NO numbering, NO bullets, NO quotes, NO markdown, NO extra text
+- Just the raw reply text, nothing else
+- Each reply on a new line
+
+EXAMPLES:
+If someone says "Want to grab lunch?"
+Sure, when works?
+Sounds great!
+What time? 🍕
+
+If someone says "I'm so tired"
+Same here 😴
+Get some rest!
+Coffee time? ☕`,
+        },
+        {
+          role: "user",
+          content: `Generate quick reply suggestions for this conversation:\n\n${conversationContext}`,
+        },
+      ],
+      // GPT-5-mini only supports default temperature (1) and no top_p
+      max_completion_tokens: 2048, // Increased token limit to prevent truncation errors
+    });
+
+    console.log("[Smart Replies] OpenAI response received");
+    console.log("[Smart Replies] Full completion object:", JSON.stringify(completion, null, 2));
+    
+    const responseText = completion.choices[0]?.message?.content?.trim() || "";
+    console.log("[Smart Replies] Raw response text:", JSON.stringify(responseText));
+    console.log("[Smart Replies] Response length:", responseText.length);
+    
+    // Parse the replies with enhanced cleaning
+    let replies = responseText
+      .split("\n")
+      .map(r => {
+        // Remove common prefixes/suffixes that AI might add
+        let cleaned = r.trim();
+        // Remove numbered lists (1., 2., etc.)
+        cleaned = cleaned.replace(/^\d+[\.\)]\s*/, "");
+        // Remove bullet points (-, *, •)
+        cleaned = cleaned.replace(/^[-*•]\s*/, "");
+        // Remove quotes
+        cleaned = cleaned.replace(/^["'](.*)["']$/, "$1");
+        return cleaned.trim();
+      })
+      .filter(r => {
+        // Filter criteria:
+        // - Must have content
+        // - Not too short (at least 1 char)
+        // - Not too long (max 100 chars)
+        // - Not just punctuation or numbers
+        return r.length > 0 && 
+               r.length <= 100 && 
+               /[a-zA-Z0-9]/.test(r);
+      });
+    
+    console.log("[Smart Replies] Parsed replies count:", replies.length);
+    console.log("[Smart Replies] Parsed replies:", JSON.stringify(replies, null, 2));
+    
+    // Take exactly 3 replies (as requested in prompt)
+    if (replies.length > 3) {
+      replies = replies.slice(0, 3);
+      console.log("[Smart Replies] Trimmed to 3 replies:", JSON.stringify(replies));
+    }
+    
+    // If we got fewer than 3 or no replies, log detailed error
+    if (replies.length === 0) {
+      console.error("[Smart Replies] ⚠️ AI generated no usable replies!");
+      console.error("[Smart Replies] Raw response was:", responseText);
+      console.error("[Smart Replies] Finish reason:", completion.choices[0]?.finish_reason);
+      console.error("[Smart Replies] Usage:", JSON.stringify(completion.usage));
+      return c.json({ replies: [] });
+    }
+    
+    if (replies.length < 3) {
+      console.warn("[Smart Replies] ⚠️ Only generated", replies.length, "replies (expected 3)");
+      console.warn("[Smart Replies] Returning what we got:", JSON.stringify(replies));
+    }
+
+    console.log("[Smart Replies] ✅ Successfully generated", replies.length, "replies:", JSON.stringify(replies));
+    console.log("=== [Smart Replies] Complete ===");
+
+    return c.json({ replies });
+  } catch (error) {
+    console.error("=== [Smart Replies] ❌ ERROR ===");
+    console.error("[Smart Replies] Error type:", error instanceof Error ? error.constructor.name : typeof error);
+    console.error("[Smart Replies] Error message:", error instanceof Error ? error.message : String(error));
+    console.error("[Smart Replies] Full error:", JSON.stringify(error, null, 2));
+    
+    // Check if it's an OpenAI API error
+    if (error && typeof error === 'object') {
+      const apiError = error as any;
+      if (apiError.response) {
+        console.error("[Smart Replies] API Error response:", JSON.stringify(apiError.response, null, 2));
+      }
+      if (apiError.status) {
+        console.error("[Smart Replies] API Error status:", apiError.status);
+      }
+      if (apiError.code) {
+        console.error("[Smart Replies] API Error code:", apiError.code);
+      }
+    }
+    console.error("=== [Smart Replies] ERROR END ===");
+
+    // For connection errors to OpenAI proxy, gracefully return empty replies
+    // This prevents frontend errors for a non-critical feature
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    if (errorMessage.includes("Connection error") || errorMessage.includes("ConnectionRefused") || errorMessage.includes("FailedToOpenSocket")) {
+      console.log("[Smart Replies] Connection error detected - returning empty replies gracefully");
+      return c.json({ replies: [] }); // Graceful degradation for connection issues
+    }
+
+    // For other errors, return error response
+    return c.json({
+      error: "Failed to generate smart replies",
+      details: errorMessage
+    }, 500);
+  }
+});
+
+export default ai;
