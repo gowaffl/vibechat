@@ -80,17 +80,6 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    // Get the AI user from database
-    const { data: aiUser } = await db
-      .from("user")
-      .select("*")
-      .eq("id", "ai-assistant")
-      .single();
-
-    if (!aiUser) {
-      return c.json({ error: "AI friend not found" }, 500);
-    }
-
     // Get the specific AI friend (or default to first one if not specified)
     let aiFriend;
     if (aiFriendId) {
@@ -274,14 +263,15 @@ Respond naturally and concisely based on the conversation.`;
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create the AI's message in the database with aiFriendId
+    // Use the AI friend's ID as the userId
     const { data: aiMessage, error: createError } = await db.from("message").insert({
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: "ai-assistant",
+        userId: aiFriend.id,
         chatId: chatId,
         aiFriendId: aiFriendId,
-    }).select("*, user(*)").single();
+    }).select("*, aiFriend:ai_friend(*)").single();
 
     if (createError || !aiMessage) {
       console.error("[AI] Failed to create message:", createError);
@@ -295,24 +285,20 @@ Respond naturally and concisely based on the conversation.`;
       });
     }
 
-    // Return the AI message
+    // Return the AI message with AI friend data
     return c.json({
       id: aiMessage.id,
       content: aiMessage.content,
       userId: aiMessage.userId,
       chatId: aiMessage.chatId,
-      createdAt: aiMessage.createdAt.toISOString(),
-      user: {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: aiUser.createdAt.toISOString(),
-        updatedAt: aiUser.updatedAt.toISOString(),
-      },
+      aiFriendId: aiMessage.aiFriendId,
+      createdAt: aiMessage.createdAt,
+      aiFriend: aiMessage.aiFriend,
     });
   } catch (error) {
+    console.error("=".repeat(80));
+    console.error("[AI] ❌ ERROR OCCURRED IN AI CHAT ROUTE");
+    console.error("=".repeat(80));
     console.error("[AI] Error during chat:", error);
 
     // Log detailed error information
@@ -327,6 +313,8 @@ Respond naturally and concisely based on the conversation.`;
       const apiError = error as any;
       console.error("[AI] API Error response:", JSON.stringify(apiError.response, null, 2));
     }
+
+    console.error("=".repeat(80));
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return c.json({
