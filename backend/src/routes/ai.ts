@@ -94,11 +94,17 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
     // Get the specific AI friend (or default to first one if not specified)
     let aiFriend;
     if (aiFriendId) {
-      const { data: foundFriend } = await db
+      const { data: foundFriend, error: friendError } = await db
         .from("ai_friend")
         .select("*, chat:chat(*)")
         .eq("id", aiFriendId)
         .single();
+      
+      if (friendError) {
+        console.error(`[AI] Error fetching AI friend:`, friendError);
+        return c.json({ error: "AI friend not found", details: friendError.message }, 404);
+      }
+      
       aiFriend = foundFriend;
 
       if (!aiFriend) {
@@ -111,13 +117,19 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       }
     } else {
       // If no aiFriendId specified, use the first AI friend in the chat
-      const { data: foundFriend } = await db
+      const { data: foundFriend, error: friendError } = await db
         .from("ai_friend")
         .select("*, chat:chat(*)")
         .eq("chatId", chatId)
         .order("sortOrder", { ascending: true })
         .limit(1)
         .single();
+      
+      if (friendError) {
+        console.error(`[AI] Error fetching AI friend:`, friendError);
+        return c.json({ error: "No AI friends found in this chat", details: friendError.message }, 404);
+      }
+      
       aiFriend = foundFriend;
 
       if (!aiFriend) {
