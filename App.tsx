@@ -13,10 +13,6 @@ import { useEffect, useRef } from "react";
 const linking = {
   prefixes: [
     "vibechat://",
-    "https://vibecode.app",
-    "http://vibecode.app",
-    "https://www.vibecodeapp.com/s/cmhti2aui00ff07hq5y289ccg",
-    "https://www.vibecodeapp.com/projects/019a6a66-f9c6-77fb-9eac-f09942694cf3"
   ],
   config: {
     screens: {

@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 
 import type { RootStackParamList } from "@/navigation/types";
+import TabNavigator from "@/navigation/TabNavigator";
 import ChatScreen from "@/screens/ChatScreen";
 import ChatListScreen from "@/screens/ChatListScreen";
 import InviteMembersScreen from "@/screens/InviteMembersScreen";
@@ -41,7 +42,7 @@ const RootNavigator = () => {
     // We can grab userId from context inside the screen if params are missing.
     initialRoute = "Birthdate"; 
   } else if (user?.hasCompletedOnboarding) {
-    initialRoute = "ChatList";
+    initialRoute = "MainTabs";
   } else {
     initialRoute = "OnboardingName";
   }
@@ -80,6 +81,13 @@ const RootNavigator = () => {
       <RootStack.Screen
         name="OnboardingPhoto"
         component={OnboardingPhotoScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <RootStack.Screen
+        name="MainTabs"
+        component={TabNavigator}
         options={{
           headerShown: false,
         }}

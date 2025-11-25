@@ -152,6 +152,7 @@ const GroupSettingsScreen = () => {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [isAddingCommand, setIsAddingCommand] = useState(false);
   const [editingCommandId, setEditingCommandId] = useState<string | null>(null);
   const [newCommand, setNewCommand] = useState("");
@@ -227,9 +228,8 @@ const GroupSettingsScreen = () => {
       // Set invite token and link from chat data
       if (chat.inviteToken) {
         setInviteToken(chat.inviteToken);
-        // Use the projects URL format with the project ID from environment
-        const projectId = process.env.EXPO_PUBLIC_VIBECODE_PROJECT_ID || "019a6a66-f9c6-77fb-9eac-f09942694cf3";
-        setInviteLink(`https://www.vibecodeapp.com/projects/${projectId}?invite=${chat.inviteToken}`);
+        // Use custom scheme for invite link
+        setInviteLink(`vibechat://invite?token=${chat.inviteToken}`);
       }
 
       // Convert relative image URL to full URL
@@ -243,6 +243,32 @@ const GroupSettingsScreen = () => {
       }
     }
   }, [chat]);
+
+  // Update navigation header
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => (
+        <View className="flex-row items-center">
+          <View className="items-center">
+            <View className="flex-row items-center gap-2">
+              <Text className="text-lg font-bold text-white">{chat?.name || "Group Settings"}</Text>
+              <Pressable
+                onPress={() => setShowEditProfileModal(true)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+              >
+                <Edit2 size={16} color="#FFFFFF" />
+              </Pressable>
+            </View>
+            {chat?.bio ? (
+              <Text className="text-xs text-gray-400 mt-0.5" numberOfLines={1}>
+                {chat.bio}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      ),
+    });
+  }, [navigation, chat?.name, chat?.bio]);
 
   // Auto-select first AI friend when data loads
   React.useEffect(() => {
@@ -401,7 +427,7 @@ const GroupSettingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ["chats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Navigate back to chat list
-      navigation.navigate("ChatList");
+      navigation.navigate("MainTabs", { screen: "Chats" });
     },
     onError: (error: any) => {
       console.error("[GroupSettings] Failed to delete chat:", error);
@@ -631,6 +657,28 @@ const GroupSettingsScreen = () => {
     );
   };
 
+  const handleUpdateAvatar = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert(
+      "Update Group Photo",
+      "Choose how you want to update the group photo",
+      [
+        {
+          text: "Take Photo",
+          onPress: takePhoto,
+        },
+        {
+          text: "Choose from Gallery",
+          onPress: pickImageFromGallery,
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]
+    );
+  };
+
   const pickImageFromGallery = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -663,6 +711,22 @@ const GroupSettingsScreen = () => {
     if (!result.canceled && result.assets[0]) {
       uploadImageMutation.mutate(result.assets[0].uri);
     }
+  };
+
+  const handleSaveProfile = () => {
+    if (!name.trim()) {
+      Alert.alert("Error", "Group name cannot be empty");
+      return;
+    }
+
+    updateSettingsMutation.mutate(
+      { name, bio },
+      {
+        onSuccess: () => {
+          setShowEditProfileModal(false);
+        },
+      }
+    );
   };
 
   const handleSaveName = () => {
@@ -1050,216 +1114,34 @@ const GroupSettingsScreen = () => {
                       </LinearGradient>
                     </BlurView>
                   </View>
+
+                  {/* Camera Button (Moved to bottom left) */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                    }}
+                  >
+                    <Pressable onPress={handleUpdateAvatar}>
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          backgroundColor: "rgba(255, 255, 255, 0.15)",
+                          borderWidth: 1,
+                          borderColor: "rgba(255, 255, 255, 0.2)",
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Camera size={16} color="#FFFFFF" />
+                      </View>
+                    </Pressable>
+                  </View>
                 </View>
               </Pressable>
-
-              <View className="flex-row gap-4 mt-4">
-                <Pressable onPress={takePhoto} className="items-center">
-                  <View
-                    className="w-14 h-14 rounded-full items-center justify-center"
-                    style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.15)",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.2)",
-                      shadowColor: "#007AFF",
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.3,
-                      shadowRadius: 4,
-                      elevation: 2,
-                    }}
-                  >
-                    <Camera size={24} color="#FFFFFF" />
-                  </View>
-                  <Text className="text-xs mt-2" style={{ color: "#8E8E93" }}>Camera</Text>
-                </Pressable>
-
-                <Pressable onPress={pickImageFromGallery} className="items-center">
-                  <View
-                    className="w-14 h-14 rounded-full items-center justify-center"
-                    style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.15)",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.2)",
-                      shadowColor: "#007AFF",
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.3,
-                      shadowRadius: 4,
-                      elevation: 2,
-                    }}
-                  >
-                    <Upload size={24} color="#FFFFFF" />
-                  </View>
-                  <Text className="text-xs mt-2" style={{ color: "#8E8E93" }}>Gallery</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Group Name */}
-            <View
-              className="rounded-2xl p-5 mb-4"
-              style={{
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.2)",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 2,
-              }}
-            >
-              <Text className="text-sm font-semibold mb-2" style={{ color: "#8E8E93" }}>
-                GROUP NAME
-              </Text>
-              {isEditingName ? (
-                <View>
-                  <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    className="rounded-lg px-4 py-3 text-base mb-3"
-                    style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.1)",
-                    }}
-                    placeholder="Enter group name"
-                    placeholderTextColor="#666666"
-                    autoFocus
-                    maxLength={50}
-                  />
-                  <View className="flex-row gap-2">
-                    <Pressable
-                      onPress={handleSaveName}
-                      className="flex-1"
-                      disabled={updateSettingsMutation.isPending}
-                    >
-                      <View
-                        style={{
-                          borderRadius: 10,
-                          padding: 12,
-                          alignItems: "center",
-                          backgroundColor: "rgba(0, 122, 255, 0.15)",
-                          borderWidth: 1,
-                          borderColor: "#007AFF",
-                        }}
-                      >
-                        {updateSettingsMutation.isPending ? (
-                          <ActivityIndicator color="#FFFFFF" size="small" />
-                        ) : (
-                          <Text className="text-white font-semibold">Save</Text>
-                        )}
-                      </View>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => {
-                        setName(chat?.name || "");
-                        setIsEditingName(false);
-                      }}
-                      className="px-6 py-3 rounded-lg"
-                      style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.1)",
-                        borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.2)",
-                      }}
-                    >
-                      <Text className="font-semibold" style={{ color: "#FFFFFF" }}>Cancel</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <Pressable onPress={() => setIsEditingName(true)}>
-                  <Text className="text-lg font-semibold" style={{ color: "#FFFFFF" }}>
-                    {chat?.name}
-                  </Text>
-                  <Text className="text-sm mt-1" style={{ color: "#007AFF" }}>Tap to edit</Text>
-                </Pressable>
-              )}
-            </View>
-
-            {/* Group Bio */}
-            <View
-              className="rounded-2xl p-5 mb-4"
-              style={{
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.2)",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 2,
-              }}
-            >
-              <Text className="text-sm font-semibold mb-2" style={{ color: "#8E8E93" }}>
-                GROUP BIO
-              </Text>
-              {isEditingBio ? (
-                <View>
-                  <TextInput
-                    value={bio}
-                    onChangeText={setBio}
-                    className="rounded-lg px-4 py-3 text-base mb-3"
-                    style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.1)",
-                    }}
-                    placeholder="Enter group bio (optional)"
-                    placeholderTextColor="#666666"
-                    multiline
-                    numberOfLines={3}
-                    autoFocus
-                    maxLength={200}
-                  />
-                  <View className="flex-row gap-2">
-                    <Pressable
-                      onPress={handleSaveBio}
-                      className="flex-1"
-                      disabled={updateSettingsMutation.isPending}
-                    >
-                      <View
-                        style={{
-                          borderRadius: 10,
-                          padding: 12,
-                          alignItems: "center",
-                          backgroundColor: "rgba(0, 122, 255, 0.15)",
-                          borderWidth: 1,
-                          borderColor: "#007AFF",
-                        }}
-                      >
-                        {updateSettingsMutation.isPending ? (
-                          <ActivityIndicator color="#FFFFFF" size="small" />
-                        ) : (
-                          <Text className="text-white font-semibold">Save</Text>
-                        )}
-                      </View>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => {
-                        setBio(chat?.bio || "");
-                        setIsEditingBio(false);
-                      }}
-                      className="px-6 py-3 rounded-lg"
-                      style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.1)",
-                        borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.2)",
-                      }}
-                    >
-                      <Text className="font-semibold" style={{ color: "#FFFFFF" }}>Cancel</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <Pressable onPress={() => setIsEditingBio(true)}>
-                  <Text className="text-base" style={{ color: "#FFFFFF" }}>
-                    {chat?.bio || "No bio yet"}
-                  </Text>
-                  <Text className="text-sm mt-1" style={{ color: "#007AFF" }}>Tap to edit</Text>
-                </Pressable>
-              )}
             </View>
 
             {/* Photos Section */}
@@ -2423,6 +2305,118 @@ const GroupSettingsScreen = () => {
             </Pressable>
           </Modal>
         )}
+
+        {/* Edit Profile Modal */}
+        <Modal
+          visible={showEditProfileModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowEditProfileModal(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <Pressable 
+              style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }} 
+              onPress={() => setShowEditProfileModal(false)}
+            />
+            <View
+              style={{
+                backgroundColor: "#1A1A1A",
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+                paddingTop: 24,
+                paddingBottom: insets.bottom + 24,
+                paddingHorizontal: 20,
+                maxHeight: "80%",
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <Text style={{ fontSize: 20, fontWeight: "bold", color: "#FFFFFF" }}>
+                  Edit Group Info
+                </Text>
+                <Pressable
+                  onPress={() => setShowEditProfileModal(false)}
+                  style={{ padding: 4 }}
+                >
+                  <X size={24} color="#FFFFFF" />
+                </Pressable>
+              </View>
+
+              <View className="mb-6">
+                <Text className="text-sm font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                  GROUP NAME
+                </Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  className="rounded-lg px-4 py-3 text-base"
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.05)",
+                    color: "#FFFFFF",
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 255, 255, 0.1)",
+                  }}
+                  placeholder="Enter group name"
+                  placeholderTextColor="#666666"
+                  maxLength={50}
+                />
+              </View>
+
+              <View className="mb-8">
+                <Text className="text-sm font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                  GROUP BIO
+                </Text>
+                <TextInput
+                  value={bio}
+                  onChangeText={setBio}
+                  className="rounded-lg px-4 py-3 text-base"
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.05)",
+                    color: "#FFFFFF",
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    minHeight: 100,
+                    textAlignVertical: "top",
+                  }}
+                  placeholder="Enter group bio (optional)"
+                  placeholderTextColor="#666666"
+                  multiline
+                  numberOfLines={4}
+                  maxLength={200}
+                />
+              </View>
+
+              <Pressable
+                onPress={handleSaveProfile}
+                disabled={updateSettingsMutation.isPending}
+                style={({ pressed }) => ({
+                  opacity: pressed || updateSettingsMutation.isPending ? 0.7 : 1,
+                })}
+              >
+                <LinearGradient
+                  colors={["#8B5CF6", "#6366F1"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    borderRadius: 12,
+                    paddingVertical: 16,
+                    alignItems: "center",
+                  }}
+                >
+                  {updateSettingsMutation.isPending ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "bold" }}>
+                      Save Changes
+                    </Text>
+                  )}
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {/* Invite Link Modal */}
         <Modal

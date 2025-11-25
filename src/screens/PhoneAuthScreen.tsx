@@ -172,7 +172,7 @@ export default function PhoneAuthScreen() {
              });
          }, 500);
       } else if (user.hasCompletedOnboarding) {
-        navigation.navigate("ChatList");
+        navigation.navigate("MainTabs");
       } else {
         navigation.navigate("OnboardingName");
       }
@@ -229,7 +229,7 @@ export default function PhoneAuthScreen() {
             </Text>
             <Text style={styles.subtitle}>
               {step === "phone"
-                ? "WhatsApp will need to verify your account. Carrier charges may apply."
+                ? "VibeChat will need to verify your account. Carrier charges may apply."
                 : `Enter the code we sent to ${phone}`}
             </Text>
           </View>

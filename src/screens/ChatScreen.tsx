@@ -19,11 +19,12 @@ import {
   StyleSheet,
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
+  Share,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -80,6 +81,7 @@ const ChatHeader = ({
   onBookmarksPress,
   onThreadsPress,
   onEventsPress,
+  onInvitePress,
 }: { 
   chatName: string; 
   chatImage: string | null; 
@@ -89,6 +91,7 @@ const ChatHeader = ({
   onBookmarksPress: () => void;
   onThreadsPress: () => void;
   onEventsPress: () => void;
+  onInvitePress: () => void;
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -159,7 +162,11 @@ const ChatHeader = ({
         <Pressable
           onPress={() => {
             Haptics.selectionAsync();
-            (navigation as any).navigate("ChatList");
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              (navigation as any).navigate("MainTabs", { screen: "Chats" });
+            }
           }}
         >
           <View
@@ -424,12 +431,12 @@ const ChatHeader = ({
 
                 <View style={{ height: 1, backgroundColor: "rgba(255, 255, 255, 0.1)", marginVertical: 8 }} />
 
-                {/* Profile Settings Option */}
+                {/* Send Invite Option */}
                 <Pressable
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setShowOptionsMenu(false);
-                    (navigation as any).navigate("Profile");
+                    onInvitePress();
                   }}
                   style={{
                     flexDirection: "row",
@@ -449,10 +456,10 @@ const ChatHeader = ({
                       marginRight: 12,
                     }}
                   >
-                    <UserIcon size={18} color="#FFFFFF" />
+                    <UserPlus size={18} color="#FFFFFF" />
                   </View>
                   <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
-                    Profile Settings
+                    Send Invite
                   </Text>
                 </Pressable>
               </LinearGradient>
@@ -4037,6 +4044,21 @@ const ChatScreen = () => {
   // Get current thread info for display
   const currentThread = threads?.find(t => t.id === currentThreadId);
 
+  const handleShareInvite = async () => {
+    if (!chat?.inviteToken) {
+      Alert.alert("Error", "Invite link not available");
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: `Join our chat "${chat.name}" on VibeChat!\n\nInvite Code: ${chat.inviteToken}`,
+      });
+    } catch (error) {
+      console.error("Error sharing invite:", error);
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>
       {/* Animated Gradient Background */}
@@ -4090,6 +4112,7 @@ const ChatScreen = () => {
         onBookmarksPress={() => setShowBookmarksModal(true)}
         onThreadsPress={() => setShowThreadsPanel(true)}
         onEventsPress={() => setShowEventsTab(true)}
+        onInvitePress={handleShareInvite}
       />
 
       {/* Smart Threads Tabs */}

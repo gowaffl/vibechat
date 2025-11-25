@@ -1253,11 +1253,9 @@ chats.post("/:id/invite-link", async (c) => {
       chat = updatedChat;
     }
 
-    // Use Vibecode projects URL with query parameter for invite token
-    // Format: https://www.vibecodeapp.com/projects/019a6a66-f9c6-77fb-9eac-f09942694cf3?invite=abc123
-    // The app will manually parse the query parameter and navigate to the invite screen
-    const projectId = process.env.EXPO_PUBLIC_VIBECODE_PROJECT_ID || "019a6a66-f9c6-77fb-9eac-f09942694cf3";
-    const inviteLink = `https://www.vibecodeapp.com/projects/${projectId}?invite=${chat.inviteToken}`;
+    // Use custom scheme for invite token
+    // Format: vibechat://invite?token=abc123
+    const inviteLink = `vibechat://invite?token=${chat.inviteToken}`;
 
     return c.json({
       inviteToken: chat.inviteToken!,

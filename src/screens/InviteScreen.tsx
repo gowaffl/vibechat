@@ -104,7 +104,7 @@ const InviteScreen = () => {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            navigation.navigate("ChatList");
+            navigation.navigate("MainTabs", { screen: "Chats" });
           }}
           style={({ pressed }) => ({
             opacity: pressed ? 0.7 : 1,

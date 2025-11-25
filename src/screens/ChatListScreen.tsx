@@ -10,22 +10,22 @@ import {
   TextInput,
   Alert,
   RefreshControl,
-  KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import MaskedView from "@react-native-masked-view/masked-view";
-import { Plus, MessageCircle, Users, X, ChevronRight, Search, Pin, LogOut, User } from "lucide-react-native";
+import { MessageCircle, Users, X, ChevronRight, Search, Pin, LogOut } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import { TapGestureHandler, State } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import { api, BACKEND_URL } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
 import type { RootStackScreenProps } from "@/navigation/types";
-import type { ChatWithMetadata, CreateChatRequest, GetUserChatsResponse, CreateChatResponse, UnreadCount } from "@/shared/contracts";
+import type { ChatWithMetadata, GetUserChatsResponse, UnreadCount } from "@/shared/contracts";
+import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
+import { GradientText } from "@/components/GradientText";
 
 const ChatListScreen = () => {
   const insets = useSafeAreaInsets();
@@ -33,13 +33,6 @@ const ChatListScreen = () => {
   const { user } = useUser();
   const queryClient = useQueryClient();
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [newChatName, setNewChatName] = useState("");
-  const [newChatBio, setNewChatBio] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-  const [isJoining, setIsJoining] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -65,68 +58,6 @@ const ChatListScreen = () => {
     unreadCounts.forEach((uc) => map.set(uc.chatId, uc.unreadCount));
     return map;
   }, [unreadCounts]);
-
-  // Create chat mutation
-  const createChatMutation = useMutation({
-    mutationFn: (data: CreateChatRequest) => api.post<CreateChatResponse>("/api/chats", data),
-    onSuccess: (newChat: CreateChatResponse) => {
-      queryClient.invalidateQueries({ queryKey: ["user-chats"] });
-      setShowCreateModal(false);
-      setNewChatName("");
-      setNewChatBio("");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Navigate to the new chat
-      navigation.navigate("Chat", {
-        chatId: newChat.id,
-        chatName: newChat.name,
-      });
-    },
-    onError: (error: any) => {
-      console.error("Error creating chat:", error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", "Failed to create chat. Please try again.");
-    },
-  });
-
-  const handleCreateChat = async () => {
-    if (!newChatName.trim()) {
-      Alert.alert("Name Required", "Please enter a chat name");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      await createChatMutation.mutateAsync({
-        name: newChatName.trim(),
-        bio: newChatBio.trim() || null,
-        creatorId: user!.id,
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const handleJoinChat = async () => {
-    if (!inviteCode.trim()) {
-      Alert.alert("Code Required", "Please enter an invite code");
-      return;
-    }
-
-    setIsJoining(true);
-    try {
-      // Navigate to the Invite screen with the token
-      setShowJoinModal(false);
-      setInviteCode("");
-      navigation.navigate("Invite", { token: inviteCode.trim() });
-    } catch (error) {
-      console.error("Error joining chat:", error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", "Failed to join chat. Please check the invite code and try again.");
-    } finally {
-      setIsJoining(false);
-    }
-  };
 
   const handleChatPress = (chat: ChatWithMetadata) => {
     Haptics.selectionAsync();
@@ -330,7 +261,10 @@ const ChatListScreen = () => {
                 }}
               />
             ) : (
-              <MessageCircle size={28} color="#8B5CF6" />
+              <GradientIcon
+                icon={<MessageCircle size={28} color="#000" />}
+                style={{ width: 28, height: 28 }}
+              />
             )}
 
             {/* Unread badge */}
@@ -379,16 +313,28 @@ const ChatListScreen = () => {
                 {item.name}
               </Text>
               {item.lastMessageAt && (
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: unreadCount > 0 ? "#8B5CF6" : "rgba(255, 255, 255, 0.5)",
-                    marginLeft: 8,
-                    fontWeight: unreadCount > 0 ? "600" : "400",
-                  }}
-                >
-                  {formatTime(item.lastMessageAt)}
-                </Text>
+                unreadCount > 0 ? (
+                  <GradientText
+                    style={{
+                      fontSize: 13,
+                      marginLeft: 8,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {formatTime(item.lastMessageAt)}
+                  </GradientText>
+                ) : (
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: "rgba(255, 255, 255, 0.5)",
+                      marginLeft: 8,
+                      fontWeight: "400",
+                    }}
+                  >
+                    {formatTime(item.lastMessageAt)}
+                  </Text>
+                )
               )}
             </View>
 
@@ -407,15 +353,17 @@ const ChatListScreen = () => {
               {item.isCreator && (
                 <View
                   style={{
-                    backgroundColor: "rgba(138, 43, 226, 0.3)",
+                    backgroundColor: "rgba(138, 43, 226, 0.15)",
                     paddingHorizontal: 8,
                     paddingVertical: 2,
                     borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "rgba(138, 43, 226, 0.3)",
                   }}
                 >
-                  <Text style={{ fontSize: 11, color: "#C084FC", fontWeight: "600" }}>
+                  <GradientText style={{ fontSize: 11, fontWeight: "600" }}>
                     Creator
-                  </Text>
+                  </GradientText>
                 </View>
               )}
             </View>
@@ -544,110 +492,6 @@ const ChatListScreen = () => {
                 </Text>
               </View>
             </TapGestureHandler>
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setShowJoinModal(true);
-                }}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.7 : 1,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderRadius: 20,
-                  backgroundColor: "rgba(255, 255, 255, 0.08)",
-                  borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.1)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                })}
-              >
-                <MaskedView
-                  maskElement={
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', width: '100%' }}>
-                      <Users size={18} color="black" strokeWidth={2.5} />
-                      <Text style={{ fontSize: 14, fontWeight: "600", color: "black" }}>
-                        Join
-                      </Text>
-                    </View>
-                  }
-                  style={{ height: 20, width: 70 }}
-                >
-                  <LinearGradient
-                    colors={["#3B82F6", "#8B5CF6", "#EC4899"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ flex: 1 }}
-                  />
-                </MaskedView>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setShowCreateModal(true);
-                }}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.7 : 1,
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  backgroundColor: "rgba(255, 255, 255, 0.08)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.1)",
-                })}
-              >
-                <MaskedView
-                  maskElement={
-                    <View style={{ backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-                      <Plus size={24} color="black" strokeWidth={2.5} />
-                    </View>
-                  }
-                  style={{ width: 24, height: 24 }}
-                >
-                  <LinearGradient
-                    colors={["#3B82F6", "#8B5CF6", "#EC4899"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ flex: 1 }}
-                  />
-                </MaskedView>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  navigation.navigate("Profile");
-                }}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.7 : 1,
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  backgroundColor: "rgba(255, 255, 255, 0.08)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.1)",
-                })}
-              >
-                <MaskedView
-                  maskElement={
-                    <View style={{ backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-                      <User size={24} color="black" strokeWidth={2.5} />
-                    </View>
-                  }
-                  style={{ width: 24, height: 24 }}
-                >
-                  <LinearGradient
-                    colors={["#3B82F6", "#8B5CF6", "#EC4899"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ flex: 1 }}
-                  />
-                </MaskedView>
-              </Pressable>
-            </View>
           </View>
 
           {/* Search Bar */}
@@ -720,7 +564,7 @@ const ChatListScreen = () => {
       {/* Chat List */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color={BRAND_GRADIENT_COLORS[0]} />
         </View>
       ) : chats.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
@@ -729,54 +573,8 @@ const ChatListScreen = () => {
             No Chats Yet
           </Text>
           <Text style={{ fontSize: 15, color: "rgba(255, 255, 255, 0.6)", marginTop: 8, textAlign: "center" }}>
-            Create a new chat or join with an invite code
+            Use the Create or Join tabs below to get started
           </Text>
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
-            <Pressable
-              onPress={() => setShowCreateModal(true)}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <LinearGradient
-                colors={["#8B5CF6", "#6366F1"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  paddingHorizontal: 28,
-                  paddingVertical: 14,
-                  borderRadius: 12,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontSize: 16, fontWeight: "600", color: "#FFFFFF" }}>
-                  Create Chat
-                </Text>
-              </LinearGradient>
-            </Pressable>
-            <Pressable
-              onPress={() => setShowJoinModal(true)}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <View
-                style={{
-                  paddingHorizontal: 28,
-                  paddingVertical: 14,
-                  borderRadius: 12,
-                  backgroundColor: "rgba(255, 255, 255, 0.1)",
-                  borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.2)",
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontSize: 16, fontWeight: "600", color: "#FFFFFF" }}>
-                  Join Chat
-                </Text>
-              </View>
-            </Pressable>
-          </View>
         </View>
       ) : (
         <FlatList
@@ -787,26 +585,28 @@ const ChatListScreen = () => {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => renderChatItem({ item })}
           contentContainerStyle={{
-            paddingTop: insets.top + 180, // Account for fixed header with search bar
-            paddingBottom: insets.bottom + 16,
+            paddingTop: insets.top + 160, // Account for fixed header with search bar (removed buttons so it's smaller)
+            paddingBottom: insets.bottom + 100, // Account for bottom tab bar
           }}
           ListHeaderComponent={
             pinnedChats.length > 0 && !searchQuery ? (
               <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                  <Pin size={16} color="#8B5CF6" />
-                  <Text
+                  <GradientIcon
+                    icon={<Pin size={16} color="#000" />}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <GradientText
                     style={{
                       fontSize: 13,
                       fontWeight: "700",
-                      color: "#8B5CF6",
                       marginLeft: 8,
                       textTransform: "uppercase",
                       letterSpacing: 0.5,
                     }}
                   >
                     Pinned
-                  </Text>
+                  </GradientText>
                 </View>
               </View>
             ) : null
@@ -840,264 +640,11 @@ const ChatListScreen = () => {
             <RefreshControl
               refreshing={isFetching}
               onRefresh={refetch}
-              tintColor="#8B5CF6"
+              tintColor={BRAND_GRADIENT_COLORS[0]}
             />
           }
         />
       )}
-
-      {/* Create Chat Modal */}
-      <Modal
-        visible={showCreateModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCreateModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-        >
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0, 0, 0, 0.9)",
-              justifyContent: "flex-end",
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: "#1A1A1A",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-                paddingTop: 24,
-                paddingBottom: insets.bottom + 24,
-                paddingHorizontal: 20,
-              }}
-            >
-              {/* Header */}
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-                <Text style={{ fontSize: 24, fontWeight: "bold", color: "#FFFFFF" }}>
-                  Create New Chat
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setShowCreateModal(false);
-                    setNewChatName("");
-                    setNewChatBio("");
-                  }}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.7 : 1,
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  })}
-                >
-                  <X size={20} color="#FFFFFF" />
-                </Pressable>
-              </View>
-
-              {/* Form */}
-              <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 15, fontWeight: "600", color: "#FFFFFF", marginBottom: 8 }}>
-                  Chat Name <Text style={{ color: "#EF4444" }}>*</Text>
-                </Text>
-                <TextInput
-                  value={newChatName}
-                  onChangeText={setNewChatName}
-                  placeholder="Enter chat name..."
-                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                  maxLength={100}
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.1)",
-                    borderRadius: 12,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    fontSize: 16,
-                    color: "#FFFFFF",
-                  }}
-                />
-              </View>
-
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{ fontSize: 15, fontWeight: "600", color: "#FFFFFF", marginBottom: 8 }}>
-                  Description (Optional)
-                </Text>
-                <TextInput
-                  value={newChatBio}
-                  onChangeText={setNewChatBio}
-                  placeholder="What's this chat about?"
-                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                  maxLength={200}
-                  multiline
-                  numberOfLines={3}
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.1)",
-                    borderRadius: 12,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    fontSize: 16,
-                    color: "#FFFFFF",
-                    minHeight: 80,
-                    textAlignVertical: "top",
-                  }}
-                />
-              </View>
-
-              {/* Create Button */}
-              <Pressable
-                onPress={handleCreateChat}
-                disabled={isCreating || !newChatName.trim()}
-                style={({ pressed }) => ({
-                  opacity: pressed || isCreating || !newChatName.trim() ? 0.7 : 1,
-                })}
-              >
-                <LinearGradient
-                  colors={["#8B5CF6", "#6366F1"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    paddingVertical: 16,
-                    borderRadius: 12,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {isCreating ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={{ fontSize: 17, fontWeight: "600", color: "#FFFFFF" }}>
-                      Create Chat
-                    </Text>
-                  )}
-                </LinearGradient>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Join Chat Modal */}
-      <Modal
-        visible={showJoinModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowJoinModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-        >
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0, 0, 0, 0.9)",
-              justifyContent: "flex-end",
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: "#1A1A1A",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-                paddingTop: 24,
-                paddingBottom: insets.bottom + 24,
-                paddingHorizontal: 20,
-              }}
-            >
-              {/* Header */}
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-                <Text style={{ fontSize: 24, fontWeight: "bold", color: "#FFFFFF" }}>
-                  Join Chat
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setShowJoinModal(false);
-                    setInviteCode("");
-                  }}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.7 : 1,
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  })}
-                >
-                  <X size={20} color="#FFFFFF" />
-                </Pressable>
-              </View>
-
-              {/* Form */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{ fontSize: 15, fontWeight: "600", color: "#FFFFFF", marginBottom: 8 }}>
-                  Invite Code <Text style={{ color: "#EF4444" }}>*</Text>
-                </Text>
-                <TextInput
-                  value={inviteCode}
-                  onChangeText={setInviteCode}
-                  placeholder="Enter 8-character code..."
-                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                  maxLength={8}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.1)",
-                    borderRadius: 12,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    fontSize: 18,
-                    color: "#FFFFFF",
-                    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-                    letterSpacing: 2,
-                  }}
-                />
-                <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.5)", marginTop: 8 }}>
-                  Enter the invite code shared with you
-                </Text>
-              </View>
-
-              {/* Join Button */}
-              <Pressable
-                onPress={handleJoinChat}
-                disabled={isJoining || !inviteCode.trim()}
-                style={({ pressed }) => ({
-                  opacity: pressed || isJoining || !inviteCode.trim() ? 0.7 : 1,
-                })}
-              >
-                <LinearGradient
-                  colors={["#8B5CF6", "#6366F1"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    paddingVertical: 16,
-                    borderRadius: 12,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {isJoining ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={{ fontSize: 17, fontWeight: "600", color: "#FFFFFF" }}>
-                      Join Chat
-                    </Text>
-                  )}
-                </LinearGradient>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Context Menu Modal */}
       <Modal
@@ -1201,13 +748,16 @@ const ChatListScreen = () => {
                             width: 42,
                             height: 42,
                             borderRadius: 21,
-                            backgroundColor: "rgba(138, 43, 226, 0.25)",
+                            backgroundColor: "rgba(138, 43, 226, 0.15)",
                             alignItems: "center",
                             justifyContent: "center",
                             marginRight: 16,
                           }}
                         >
-                          <Pin size={22} color="#A78BFA" strokeWidth={2.5} />
+                          <GradientIcon
+                            icon={<Pin size={22} color="#000" strokeWidth={2.5} />}
+                            style={{ width: 22, height: 22 }}
+                          />
                         </View>
                         <Text 
                           style={{ 
@@ -1290,16 +840,15 @@ const ChatListScreen = () => {
                         borderRadius: 16,
                       })}
                     >
-                      <Text 
-                        style={{ 
-                          color: "#A78BFA", 
-                          fontSize: 18, 
+                      <GradientText
+                        style={{
+                          fontSize: 18,
                           fontWeight: "700",
                           textAlign: "center",
                         }}
                       >
                         Cancel
-                      </Text>
+                      </GradientText>
                     </Pressable>
                   </View>
                 </LinearGradient>

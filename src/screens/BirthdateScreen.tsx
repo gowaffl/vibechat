@@ -78,7 +78,7 @@ export default function BirthdateScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       if (hasCompletedOnboarding) {
-        navigation.navigate("ChatList");
+        navigation.navigate("MainTabs", { screen: "Chats" });
       } else {
         navigation.navigate("OnboardingName");
       }

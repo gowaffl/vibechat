@@ -16,7 +16,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
 
   // Backend URL for Expo client access
-  BACKEND_URL: z.url("BACKEND_URL must be a valid URL").default("http://localhost:3000"), // Set via the Vibecode enviroment at run-time
+  BACKEND_URL: z.string().url("BACKEND_URL must be a valid URL").default("http://localhost:3000"),
 
   // Google OAuth Configuration
   // GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
@@ -76,5 +76,5 @@ export type Env = typeof env;
  */
 export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
-  baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com.proxy.vibecodeapp.com/v1",
+  baseURL: process.env.OPENAI_BASE_URL,
 });
