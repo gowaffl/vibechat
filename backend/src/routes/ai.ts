@@ -263,12 +263,12 @@ Respond naturally and concisely based on the conversation.`;
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create the AI's message in the database with aiFriendId
-    // Use the AI friend's ID as the userId
+    // userId is null for AI friend messages since they're not users
     const { data: aiMessage, error: createError } = await db.from("message").insert({
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: aiFriend.id,
+        userId: null,
         chatId: chatId,
         aiFriendId: aiFriendId,
     }).select("*, aiFriend:ai_friend(*)").single();
