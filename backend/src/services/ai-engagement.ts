@@ -67,18 +67,21 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
 
     // CRITICAL: Check if last message is from AI BEFORE doing anything else
     // This is the FIRST check after acquiring the lock
-    const lastMessageCheck = await db.message.findFirst({
-      where: { chatId },
-      orderBy: { createdAt: "desc" },
-      take: 1,
-    });
+    const { data: lastMessageCheck } = await db
+      .from("message")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (lastMessageCheck && lastMessageCheck.userId === "ai-assistant") {
-      console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Last message in chat ${chatId} is already from AI (messageId: ${lastMessageCheck.id}). AI cannot send consecutive messages.`);
+    // AI messages are identified by having an aiFriendId (not by userId)
+    if (lastMessageCheck && lastMessageCheck.aiFriendId) {
+      console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Last message in chat ${chatId} is already from AI (messageId: ${lastMessageCheck.id}, aiFriendId: ${lastMessageCheck.aiFriendId}). AI cannot send consecutive messages.`);
       return;
     }
 
-    console.log(`[AI Engagement] [${requestId}] ✅ Last message check passed. Last message from: ${lastMessageCheck?.userId || "none"}`);
+    console.log(`[AI Engagement] [${requestId}] ✅ Last message check passed. Last message from: userId=${lastMessageCheck?.userId || "none"}, aiFriendId=${lastMessageCheck?.aiFriendId || "none"}`);
 
 
     // Check cooldown - prevent AI from responding too frequently
@@ -86,39 +89,39 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       return;
     }
 
-    // Get the specific AI friend
-    const aiFriend = await db.aIFriend.findUnique({
-      where: { id: aiFriendId },
-      include: { chat: true },
-    });
+    // Get the specific AI friend with chat
+    const { data: aiFriend } = await db
+      .from("ai_friend")
+      .select(`
+        *,
+        chat:chatId (*)
+      `)
+      .eq("id", aiFriendId)
+      .single();
 
     if (!aiFriend) {
       console.error(`[AI Engagement] AI friend ${aiFriendId} not found`);
       return;
     }
 
-    const chat = aiFriend.chat;
-
-    // Get AI user
-    const aiUser = await db.user.findUnique({
-      where: { id: "ai-assistant" },
-    });
-
-    if (!aiUser) {
-      console.error("[AI Engagement] AI friend user not found");
-      return;
-    }
+    const chat = Array.isArray(aiFriend.chat) ? aiFriend.chat[0] : aiFriend.chat;
 
     // Fetch last 100 messages from this chat
-    const allMessages = await db.message.findMany({
-      where: { chatId },
-      include: { user: true },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
+    const { data: allMessages } = await db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*)
+      `)
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: false })
+      .limit(100);
 
     // Reverse to get chronological order
-    const messagesInOrder = allMessages.reverse();
+    const messagesInOrder = (allMessages || []).reverse().map((msg: any) => ({
+      ...msg,
+      user: Array.isArray(msg.user) ? msg.user[0] : msg.user,
+    }));
 
     // Get AI name from AI friend (not chat)
     const aiName = aiFriend.name || "AI Friend";
@@ -223,7 +226,7 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
     // Construct a more natural user input
     const userInput = `Based on the conversation, should you respond? If yes, say something brief and natural. If not, stay quiet.`;
 
-    const tools = [
+    const tools: any[] = [
       { type: "web_search" },
       { type: "image_generation" },
       { type: "code_interpreter", container: { type: "auto" } },
@@ -260,30 +263,41 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
     // This catches race conditions where an AI message was created between
     // the initial check and now (after OpenAI API call completed)
     console.log(`[AI Engagement] [${requestId}] Performing final check before saving AI message...`);
-    const finalCheck = await db.message.findFirst({
-      where: { chatId },
-      orderBy: { createdAt: "desc" },
-      take: 1,
-    });
+    const { data: finalCheck } = await db
+      .from("message")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (finalCheck && finalCheck.userId === "ai-assistant") {
-      console.log(`[AI Engagement] [${requestId}] ⚠️ RACE CONDITION DETECTED! Last message in chat ${chatId} is now from AI (messageId: ${finalCheck.id}). Aborting to prevent duplicate.`);
+    // AI messages are identified by having an aiFriendId (not by userId)
+    if (finalCheck && finalCheck.aiFriendId) {
+      console.log(`[AI Engagement] [${requestId}] ⚠️ RACE CONDITION DETECTED! Last message in chat ${chatId} is now from AI (messageId: ${finalCheck.id}, aiFriendId: ${finalCheck.aiFriendId}). Aborting to prevent duplicate.`);
       return;
     }
 
     console.log(`[AI Engagement] [${requestId}] ✅ Final check passed. Saving AI message to database...`);
 
     // Create the AI's message in the database with aiFriendId
-    const aiMessage = await db.message.create({
-      data: {
+    // NOTE: userId is set to null for AI messages - the aiFriendId identifies which AI sent it
+    const { data: aiMessage, error: insertError } = await db
+      .from("message")
+      .insert({
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: "ai-assistant",
+        userId: null,
         chatId: chatId,
         aiFriendId: aiFriendId,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (insertError || !aiMessage) {
+      console.error(`[AI Engagement] [${requestId}] Failed to create message:`, insertError);
+      return;
+    }
 
     // Auto-tag AI message for smart threads (fire-and-forget, immediate)
     if (aiResponseText && aiResponseText.trim().length > 0) {
@@ -316,12 +330,13 @@ async function processNewMessages(chatId: string): Promise<void> {
 
   try {
     // Get all AI friends for this chat
-    const aiFriends = await db.aIFriend.findMany({
-      where: { chatId },
-      orderBy: { sortOrder: "asc" },
-    });
+    const { data: aiFriends } = await db
+      .from("ai_friend")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true });
 
-    if (aiFriends.length === 0) {
+    if (!aiFriends || aiFriends.length === 0) {
       console.log(`[AI Engagement] No AI friends found for chat ${chatId}`);
       return;
     }
@@ -337,14 +352,17 @@ async function processNewMessages(chatId: string): Promise<void> {
 
     // Check if the last message in the chat is from the AI
     // If so, do NOT respond until a user sends a message
-    const lastMessage = await db.message.findFirst({
-      where: { chatId },
-      orderBy: { createdAt: "desc" },
-      take: 1,
-    });
+    const { data: lastMessage } = await db
+      .from("message")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (lastMessage && lastMessage.userId === "ai-assistant") {
-      console.log(`[AI Engagement] Last message in chat ${chatId} is from AI. Waiting for user interaction.`);
+    // AI messages are identified by having an aiFriendId (not by userId)
+    if (lastMessage && lastMessage.aiFriendId) {
+      console.log(`[AI Engagement] Last message in chat ${chatId} is from AI (aiFriendId: ${lastMessage.aiFriendId}). Waiting for user interaction.`);
       return;
     }
 
@@ -352,18 +370,31 @@ async function processNewMessages(chatId: string): Promise<void> {
     const lastProcessed = lastProcessedMessageId.get(chatId);
 
     // Fetch new messages since last processing
-    const newMessages = await db.message.findMany({
-      where: {
-        chatId,
-        ...(lastProcessed && { createdAt: { gt: await db.message.findUnique({ where: { id: lastProcessed } }).then(m => m?.createdAt || new Date(0)) } }),
-        userId: { not: "ai-assistant" }, // Don't respond to own messages
-        messageType: { not: "system" }, // Don't respond to system messages
-      },
-      orderBy: { createdAt: "asc" },
-      take: 10, // Process up to 10 new messages at a time
-    });
+    let query = db
+      .from("message")
+      .select("*")
+      .eq("chatId", chatId)
+      .is("aiFriendId", null) // Don't respond to AI messages (identified by aiFriendId being set)
+      .neq("messageType", "system") // Don't respond to system messages
+      .order("createdAt", { ascending: true })
+      .limit(10); // Process up to 10 new messages at a time
 
-    if (newMessages.length === 0) return;
+    // If we have a lastProcessed message, only get messages after it
+    if (lastProcessed) {
+      const { data: lastProcessedMsg } = await db
+        .from("message")
+        .select("createdAt")
+        .eq("id", lastProcessed)
+        .single();
+      
+      if (lastProcessedMsg?.createdAt) {
+        query = query.gt("createdAt", lastProcessedMsg.createdAt);
+      }
+    }
+
+    const { data: newMessages } = await query;
+
+    if (!newMessages || newMessages.length === 0) return;
 
     // Update last processed message
     lastProcessedMessageId.set(chatId, newMessages[newMessages.length - 1].id);
@@ -388,7 +419,7 @@ async function processNewMessages(chatId: string): Promise<void> {
       }
 
       // Collect AI friends that qualify for auto-engagement on this message
-      const qualifyingFriends: typeof aiFriends = [];
+      const qualifyingFriends: any[] = [];
       
       for (const friend of aiFriends) {
         // Check for automatic engagement based on percentage
@@ -422,19 +453,21 @@ async function processNewMessages(chatId: string): Promise<void> {
 export async function pollForEngagement() {
   try {
     // Get all chats that have at least one AI friend with engagement enabled
-    const chatsWithAIFriends = await db.aIFriend.findMany({
-      where: {
-        engagementMode: "percentage",
-      },
-      select: {
-        chatId: true,
-      },
-      distinct: ["chatId"],
-    });
+    const { data: aiFriendsWithEngagement } = await db
+      .from("ai_friend")
+      .select("chatId")
+      .eq("engagementMode", "percentage");
+
+    if (!aiFriendsWithEngagement || aiFriendsWithEngagement.length === 0) {
+      return;
+    }
+
+    // Get unique chat IDs
+    const uniqueChatIds = [...new Set(aiFriendsWithEngagement.map((af: any) => af.chatId))];
 
     // Process each chat
-    for (const entry of chatsWithAIFriends) {
-      await processNewMessages(entry.chatId);
+    for (const chatId of uniqueChatIds) {
+      await processNewMessages(chatId);
     }
   } catch (error) {
     console.error("[AI Engagement] Error in polling loop:", error);

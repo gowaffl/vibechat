@@ -857,9 +857,9 @@ messages.delete("/:id", async (c) => {
 
     // Check permissions:
     // 1. User can delete their own messages
-    // 2. Chat creator can delete AI messages (userId === "ai" or "ai-assistant")
+    // 2. Chat creator can delete AI messages (identified by having an aiFriendId)
     const isOwnMessage = message.userId === userId;
-    const isAIMessage = message.userId === "ai" || message.userId === "ai-assistant";
+    const isAIMessage = message.aiFriendId !== null; // AI messages have an aiFriendId
     const isCreator = chat.creatorId === userId;
 
     if (!isOwnMessage && !(isAIMessage && isCreator)) {

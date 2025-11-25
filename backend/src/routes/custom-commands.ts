@@ -366,9 +366,10 @@ Please respond according to the command instructions above.`;
         content: messageContent,
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: "ai-assistant",
+        userId: null, // AI-generated messages have null userId
         chatId: validatedData.chatId,
         replyToId: validatedData.replyToId,
+        aiFriendId: null, // Custom commands don't have a specific AI friend
       })
       .select("*")
       .single();
@@ -377,13 +378,6 @@ Please respond according to the command instructions above.`;
       console.error("[CustomCommands] Error creating AI message:", messageError);
       return c.json({ error: "Failed to create AI message" }, 500);
     }
-
-    // Fetch user for AI message
-    const { data: aiUser } = await db
-      .from("user")
-      .select("*")
-      .eq("id", "ai-assistant")
-      .single();
 
     // Fetch replyTo if exists
     let replyTo = null;
@@ -404,18 +398,10 @@ Please respond according to the command instructions above.`;
       messageType: aiMessage.messageType as "text" | "image",
       imageUrl: aiMessage.imageUrl,
       imageDescription: aiMessage.imageDescription,
-      userId: aiMessage.userId,
+      userId: aiMessage.userId, // null for AI messages
       chatId: aiMessage.chatId,
       replyToId: aiMessage.replyToId,
-      user: aiUser ? {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: new Date(aiUser.createdAt).toISOString(),
-        updatedAt: new Date(aiUser.updatedAt).toISOString(),
-      } : null,
+      user: null, // AI messages don't have a user
       replyTo: replyTo
         ? {
             id: replyTo.id,

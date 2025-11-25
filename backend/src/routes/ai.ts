@@ -263,17 +263,25 @@ Respond naturally and concisely based on the conversation.`;
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create the AI's message in the database with aiFriendId
-    const aiMessage = await db.message.create({
-      data: {
+    // NOTE: userId is set to null for AI messages - the aiFriendId identifies which AI sent it
+    const { data: aiMessage, error: insertError } = await db
+      .from("message")
+      .insert({
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: "ai-assistant",
+        userId: null,
         chatId: chatId,
         aiFriendId: aiFriendId,
-      },
-      include: { user: true },
-    });
+      })
+      .select()
+      .single();
+
+    if (insertError || !aiMessage) {
+      console.error(`[AI Chat] Failed to create message:`, insertError);
+      releaseAIResponseLock(chatId);
+      return c.json({ error: "Failed to create AI message" }, 500);
+    }
 
     // Auto-tag AI message for smart threads (fire-and-forget, immediate)
     if (aiResponseText && aiResponseText.trim().length > 0) {
@@ -283,21 +291,14 @@ Respond naturally and concisely based on the conversation.`;
     }
 
     // Return the AI message
+    // Note: userId is null for AI messages - frontend will use aiFriendId to display correct AI info
     return c.json({
       id: aiMessage.id,
       content: aiMessage.content,
-      userId: aiMessage.userId,
+      userId: aiMessage.userId, // null for AI messages
+      aiFriendId: aiMessage.aiFriendId,
       chatId: aiMessage.chatId,
-      createdAt: aiMessage.createdAt.toISOString(),
-      user: {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: aiUser.createdAt.toISOString(),
-        updatedAt: aiUser.updatedAt.toISOString(),
-      },
+      createdAt: typeof aiMessage.createdAt === 'string' ? aiMessage.createdAt : aiMessage.createdAt.toISOString(),
     });
   } catch (error) {
     console.error("[AI] Error during chat:", error);
@@ -556,24 +557,24 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create a message in the database with the generated image
-    const aiUser = await db.user.findUnique({
-      where: { id: "ai-assistant" },
-    });
-
-    if (!aiUser) {
-      return c.json({ error: "AI friend user not found" }, 500);
-    }
-
-    const message = await db.message.create({
-      data: {
+    // Note: These standalone AI-generated images don't have an aiFriendId
+    const { data: message, error: insertError } = await db
+      .from("message")
+      .insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: "ai-assistant",
+        userId: null, // AI-generated messages have null userId
         chatId: chatId,
-      },
-      include: { user: true },
-    });
+        aiFriendId: null, // No specific AI friend for these standalone images
+      })
+      .select()
+      .single();
+
+    if (insertError || !message) {
+      console.error("[AI Image] Failed to create message:", insertError);
+      return c.json({ error: "Failed to create message" }, 500);
+    }
 
     return c.json({
       id: message.id,
@@ -582,16 +583,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       imageUrl: message.imageUrl,
       userId: message.userId,
       chatId: message.chatId,
-      createdAt: message.createdAt.toISOString(),
-      user: {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: aiUser.createdAt.toISOString(),
-        updatedAt: aiUser.updatedAt.toISOString(),
-      },
+      createdAt: message.createdAt,
     });
   } catch (error) {
     console.error("[AI Image] Error generating image:", error);
@@ -822,24 +814,24 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create a message in the database with the generated meme
-    const aiUser = await db.user.findUnique({
-      where: { id: "ai-assistant" },
-    });
-
-    if (!aiUser) {
-      return c.json({ error: "AI friend user not found" }, 500);
-    }
-
-    const message = await db.message.create({
-      data: {
+    // Note: These standalone AI-generated memes don't have an aiFriendId
+    const { data: message, error: insertError } = await db
+      .from("message")
+      .insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: "ai-assistant",
+        userId: null, // AI-generated messages have null userId
         chatId: chatId,
-      },
-      include: { user: true },
-    });
+        aiFriendId: null, // No specific AI friend for these standalone memes
+      })
+      .select()
+      .single();
+
+    if (insertError || !message) {
+      console.error("[AI Meme] Failed to create message:", insertError);
+      return c.json({ error: "Failed to create message" }, 500);
+    }
 
     return c.json({
       id: message.id,
@@ -848,16 +840,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       imageUrl: message.imageUrl,
       userId: message.userId,
       chatId: message.chatId,
-      createdAt: message.createdAt.toISOString(),
-      user: {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: aiUser.createdAt.toISOString(),
-        updatedAt: aiUser.updatedAt.toISOString(),
-      },
+      createdAt: message.createdAt,
     });
   } catch (error) {
     console.error("[AI Meme] Error generating meme:", error);
@@ -886,9 +869,11 @@ ai.post("/generate-group-avatar", async (c) => {
     console.log("[AI Avatar] GOOGLE_API_KEY length:", process.env.GOOGLE_API_KEY?.length);
 
     // Get chat
-    const chat = await db.chat.findUnique({
-      where: { id: chatId },
-    });
+    const { data: chat } = await db
+      .from("chat")
+      .select("*")
+      .eq("id", chatId)
+      .single();
 
     if (!chat) {
       return c.json({ error: "Chat not found" }, 404);
@@ -1033,14 +1018,19 @@ ai.post("/generate-group-avatar", async (c) => {
     console.log("[AI Avatar] Avatar saved successfully to Supabase Storage:", imageUrl);
 
     // Update chat with new avatar
-    await db.chat.update({
-      where: { id: chatId },
-      data: {
+    const { error: updateError } = await db
+      .from("chat")
+      .update({
         image: imageUrl,
-        lastAvatarGenDate: new Date(),
+        lastAvatarGenDate: new Date().toISOString(),
         avatarPromptUsed: prompt,
-      },
-    });
+      })
+      .eq("id", chatId);
+
+    if (updateError) {
+      console.error("[AI Avatar] Failed to update chat:", updateError);
+      return c.json({ error: "Failed to update chat with new avatar" }, 500);
+    }
 
     console.log("[AI Avatar] Chat updated with new avatar");
 

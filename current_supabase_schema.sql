@@ -10,6 +10,19 @@
 -- - setup_rls_policies
 -- - add_phone_to_user ✅ APPLIED (November 24, 2025)
 -- - add_birthdate_to_user ✅ APPLIED (November 24, 2025)
+--
+-- CODE MIGRATION STATUS:
+-- ✅ All Prisma-style queries converted to Supabase (November 25, 2025)
+--    - backend/src/services/ai-engagement.ts: Fixed all db.aIFriend/message queries
+--    - backend/src/routes/ai.ts: Fixed all db.user/message/chat queries
+--    - backend/src/routes/messages.ts: Fixed AI message detection
+--    - backend/src/routes/custom-commands.ts: Fixed AI message creation
+--
+-- ✅ AI Message Architecture Corrected (November 25, 2025)
+--    - AI messages now use userId: NULL instead of "ai-assistant"
+--    - AI messages identified by aiFriendId field (not userId)
+--    - Removed "ai-assistant" user dependency (doesn't exist in DB)
+--    - AI messages properly link to specific ai_friend records via aiFriendId
 -- ==========================================
 
 -- ============================================
@@ -135,16 +148,17 @@ CREATE TRIGGER update_ai_friend_updatedAt
     EXECUTE PROCEDURE update_updated_at_column();
 
 -- Message
+-- NOTE: userId is NULL for AI-generated messages. aiFriendId identifies which AI friend sent the message.
 CREATE TABLE IF NOT EXISTS "message" (
     "id" TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
     "content" TEXT NOT NULL DEFAULT '',
     "messageType" TEXT NOT NULL DEFAULT 'text',
     "imageUrl" TEXT,
     "imageDescription" TEXT,
-    "userId" TEXT NOT NULL,
+    "userId" TEXT, -- NULL for AI messages, actual user ID for human messages
     "chatId" TEXT NOT NULL,
     "replyToId" TEXT,
-    "aiFriendId" TEXT,
+    "aiFriendId" TEXT, -- Set for AI messages to identify which AI friend sent it
     "linkPreviewUrl" TEXT,
     "linkPreviewTitle" TEXT,
     "linkPreviewDescription" TEXT,
