@@ -68,14 +68,14 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
     // CRITICAL: Check if last message is from AI BEFORE doing anything else
     // This is the FIRST check after acquiring the lock
     const { data: lastMessageCheck } = await db
-      .from('Message')
+      .from('message')
       .select('*')
       .eq('chatId', chatId)
       .order('createdAt', { ascending: false })
       .limit(1)
       .single();
 
-    if (lastMessageCheck && lastMessageCheck.userId === "ai-assistant") {
+    if (lastMessageCheck && (lastMessageCheck.userId === null || lastMessageCheck.aiFriendId !== null)) {
       console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Last message in chat ${chatId} is already from AI (messageId: ${lastMessageCheck.id}). AI cannot send consecutive messages.`);
       return;
     }
@@ -90,8 +90,8 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
 
     // Get the specific AI friend
     const { data: aiFriend } = await db
-      .from('AIFriend')
-      .select('*, Chat(*)')
+      .from('ai_friend')
+      .select('*, chat(*)')
       .eq('id', aiFriendId)
       .single();
 
@@ -102,22 +102,10 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
 
     const chat = aiFriend.Chat;
 
-    // Get AI user
-    const { data: aiUser } = await db
-      .from('User')
-      .select('*')
-      .eq('id', "ai-assistant")
-      .single();
-
-    if (!aiUser) {
-      console.error("[AI Engagement] AI friend user not found");
-      return;
-    }
-
     // Fetch last 100 messages from this chat
     const { data: allMessages } = await db
-      .from('Message')
-      .select('*, User(*)')
+      .from('message')
+      .select('*, user(*), aiFriend:ai_friend(*)')
       .eq('chatId', chatId)
       .order('createdAt', { ascending: false })
       .limit(100);
@@ -271,14 +259,14 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
     // the initial check and now (after OpenAI API call completed)
     console.log(`[AI Engagement] [${requestId}] Performing final check before saving AI message...`);
     const { data: finalCheck } = await db
-      .from('Message')
+      .from('message')
       .select('*')
       .eq('chatId', chatId)
       .order('createdAt', { ascending: false })
       .limit(1)
       .single();
 
-    if (finalCheck && finalCheck.userId === "ai-assistant") {
+    if (finalCheck && (finalCheck.userId === null || finalCheck.aiFriendId !== null)) {
       console.log(`[AI Engagement] [${requestId}] ⚠️ RACE CONDITION DETECTED! Last message in chat ${chatId} is now from AI (messageId: ${finalCheck.id}). Aborting to prevent duplicate.`);
       return;
     }
@@ -286,13 +274,14 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
     console.log(`[AI Engagement] [${requestId}] ✅ Final check passed. Saving AI message to database...`);
 
     // Create the AI's message in the database with aiFriendId
+    // userId is null for AI friend messages
     const { data: aiMessage } = await db
-      .from('Message')
+      .from('message')
       .insert({
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: "ai-assistant",
+        userId: null,
         chatId: chatId,
         aiFriendId: aiFriendId,
         updatedAt: new Date().toISOString(), // Manually set updatedAt since Prisma handled it
@@ -332,7 +321,7 @@ async function processNewMessages(chatId: string): Promise<void> {
   try {
     // Get all AI friends for this chat
     const { data: aiFriends } = await db
-      .from('AIFriend')
+      .from('ai_friend')
       .select('*')
       .eq('chatId', chatId)
       .order('sortOrder', { ascending: true });
@@ -354,14 +343,14 @@ async function processNewMessages(chatId: string): Promise<void> {
     // Check if the last message in the chat is from the AI
     // If so, do NOT respond until a user sends a message
     const { data: lastMessage } = await db
-      .from('Message')
+      .from('message')
       .select('*')
       .eq('chatId', chatId)
       .order('createdAt', { ascending: false })
       .limit(1)
       .single();
 
-    if (lastMessage && lastMessage.userId === "ai-assistant") {
+    if (lastMessage && (lastMessage.userId === null || lastMessage.aiFriendId !== null)) {
       console.log(`[AI Engagement] Last message in chat ${chatId} is from AI. Waiting for user interaction.`);
       return;
     }
@@ -370,12 +359,11 @@ async function processNewMessages(chatId: string): Promise<void> {
     const lastProcessed = lastProcessedMessageId.get(chatId);
 
     // Fetch new messages since last processing
-    // Complex query construction
+    // Get user messages (not AI messages, not system messages)
     let query = db
-      .from('Message')
+      .from('message')
       .select('*')
-      .eq('chatId', chatId)
-      .neq('userId', 'ai-assistant')
+      .not('userId', 'is', null) // Exclude AI messages (they have null userId)
       .neq('messageType', 'system')
       .order('createdAt', { ascending: true })
       .limit(10);
@@ -383,7 +371,7 @@ async function processNewMessages(chatId: string): Promise<void> {
     if (lastProcessed) {
         // Need to fetch the createdAt of the last processed message first
         const { data: lastProcessedMsg } = await db
-            .from('Message')
+            .from('message')
             .select('createdAt')
             .eq('id', lastProcessed)
             .single();
@@ -459,7 +447,7 @@ export async function pollForEngagement() {
     // Supabase doesn't support distinct() directly on select in the JS client easily without raw SQL or RPC.
     // We'll fetch all active AI friends and dedupe chatIds in memory.
     const { data: aiFriends } = await db
-      .from('AIFriend')
+      .from('ai_friend')
       .select('chatId')
       .eq('engagementMode', 'percentage');
 

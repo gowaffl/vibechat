@@ -563,20 +563,30 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // Users should be able to generate images even if AI just responded.
     // The lock ensures we don't interfere with ongoing AI responses.
 
-    // Create a message in the database with the generated image
-    const { data: aiUser } = await db.from("user").select("*").eq("id", "ai-assistant").single();
+    // Get the first AI friend from this chat to attribute the image to
+    const { data: aiFriend } = await db
+      .from("ai_friend")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
 
-    if (!aiUser) {
-      return c.json({ error: "AI friend user not found" }, 500);
+    if (!aiFriend) {
+      console.error("[AI Image] No AI friend found for chat:", chatId);
+      return c.json({ error: "No AI friend found for this chat" }, 404);
     }
 
+    // Create a message in the database with the generated image
+    // userId is null for AI-generated images
     const { data: message, error: createError } = await db.from("message").insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: "ai-assistant",
+        userId: null,
         chatId: chatId,
-    }).select("*, user(*)").single();
+        aiFriendId: aiFriend.id,
+    }).select("*, aiFriend:ai_friend(*)").single();
 
     if (createError || !message) {
        console.error("[AI Image] Failed to create message:", createError);
@@ -591,14 +601,17 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       userId: message.userId,
       chatId: message.chatId,
       createdAt: message.createdAt.toISOString(),
-      user: {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: aiUser.createdAt.toISOString(),
-        updatedAt: aiUser.updatedAt.toISOString(),
+      aiFriend: {
+        id: aiFriend.id,
+        name: aiFriend.name,
+        personality: aiFriend.personality,
+        tone: aiFriend.tone,
+        color: aiFriend.color,
+        engagementMode: aiFriend.engagementMode,
+        engagementPercent: aiFriend.engagementPercent,
+        sortOrder: aiFriend.sortOrder,
+        createdAt: aiFriend.createdAt.toISOString(),
+        updatedAt: aiFriend.updatedAt.toISOString(),
       },
     });
   } catch (error) {
@@ -836,20 +849,30 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     // Users should be able to generate memes even if AI just responded.
     // The lock ensures we don't interfere with ongoing AI responses.
 
-    // Create a message in the database with the generated meme
-    const { data: aiUser } = await db.from("user").select("*").eq("id", "ai-assistant").single();
+    // Get the first AI friend from this chat to attribute the meme to
+    const { data: aiFriend } = await db
+      .from("ai_friend")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
 
-    if (!aiUser) {
-      return c.json({ error: "AI friend user not found" }, 500);
+    if (!aiFriend) {
+      console.error("[AI Meme] No AI friend found for chat:", chatId);
+      return c.json({ error: "No AI friend found for this chat" }, 404);
     }
 
+    // Create a message in the database with the generated meme
+    // userId is null for AI-generated memes
     const { data: message, error: createError } = await db.from("message").insert({
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: "ai-assistant",
+        userId: null,
         chatId: chatId,
-    }).select("*, user(*)").single();
+        aiFriendId: aiFriend.id,
+    }).select("*, aiFriend:ai_friend(*)").single();
 
     if (createError || !message) {
        console.error("[AI Meme] Failed to create message:", createError);
@@ -864,14 +887,17 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       userId: message.userId,
       chatId: message.chatId,
       createdAt: message.createdAt.toISOString(),
-      user: {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: aiUser.createdAt.toISOString(),
-        updatedAt: aiUser.updatedAt.toISOString(),
+      aiFriend: {
+        id: aiFriend.id,
+        name: aiFriend.name,
+        personality: aiFriend.personality,
+        tone: aiFriend.tone,
+        color: aiFriend.color,
+        engagementMode: aiFriend.engagementMode,
+        engagementPercent: aiFriend.engagementPercent,
+        sortOrder: aiFriend.sortOrder,
+        createdAt: aiFriend.createdAt.toISOString(),
+        updatedAt: aiFriend.updatedAt.toISOString(),
       },
     });
   } catch (error) {

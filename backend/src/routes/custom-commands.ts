@@ -360,14 +360,29 @@ Please respond according to the command instructions above.`;
           ? "Generated image attached."
           : "Command completed.";
 
+    // Get the first AI friend from this chat to attribute the command response to
+    const { data: aiFriend } = await db
+      .from("ai_friend")
+      .select("*")
+      .eq("chatId", validatedData.chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
+
+    if (!aiFriend) {
+      console.error("[CustomCommands] No AI friend found for chat:", validatedData.chatId);
+      return c.json({ error: "No AI friend found for this chat" }, 404);
+    }
+
     const { data: aiMessage, error: messageError } = await db
       .from("message")
       .insert({
         content: messageContent,
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: "ai-assistant",
+        userId: null,
         chatId: validatedData.chatId,
+        aiFriendId: aiFriend.id,
         replyToId: validatedData.replyToId,
       })
       .select("*")
@@ -377,13 +392,6 @@ Please respond according to the command instructions above.`;
       console.error("[CustomCommands] Error creating AI message:", messageError);
       return c.json({ error: "Failed to create AI message" }, 500);
     }
-
-    // Fetch user for AI message
-    const { data: aiUser } = await db
-      .from("user")
-      .select("*")
-      .eq("id", "ai-assistant")
-      .single();
 
     // Fetch replyTo if exists
     let replyTo = null;
@@ -407,15 +415,21 @@ Please respond according to the command instructions above.`;
       userId: aiMessage.userId,
       chatId: aiMessage.chatId,
       replyToId: aiMessage.replyToId,
-      user: aiUser ? {
-        id: aiUser.id,
-        name: aiUser.name,
-        bio: aiUser.bio,
-        image: aiUser.image,
-        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
-        createdAt: new Date(aiUser.createdAt).toISOString(),
-        updatedAt: new Date(aiUser.updatedAt).toISOString(),
-      } : null,
+      aiFriendId: aiMessage.aiFriendId,
+      user: null,
+      aiFriend: {
+        id: aiFriend.id,
+        chatId: aiFriend.chatId,
+        name: aiFriend.name,
+        personality: aiFriend.personality,
+        tone: aiFriend.tone,
+        color: aiFriend.color,
+        engagementMode: aiFriend.engagementMode,
+        engagementPercent: aiFriend.engagementPercent,
+        sortOrder: aiFriend.sortOrder,
+        createdAt: new Date(aiFriend.createdAt).toISOString(),
+        updatedAt: new Date(aiFriend.updatedAt).toISOString(),
+      },
       replyTo: replyTo
         ? {
             id: replyTo.id,
