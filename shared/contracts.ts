@@ -304,7 +304,7 @@ export const smartRepliesRequestSchema = z.object({
   userId: z.string(),
   lastMessages: z.array(z.object({
     content: z.string(),
-    userId: z.string().nullable(), // Nullable for AI friend messages
+    userId: z.string(),
     userName: z.string(),
     isCurrentUser: z.boolean(),
   })).max(3),

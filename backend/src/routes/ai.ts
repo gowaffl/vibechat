@@ -15,6 +15,7 @@ import { executeGPT51Response } from "../services/gpt-responses";
 import { saveResponseImages } from "../services/image-storage";
 import { smartRepliesRequestSchema } from "../../../shared/contracts";
 import { tagMessage } from "../services/message-tagger";
+import { uploadFileToStorage } from "../services/storage";
 
 const ai = new Hono<AppType>();
 
@@ -80,20 +81,25 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
+    // Get the AI user from database
+    const { data: aiUser } = await db
+      .from("user")
+      .select("*")
+      .eq("id", "ai-assistant")
+      .single();
+
+    if (!aiUser) {
+      return c.json({ error: "AI friend not found" }, 500);
+    }
+
     // Get the specific AI friend (or default to first one if not specified)
     let aiFriend;
     if (aiFriendId) {
-      const { data: foundFriend, error: friendError } = await db
+      const { data: foundFriend } = await db
         .from("ai_friend")
         .select("*, chat:chat(*)")
         .eq("id", aiFriendId)
         .single();
-      
-      if (friendError) {
-        console.error(`[AI] Error fetching AI friend:`, friendError);
-        return c.json({ error: "AI friend not found", details: friendError.message }, 404);
-      }
-      
       aiFriend = foundFriend;
 
       if (!aiFriend) {
@@ -106,19 +112,13 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       }
     } else {
       // If no aiFriendId specified, use the first AI friend in the chat
-      const { data: foundFriend, error: friendError } = await db
+      const { data: foundFriend } = await db
         .from("ai_friend")
         .select("*, chat:chat(*)")
         .eq("chatId", chatId)
         .order("sortOrder", { ascending: true })
         .limit(1)
         .single();
-      
-      if (friendError) {
-        console.error(`[AI] Error fetching AI friend:`, friendError);
-        return c.json({ error: "No AI friends found in this chat", details: friendError.message }, 404);
-      }
-      
       aiFriend = foundFriend;
 
       if (!aiFriend) {
@@ -263,20 +263,17 @@ Respond naturally and concisely based on the conversation.`;
     // The lock ensures we don't interfere with ongoing AI responses.
 
     // Create the AI's message in the database with aiFriendId
-    // userId is null for AI friend messages since they're not users
-    const { data: aiMessage, error: createError } = await db.from("message").insert({
+    const aiMessage = await db.message.create({
+      data: {
         content: aiResponseText || "Generated image attached.",
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: null,
+        userId: "ai-assistant",
         chatId: chatId,
         aiFriendId: aiFriendId,
-    }).select("*, aiFriend:ai_friend(*)").single();
-
-    if (createError || !aiMessage) {
-      console.error("[AI] Failed to create message:", createError);
-      throw new Error("Failed to create message in database");
-    }
+      },
+      include: { user: true },
+    });
 
     // Auto-tag AI message for smart threads (fire-and-forget, immediate)
     if (aiResponseText && aiResponseText.trim().length > 0) {
@@ -285,20 +282,24 @@ Respond naturally and concisely based on the conversation.`;
       });
     }
 
-    // Return the AI message with AI friend data
+    // Return the AI message
     return c.json({
       id: aiMessage.id,
       content: aiMessage.content,
       userId: aiMessage.userId,
       chatId: aiMessage.chatId,
-      aiFriendId: aiMessage.aiFriendId,
-      createdAt: aiMessage.createdAt,
-      aiFriend: aiMessage.aiFriend,
+      createdAt: aiMessage.createdAt.toISOString(),
+      user: {
+        id: aiUser.id,
+        name: aiUser.name,
+        bio: aiUser.bio,
+        image: aiUser.image,
+        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
+        createdAt: aiUser.createdAt.toISOString(),
+        updatedAt: aiUser.updatedAt.toISOString(),
+      },
     });
   } catch (error) {
-    console.error("=".repeat(80));
-    console.error("[AI] ❌ ERROR OCCURRED IN AI CHAT ROUTE");
-    console.error("=".repeat(80));
     console.error("[AI] Error during chat:", error);
 
     // Log detailed error information
@@ -313,8 +314,6 @@ Respond naturally and concisely based on the conversation.`;
       const apiError = error as any;
       console.error("[AI] API Error response:", JSON.stringify(apiError.response, null, 2));
     }
-
-    console.error("=".repeat(80));
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return c.json({
@@ -545,53 +544,36 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
 
     const base64Image = imagePart.inlineData.data;
 
-    // Save the image to uploads directory
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    await fs.mkdir(uploadsDir, { recursive: true });
-
+    // Save the image to Supabase Storage
     const filename = `nano-banana-${Date.now()}.png`;
-    const filepath = path.join(uploadsDir, filename);
-
-    // Write base64 to file
-    await fs.writeFile(filepath, base64Image, { encoding: 'base64' });
-
-    const imageUrl = `/uploads/${filename}`;
-
-    console.log("[AI Image] Image saved successfully:", imageUrl);
+    const buffer = Buffer.from(base64Image, 'base64');
+    
+    const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
+    console.log("[AI Image] Image saved successfully to Supabase Storage:", imageUrl);
 
     // NOTE: No final check here because this is a USER-INITIATED command.
     // Users should be able to generate images even if AI just responded.
     // The lock ensures we don't interfere with ongoing AI responses.
 
-    // Get the first AI friend from this chat to attribute the image to
-    const { data: aiFriend } = await db
-      .from("ai_friend")
-      .select("*")
-      .eq("chatId", chatId)
-      .order("sortOrder", { ascending: true })
-      .limit(1)
-      .single();
+    // Create a message in the database with the generated image
+    const aiUser = await db.user.findUnique({
+      where: { id: "ai-assistant" },
+    });
 
-    if (!aiFriend) {
-      console.error("[AI Image] No AI friend found for chat:", chatId);
-      return c.json({ error: "No AI friend found for this chat" }, 404);
+    if (!aiUser) {
+      return c.json({ error: "AI friend user not found" }, 500);
     }
 
-    // Create a message in the database with the generated image
-    // userId is null for AI-generated images
-    const { data: message, error: createError } = await db.from("message").insert({
+    const message = await db.message.create({
+      data: {
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: null,
+        userId: "ai-assistant",
         chatId: chatId,
-        aiFriendId: aiFriend.id,
-    }).select("*, aiFriend:ai_friend(*)").single();
-
-    if (createError || !message) {
-       console.error("[AI Image] Failed to create message:", createError);
-       return c.json({ error: "Failed to save generated image message" }, 500);
-    }
+      },
+      include: { user: true },
+    });
 
     return c.json({
       id: message.id,
@@ -600,18 +582,15 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       imageUrl: message.imageUrl,
       userId: message.userId,
       chatId: message.chatId,
-      createdAt: typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString(),
-      aiFriend: {
-        id: aiFriend.id,
-        name: aiFriend.name,
-        personality: aiFriend.personality,
-        tone: aiFriend.tone,
-        color: aiFriend.color,
-        engagementMode: aiFriend.engagementMode,
-        engagementPercent: aiFriend.engagementPercent,
-        sortOrder: aiFriend.sortOrder,
-        createdAt: typeof aiFriend.createdAt === 'string' ? aiFriend.createdAt : aiFriend.createdAt.toISOString(),
-        updatedAt: typeof aiFriend.updatedAt === 'string' ? aiFriend.updatedAt : aiFriend.updatedAt.toISOString(),
+      createdAt: message.createdAt.toISOString(),
+      user: {
+        id: aiUser.id,
+        name: aiUser.name,
+        bio: aiUser.bio,
+        image: aiUser.image,
+        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
+        createdAt: aiUser.createdAt.toISOString(),
+        updatedAt: aiUser.updatedAt.toISOString(),
       },
     });
   } catch (error) {
@@ -831,53 +810,36 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
 
     const base64Image = imagePart.inlineData.data;
 
-    // Save the meme to uploads directory
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    await fs.mkdir(uploadsDir, { recursive: true });
-
+    // Save the meme to Supabase Storage
     const filename = `meme-${Date.now()}.png`;
-    const filepath = path.join(uploadsDir, filename);
-
-    // Write base64 to file
-    await fs.writeFile(filepath, base64Image, { encoding: 'base64' });
-
-    const imageUrl = `/uploads/${filename}`;
-
-    console.log("[AI Meme] Meme saved successfully:", imageUrl);
+    const buffer = Buffer.from(base64Image, 'base64');
+    
+    const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
+    console.log("[AI Meme] Meme saved successfully to Supabase Storage:", imageUrl);
 
     // NOTE: No final check here because this is a USER-INITIATED command.
     // Users should be able to generate memes even if AI just responded.
     // The lock ensures we don't interfere with ongoing AI responses.
 
-    // Get the first AI friend from this chat to attribute the meme to
-    const { data: aiFriend } = await db
-      .from("ai_friend")
-      .select("*")
-      .eq("chatId", chatId)
-      .order("sortOrder", { ascending: true })
-      .limit(1)
-      .single();
+    // Create a message in the database with the generated meme
+    const aiUser = await db.user.findUnique({
+      where: { id: "ai-assistant" },
+    });
 
-    if (!aiFriend) {
-      console.error("[AI Meme] No AI friend found for chat:", chatId);
-      return c.json({ error: "No AI friend found for this chat" }, 404);
+    if (!aiUser) {
+      return c.json({ error: "AI friend user not found" }, 500);
     }
 
-    // Create a message in the database with the generated meme
-    // userId is null for AI-generated memes
-    const { data: message, error: createError } = await db.from("message").insert({
+    const message = await db.message.create({
+      data: {
         content: prompt,
         messageType: "image",
         imageUrl: imageUrl,
-        userId: null,
+        userId: "ai-assistant",
         chatId: chatId,
-        aiFriendId: aiFriend.id,
-    }).select("*, aiFriend:ai_friend(*)").single();
-
-    if (createError || !message) {
-       console.error("[AI Meme] Failed to create message:", createError);
-       return c.json({ error: "Failed to save generated meme message" }, 500);
-    }
+      },
+      include: { user: true },
+    });
 
     return c.json({
       id: message.id,
@@ -886,18 +848,15 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       imageUrl: message.imageUrl,
       userId: message.userId,
       chatId: message.chatId,
-      createdAt: typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString(),
-      aiFriend: {
-        id: aiFriend.id,
-        name: aiFriend.name,
-        personality: aiFriend.personality,
-        tone: aiFriend.tone,
-        color: aiFriend.color,
-        engagementMode: aiFriend.engagementMode,
-        engagementPercent: aiFriend.engagementPercent,
-        sortOrder: aiFriend.sortOrder,
-        createdAt: typeof aiFriend.createdAt === 'string' ? aiFriend.createdAt : aiFriend.createdAt.toISOString(),
-        updatedAt: typeof aiFriend.updatedAt === 'string' ? aiFriend.updatedAt : aiFriend.updatedAt.toISOString(),
+      createdAt: message.createdAt.toISOString(),
+      user: {
+        id: aiUser.id,
+        name: aiUser.name,
+        bio: aiUser.bio,
+        image: aiUser.image,
+        hasCompletedOnboarding: aiUser.hasCompletedOnboarding,
+        createdAt: aiUser.createdAt.toISOString(),
+        updatedAt: aiUser.updatedAt.toISOString(),
       },
     });
   } catch (error) {
@@ -927,7 +886,9 @@ ai.post("/generate-group-avatar", async (c) => {
     console.log("[AI Avatar] GOOGLE_API_KEY length:", process.env.GOOGLE_API_KEY?.length);
 
     // Get chat
-    const { data: chat } = await db.from("chat").select("*").eq("id", chatId).single();
+    const chat = await db.chat.findUnique({
+      where: { id: chatId },
+    });
 
     if (!chat) {
       return c.json({ error: "Chat not found" }, 404);
@@ -1064,26 +1025,22 @@ ai.post("/generate-group-avatar", async (c) => {
 
     const base64Image = imagePart.inlineData.data;
 
-    // Save the avatar to uploads directory
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    await fs.mkdir(uploadsDir, { recursive: true });
-
+    // Save the avatar to Supabase Storage
     const filename = `group-avatar-${Date.now()}.png`;
-    const filepath = path.join(uploadsDir, filename);
-
-    // Write base64 to file
-    await fs.writeFile(filepath, base64Image, { encoding: 'base64' });
-
-    const imageUrl = `/uploads/${filename}`;
-
-    console.log("[AI Avatar] Avatar saved successfully:", imageUrl);
+    const buffer = Buffer.from(base64Image, 'base64');
+    
+    const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
+    console.log("[AI Avatar] Avatar saved successfully to Supabase Storage:", imageUrl);
 
     // Update chat with new avatar
-    await db.from("chat").update({
+    await db.chat.update({
+      where: { id: chatId },
+      data: {
         image: imageUrl,
         lastAvatarGenDate: new Date(),
         avatarPromptUsed: prompt,
-    }).eq("id", chatId);
+      },
+    });
 
     console.log("[AI Avatar] Chat updated with new avatar");
 

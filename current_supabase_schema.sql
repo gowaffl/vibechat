@@ -29,6 +29,15 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ==========================================
+-- Storage Configuration
+-- ==========================================
+-- Storage bucket "uploads" is configured via Supabase UI with:
+-- - Public access enabled
+-- - File size limit: 10MB (Unset in UI = 10MB default)
+-- - Allowed MIME types: Any
+-- - RLS policies: 4 policies configured for authenticated users
+
+-- ==========================================
 -- Utilities
 -- ==========================================
 
@@ -518,22 +527,3 @@ CREATE POLICY "Members can view media reactions" ON "media_reaction" FOR SELECT 
 
 -- Conversation Summary
 CREATE POLICY "Users can view their own summaries" ON "conversation_summary" FOR SELECT USING (is_self("userId"));
-
--- ==========================================
--- MIGRATION: make_message_user_id_nullable
--- Date: November 25, 2025
--- ==========================================
--- Make userId nullable in message table to allow AI friends to send messages
--- without being users. AI friends are identified by aiFriendId instead.
-
-ALTER TABLE message 
-ALTER COLUMN "userId" DROP NOT NULL;
-
-ALTER TABLE message 
-DROP CONSTRAINT IF EXISTS "message_userId_fkey";
-
-ALTER TABLE message 
-ADD CONSTRAINT "message_userId_fkey" 
-FOREIGN KEY ("userId") 
-REFERENCES "user"(id) 
-ON DELETE SET NULL;

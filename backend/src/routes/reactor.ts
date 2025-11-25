@@ -7,6 +7,7 @@ import {
   createMemeFromMediaRequestSchema,
 } from "@shared/contracts";
 import { openai } from "../env";
+import { uploadFileToStorage } from "../services/storage";
 
 const reactor = new Hono();
 
@@ -297,13 +298,11 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
       const base64Image = imagePart.inlineData.data;
       console.log("[Reactor] ✅ Image generated successfully, size:", base64Image.length, "bytes");
 
-      // Save the image to uploads directory
+      // Save the image to Supabase Storage
       const filename = `remix_${Date.now()}.png`;
-      const fs = await import("fs/promises");
-      await fs.writeFile(`./uploads/${filename}`, base64Image, { encoding: 'base64' });
-      console.log("[Reactor] ✅ Image saved to:", filename);
-
-      const savedImageUrl = `/uploads/${filename}`;
+      const buffer = Buffer.from(base64Image, 'base64');
+      const savedImageUrl = await uploadFileToStorage(filename, buffer, "image/png");
+      console.log("[Reactor] ✅ Image saved to Supabase Storage:", savedImageUrl);
 
       // Create new message with remixed image
       const { data: remixedMessage, error: remixError } = await db
@@ -540,12 +539,11 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
       const base64Image = imagePart.inlineData.data;
       console.log("[Reactor] Meme generated successfully");
 
-      // Save the meme
+      // Save the meme to Supabase Storage
       const filename = `meme_${Date.now()}.png`;
-      const fs = await import("fs/promises");
-      await fs.writeFile(`./uploads/${filename}`, base64Image, { encoding: 'base64' });
-
-      const savedImageUrl = `/uploads/${filename}`;
+      const buffer = Buffer.from(base64Image, 'base64');
+      const savedImageUrl = await uploadFileToStorage(filename, buffer, "image/png");
+      console.log("[Reactor] Meme saved to Supabase Storage:", savedImageUrl);
 
       // Create new message with meme
       const { data: memeMessage, error: memeError } = await db

@@ -1411,14 +1411,6 @@ const ChatScreen = () => {
   const navigation = useNavigation<RootStackScreenProps<"Chat">["navigation"]>();
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
   const { user } = useUser();
-
-  // Helper function to get sender name (user or AI friend)
-  const getSenderName = (message: Message): string => {
-    if (message.aiFriend) {
-      return message.aiFriend.name;
-    }
-    return message.user?.name || "Unknown";
-  };
   const queryClient = useQueryClient();
 
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
@@ -1477,6 +1469,7 @@ const ChatScreen = () => {
   const [reactorMessageId, setReactorMessageId] = useState<string | null>(null);
   const [showThreadsPanel, setShowThreadsPanel] = useState(false);
   const [showCreateThread, setShowCreateThread] = useState(false);
+  const [loadingImageIds, setLoadingImageIds] = useState<Set<string>>(new Set());
   const [editingThread, setEditingThread] = useState<Thread | null>(null);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [catchUpDismissed, setCatchUpDismissed] = useState(false);
@@ -1662,7 +1655,7 @@ const ChatScreen = () => {
     const query = searchQuery.toLowerCase();
     return messages.filter(msg => 
       msg.content?.toLowerCase().includes(query) ||
-      getSenderName(msg).toLowerCase().includes(query)
+      msg.user.name.toLowerCase().includes(query)
     );
   }, [messages, searchQuery]);
 
@@ -1788,7 +1781,7 @@ const ChatScreen = () => {
     return relevantMessages.map(msg => ({
       content: msg.content || "",
       userId: msg.userId,
-      userName: getSenderName(msg),
+      userName: msg.user?.name || "Unknown User",
       isCurrentUser: msg.userId === user?.id,
     }));
   }, [messages, user?.id]);
@@ -3651,7 +3644,7 @@ const ChatScreen = () => {
                   } else {
                     setViewerImage({
                       url: message.imageUrl!,
-                      senderName: getSenderName(message),
+                      senderName: message.user?.name || "Unknown",
                       timestamp: new Date(message.createdAt).toLocaleString(),
                       messageId: message.id,
                       caption: message.content,
@@ -3666,24 +3659,34 @@ const ChatScreen = () => {
                 }}
               >
                 <View style={{ width: 225, height: 240, position: "relative", overflow: "hidden" }}>
-                  {/* Placeholder */}
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <ActivityIndicator size="large" color="#FFFFFF" />
-                  </View>
+                  {/* Placeholder - only show while loading */}
+                  {loadingImageIds.has(message.id) && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ActivityIndicator size="large" color="#FFFFFF" />
+                    </View>
+                  )}
                   {/* Actual Image */}
                   <Image
-                    source={{ uri: getFullImageUrl(message.imageUrl) }}
+                    source={{ uri: (() => {
+                      const fullUrl = getFullImageUrl(message.imageUrl);
+                      console.log(`[ChatScreen] Loading image for message ${message.id}:`, {
+                        relativeUrl: message.imageUrl,
+                        fullUrl: fullUrl,
+                        backendUrl: BACKEND_URL
+                      });
+                      return fullUrl;
+                    })() }}
                     style={{
                       position: "absolute",
                       top: 0,
@@ -3692,6 +3695,26 @@ const ChatScreen = () => {
                       height: "100%"
                     }}
                     resizeMode="cover"
+                    onLoadStart={() => {
+                      console.log(`[ChatScreen] Image load started for message ${message.id}`);
+                      setLoadingImageIds(prev => new Set(prev).add(message.id));
+                    }}
+                    onLoad={() => {
+                      console.log(`[ChatScreen] Image loaded successfully for message ${message.id}`);
+                      setLoadingImageIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(message.id);
+                        return next;
+                      });
+                    }}
+                    onError={(error) => {
+                      console.error(`[ChatScreen] Image load error for message ${message.id}:`, error.nativeEvent);
+                      setLoadingImageIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(message.id);
+                        return next;
+                      });
+                    }}
                   />
 
                   {/* Selection checkbox overlay */}
@@ -3888,7 +3911,7 @@ const ChatScreen = () => {
 
         {/* Profile Photo for others */}
         {!isCurrentUser && (
-          <ProfileImage imageUri={message.user?.image || null} isAI={isAI} userName={getSenderName(message)} />
+          <ProfileImage imageUri={message.user?.image} isAI={isAI} userName={message.user?.name || "Unknown"} />
         )}
 
         {/* Message Content */}
@@ -3898,7 +3921,7 @@ const ChatScreen = () => {
               className="text-xs font-medium mb-1 ml-2"
               style={{ color: isAI ? aiColor : "#6B7280", fontSize: 13, fontWeight: isAI ? "600" : "500" }}
             >
-              {isAI ? aiName : getSenderName(message)}
+              {isAI ? aiName : message.user?.name || "Unknown"}
             </Text>
           )}
           {/* Reply Preview */}
@@ -4361,7 +4384,7 @@ const ChatScreen = () => {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 12, color: "#007AFF", fontWeight: "600" }}>
-                    Replying to {getSenderName(replyToMessage)}
+                    Replying to {replyToMessage.user.name}
                   </Text>
                   <Text
                     style={{ fontSize: 13, color: "#FFFFFF", marginTop: 2 }}
@@ -5092,7 +5115,7 @@ const ChatScreen = () => {
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
                       <Text style={{ color: "#007AFF", fontSize: 14, fontWeight: "600" }}>
-                        {getSenderName(item)}
+                        {item.user.name}
                       </Text>
                       <Text style={{ color: "#666", fontSize: 12, marginLeft: 12 }}>
                         {new Date(item.createdAt).toLocaleDateString()}
@@ -5154,7 +5177,7 @@ const ChatScreen = () => {
                   style={{ marginBottom: 12, borderRadius: 16, overflow: "hidden", backgroundColor: "rgba(255, 255, 255, 0.05)", borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.1)", padding: 16 }}
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                    <Text style={{ color: "#007AFF", fontSize: 14, fontWeight: "600" }}>{getSenderName(item)}</Text>
+                    <Text style={{ color: "#007AFF", fontSize: 14, fontWeight: "600" }}>{item.user.name}</Text>
                     <Text style={{ color: "#666", fontSize: 12, marginLeft: 12 }}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
                   <Text style={{ color: "#FFFFFF", fontSize: 15, lineHeight: 20 }} numberOfLines={3}>{item.content}</Text>

@@ -13,15 +13,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vibecodeapp.vibechat",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSCalendarsUsageDescription": "VibeChat needs access to your calendar to help you schedule events with your AI friends.",
-        "NSCalendarsFullAccessUsageDescription": "VibeChat needs full access to your calendar to create and edit events with your AI friends.",
-        "NSRemindersUsageDescription": "VibeChat needs access to your reminders to help you manage tasks.",
-        "NSRemindersFullAccessUsageDescription": "VibeChat needs full access to your reminders to create and manage tasks with your AI friends.",
-        "NSPhotoLibraryUsageDescription": "VibeChat needs access to your photos to let you share them with your friends.",
-        "NSCameraUsageDescription": "VibeChat needs access to your camera to let you take photos and share them.",
-        "NSMicrophoneUsageDescription": "VibeChat needs access to your microphone to let you send voice messages.",
-        "NSPhotoLibraryAddUsageDescription": "VibeChat needs access to your photos to save images you download."
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
