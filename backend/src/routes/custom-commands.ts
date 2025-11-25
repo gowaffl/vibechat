@@ -366,7 +366,7 @@ Please respond according to the command instructions above.`;
         content: messageContent,
         messageType: primaryImageUrl ? "image" : "text",
         imageUrl: primaryImageUrl,
-        userId: null, // AI-generated messages have null userId
+        userId: validatedData.userId, // Credit to the user who submitted the command
         chatId: validatedData.chatId,
         replyToId: validatedData.replyToId,
         aiFriendId: null, // Custom commands don't have a specific AI friend
@@ -375,8 +375,8 @@ Please respond according to the command instructions above.`;
       .single();
 
     if (messageError || !aiMessage) {
-      console.error("[CustomCommands] Error creating AI message:", messageError);
-      return c.json({ error: "Failed to create AI message" }, 500);
+      console.error("[CustomCommands] Error creating command message:", messageError);
+      return c.json({ error: "Failed to create command message" }, 500);
     }
 
     // Fetch replyTo if exists
@@ -385,7 +385,7 @@ Please respond according to the command instructions above.`;
       replyTo = replyToMessage;
     }
 
-    // Auto-tag AI message for smart threads (fire-and-forget, immediate)
+    // Auto-tag command message for smart threads (fire-and-forget, immediate)
     if (messageContent.trim().length > 0) {
       tagMessage(aiMessage.id, messageContent).catch(error => {
         console.error(`[CustomCommands] Failed to tag message ${aiMessage.id}:`, error);
@@ -398,10 +398,10 @@ Please respond according to the command instructions above.`;
       messageType: aiMessage.messageType as "text" | "image",
       imageUrl: aiMessage.imageUrl,
       imageDescription: aiMessage.imageDescription,
-      userId: aiMessage.userId, // null for AI messages
+      userId: aiMessage.userId, // User who submitted the command
       chatId: aiMessage.chatId,
       replyToId: aiMessage.replyToId,
-      user: null, // AI messages don't have a user
+      user: null, // User object not fetched in this response
       replyTo: replyTo
         ? {
             id: replyTo.id,

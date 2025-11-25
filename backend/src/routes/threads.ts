@@ -327,7 +327,7 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
 
     // Fetch related data for messages
     const messageIds = messages.map((m: any) => m.id);
-    const userIds = [...new Set(messages.map((m: any) => m.userId))];
+    const userIds = [...new Set(messages.map((m: any) => m.userId).filter((id: any) => id !== null))];
     const replyToIds = [...new Set(messages.filter((m: any) => m.replyToId).map((m: any) => m.replyToId))];
 
     // Fetch users
@@ -491,15 +491,15 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
         favicon: msg.linkPreviewFavicon,
       } : null,
       mentions: [], // TODO: Add mentions if needed
-      user: {
+      user: msg.user ? {
         id: msg.user.id,
         name: msg.user.name,
         bio: msg.user.bio,
         image: msg.user.image,
         hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
-        createdAt: msg.user.createdAt.toISOString(),
-        updatedAt: msg.user.updatedAt.toISOString(),
-      },
+        createdAt: typeof msg.user.createdAt === 'string' ? msg.user.createdAt : msg.user.createdAt.toISOString(),
+        updatedAt: typeof msg.user.updatedAt === 'string' ? msg.user.updatedAt : msg.user.updatedAt.toISOString(),
+      } : null,
       replyTo: msg.replyTo
         ? {
             id: msg.replyTo.id,
@@ -515,19 +515,19 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
             editHistory: msg.replyTo.editHistory,
             voiceUrl: msg.replyTo.voiceUrl,
             voiceDuration: msg.replyTo.voiceDuration,
-            createdAt: msg.replyTo.createdAt.toISOString(),
+            createdAt: typeof msg.replyTo.createdAt === 'string' ? msg.replyTo.createdAt : msg.replyTo.createdAt.toISOString(),
             linkPreview: null, // Don't nest link previews in replies
             mentions: [],
             reactions: [],
-            user: {
+            user: msg.replyTo.user ? {
               id: msg.replyTo.user.id,
               name: msg.replyTo.user.name,
               bio: msg.replyTo.user.bio,
               image: msg.replyTo.user.image,
               hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
-              createdAt: msg.replyTo.user.createdAt.toISOString(),
-              updatedAt: msg.replyTo.user.updatedAt.toISOString(),
-            },
+              createdAt: typeof msg.replyTo.user.createdAt === 'string' ? msg.replyTo.user.createdAt : msg.replyTo.user.createdAt.toISOString(),
+              updatedAt: typeof msg.replyTo.user.updatedAt === 'string' ? msg.replyTo.user.updatedAt : msg.replyTo.user.updatedAt.toISOString(),
+            } : null,
           }
         : null,
       reactions: msg.reactions.map((reaction) => ({
@@ -535,16 +535,16 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
         emoji: reaction.emoji,
         userId: reaction.userId,
         messageId: reaction.messageId,
-        createdAt: reaction.createdAt.toISOString(),
-        user: {
+        createdAt: typeof reaction.createdAt === 'string' ? reaction.createdAt : reaction.createdAt.toISOString(),
+        user: reaction.user ? {
           id: reaction.user.id,
           name: reaction.user.name,
           bio: reaction.user.bio,
           image: reaction.user.image,
           hasCompletedOnboarding: reaction.user.hasCompletedOnboarding,
-          createdAt: reaction.user.createdAt.toISOString(),
-          updatedAt: reaction.user.updatedAt.toISOString(),
-        },
+          createdAt: typeof reaction.user.createdAt === 'string' ? reaction.user.createdAt : reaction.user.createdAt.toISOString(),
+          updatedAt: typeof reaction.user.updatedAt === 'string' ? reaction.user.updatedAt : reaction.user.updatedAt.toISOString(),
+        } : null,
       })),
     }));
 
