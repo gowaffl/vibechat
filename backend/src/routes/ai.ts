@@ -600,7 +600,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       imageUrl: message.imageUrl,
       userId: message.userId,
       chatId: message.chatId,
-      createdAt: message.createdAt.toISOString(),
+      createdAt: typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString(),
       aiFriend: {
         id: aiFriend.id,
         name: aiFriend.name,
@@ -610,8 +610,8 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
         engagementMode: aiFriend.engagementMode,
         engagementPercent: aiFriend.engagementPercent,
         sortOrder: aiFriend.sortOrder,
-        createdAt: aiFriend.createdAt.toISOString(),
-        updatedAt: aiFriend.updatedAt.toISOString(),
+        createdAt: typeof aiFriend.createdAt === 'string' ? aiFriend.createdAt : aiFriend.createdAt.toISOString(),
+        updatedAt: typeof aiFriend.updatedAt === 'string' ? aiFriend.updatedAt : aiFriend.updatedAt.toISOString(),
       },
     });
   } catch (error) {
@@ -886,7 +886,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       imageUrl: message.imageUrl,
       userId: message.userId,
       chatId: message.chatId,
-      createdAt: message.createdAt.toISOString(),
+      createdAt: typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString(),
       aiFriend: {
         id: aiFriend.id,
         name: aiFriend.name,
@@ -896,8 +896,8 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
         engagementMode: aiFriend.engagementMode,
         engagementPercent: aiFriend.engagementPercent,
         sortOrder: aiFriend.sortOrder,
-        createdAt: aiFriend.createdAt.toISOString(),
-        updatedAt: aiFriend.updatedAt.toISOString(),
+        createdAt: typeof aiFriend.createdAt === 'string' ? aiFriend.createdAt : aiFriend.createdAt.toISOString(),
+        updatedAt: typeof aiFriend.updatedAt === 'string' ? aiFriend.updatedAt : aiFriend.updatedAt.toISOString(),
       },
     });
   } catch (error) {
