@@ -127,7 +127,8 @@
     "victory-native": "^41.16.2",
     "zeego": "^3.0.6",
     "zod": "4.1.11",
-    "zustand": "^5.0.4"
+    "zustand": "^5.0.4",
+    "expo-audio": "~0.4.9"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

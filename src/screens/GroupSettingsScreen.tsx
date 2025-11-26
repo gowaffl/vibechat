@@ -235,13 +235,18 @@ const GroupSettingsScreen = () => {
       // Convert relative image URL to full URL
       if (chat.image) {
         let fullImageUrl: string;
-        // If already a full URL, extract the path and reconstruct with current BACKEND_URL
-        // This handles cases where the URL was saved with a different backend URL
+        // If already a full URL
         if (chat.image.startsWith('http://') || chat.image.startsWith('https://')) {
           try {
             const url = new URL(chat.image);
-            // Use the pathname (e.g., /uploads/image.jpg) with current BACKEND_URL
-            fullImageUrl = `${BACKEND_URL}${url.pathname}`;
+            
+            // Check if this is a Supabase storage URL - if so, use as-is
+            if (url.pathname.includes('/storage/v1/object/')) {
+              fullImageUrl = chat.image;
+            } else {
+              // For other full URLs, extract path and use current BACKEND_URL
+              fullImageUrl = `${BACKEND_URL}${url.pathname}`;
+            }
           } catch {
             // If URL parsing fails, use as is
             fullImageUrl = chat.image;

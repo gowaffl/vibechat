@@ -17,6 +17,9 @@
         "NSCalendarsUsageDescription": "VibeChat needs access to your calendar to create and manage event reminders for your group chats.",
         "NSRemindersUsageDescription": "VibeChat needs access to reminders to help you keep track of important group events.",
         "NSCalendarsFullAccessUsageDescription": "VibeChat needs full calendar access to create and manage event reminders for your group chats."
+      },
+      "entitlements": {
+        "aps-environment": "development"
       }
     },
     "android": {
