@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { View, Text, Pressable, Alert, Platform, Linking } from "react-native";
-import * as Calendar from "expo-calendar";
 import * as Haptics from "expo-haptics";
 import { Calendar as CalendarIcon, CalendarPlus } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -28,6 +27,9 @@ const AddToCalendar: React.FC<AddToCalendarProps> = ({
     try {
       setIsAdding(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      // Lazy-load expo-calendar only when needed
+      const Calendar = await import("expo-calendar");
 
       // Request calendar permissions
       const { status } = await Calendar.requestCalendarPermissionsAsync();

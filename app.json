@@ -15,8 +15,10 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCalendarsUsageDescription": "VibeChat needs access to your calendar to create and manage event reminders for your group chats.",
+        "NSCalendarsWriteOnlyAccessUsageDescription": "VibeChat needs to add events to your calendar for group chat scheduling.",
+        "NSCalendarsFullAccessUsageDescription": "VibeChat needs full calendar access to create and manage event reminders for your group chats.",
         "NSRemindersUsageDescription": "VibeChat needs access to reminders to help you keep track of important group events.",
-        "NSCalendarsFullAccessUsageDescription": "VibeChat needs full calendar access to create and manage event reminders for your group chats."
+        "NSRemindersFullAccessUsageDescription": "VibeChat needs full reminders access to create and manage tasks for your group chats."
       },
       "entitlements": {
         "aps-environment": "development"
