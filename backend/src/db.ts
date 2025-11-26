@@ -51,6 +51,5 @@ export function createUserClient(accessToken: string) {
   });
 }
 
-// Legacy exports for backwards compatibility during migration
-export const prisma = db;
+// Alias for backwards compatibility
 export const supabase = db;
