@@ -140,16 +140,18 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
 
     // Format immediate context (last 5 messages) with time awareness
     const recentContextText = lastFiveMessages
+      .filter((msg) => msg.user) // Filter out messages without users
       .map((msg) => {
         const timeAgo = Math.floor((now.getTime() - new Date(msg.createdAt).getTime()) / 1000);
         const timeDesc = timeAgo < 60 ? "just now" : timeAgo < 300 ? "a few minutes ago" : "earlier";
+        const userName = msg.user?.name || "Unknown";
 
         if (msg.messageType === "image" && msg.imageDescription) {
-          return `${msg.user.name} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}`;
+          return `${userName} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}`;
         } else if (msg.messageType === "image") {
-          return `${msg.user.name} (${timeDesc}): [shared an image]${msg.content ? ` ${msg.content}"` : ""}`;
+          return `${userName} (${timeDesc}): [shared an image]${msg.content ? ` ${msg.content}"` : ""}`;
         }
-        return `${msg.user.name} (${timeDesc}): "${msg.content}"`;
+        return `${userName} (${timeDesc}): "${msg.content}"`;
       })
       .join("\n");
 
@@ -157,13 +159,14 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
     const earlierContext = recentMessages.slice(0, -5);
     const earlierContextText = earlierContext.length > 0
       ? earlierContext
-          .map((msg) => `${msg.user.name}: "${msg.content}"`)
+          .filter((msg) => msg.user) // Filter out messages without users
+          .map((msg) => `${msg.user?.name || "Unknown"}: "${msg.content}"`)
           .join("\n")
       : "";
 
     // Extract unique participant names (exclude AI name)
     const uniqueParticipants = Array.from(
-      new Set(messagesInOrder.map((msg) => msg.user.name).filter((name) => name !== aiName && name !== "AI Friend"))
+      new Set(messagesInOrder.filter((msg) => msg.user).map((msg) => msg.user.name).filter((name) => name !== aiName && name !== "AI Friend"))
     );
     const participantList = uniqueParticipants.join(", ");
 
