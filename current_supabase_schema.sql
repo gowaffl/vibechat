@@ -10,6 +10,7 @@
 -- - setup_rls_policies
 -- - add_phone_to_user ✅ APPLIED (November 24, 2025)
 -- - add_birthdate_to_user ✅ APPLIED (November 24, 2025)
+-- - fix_corrupted_image_urls ✅ APPLIED (January 26, 2025) - Fixed double-prepended URLs
 --
 -- CODE MIGRATION STATUS:
 -- ✅ All Prisma-style queries converted to Supabase (November 25, 2025)

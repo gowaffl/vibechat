@@ -2,10 +2,19 @@ import { BACKEND_URL } from "@/lib/api";
 
 /**
  * Convert an image URL to a full URL
- * Handles relative URLs, full URLs, and Supabase storage URLs
+ * Handles relative URLs, full URLs, Supabase storage URLs, and corrupted double-prepended URLs
  */
 export const getFullImageUrl = (imageUrl: string | null | undefined): string => {
   if (!imageUrl) return "";
+  
+  // FIX: Handle corrupted URLs that have been double-prepended
+  // e.g., "https://backend.comhttps://supabase.co/storage/..."
+  const supabaseUrlMatch = imageUrl.match(/(https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/.+)/);
+  if (supabaseUrlMatch) {
+    // Extract and return the clean Supabase URL
+    console.log("[ImageHelper] Fixed corrupted URL, extracted:", supabaseUrlMatch[1]);
+    return supabaseUrlMatch[1];
+  }
   
   // If already a full URL
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {

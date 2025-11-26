@@ -152,11 +152,8 @@ const ChatHeader = ({
         <Pressable
           onPress={() => {
             Haptics.selectionAsync();
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              (navigation as any).navigate("MainTabs", { screen: "Chats" });
-            }
+            // Always navigate to the Chats list, not previous screen
+            (navigation as any).navigate("MainTabs", { screen: "Chats" });
           }}
         >
           <View

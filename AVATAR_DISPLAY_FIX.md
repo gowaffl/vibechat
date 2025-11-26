@@ -1,7 +1,22 @@
 # Avatar Display Fix - Summary
 
-## Root Cause
-The images weren't displaying because of an **incorrect URL formation bug**. When uploading images, the backend returns a full Supabase Storage public URL (e.g., `https://xxx.supabase.co/storage/v1/object/public/uploads/file.png`), but the frontend was prepending `BACKEND_URL` to it again, creating invalid URLs like `http://localhost:3000/https://xxx.supabase.co/...`.
+## Root Cause - CRITICAL BUG FOUND & FIXED! 🐛✅
+
+The images weren't displaying due to **double-prepended URLs in the database**:
+
+### The Problem:
+1. Backend returns full Supabase Storage URL: `https://xxx.supabase.co/storage/v1/object/public/uploads/file.png`
+2. Frontend was **incorrectly** prepending `BACKEND_URL` to it
+3. This created corrupted URLs like: `https://backend.comhttps://xxx.supabase.co/storage/...`
+4. These malformed URLs were **saved to the database**
+5. Even after fixing the frontend code, **existing data was already corrupted**
+
+### Database Evidence:
+```sql
+SELECT image FROM "user" LIMIT 1;
+-- Result: "https://vibechat-zdok.onrender.comhttps://xxekfvxdzixesjrbxoju.supabase.co/storage/..."
+--          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ INVALID! Double prepended!
+```
 
 ## Issues Fixed
 
@@ -138,16 +153,44 @@ All changes are backward compatible and improve existing functionality without b
 - Frontend was incorrectly prepending `BACKEND_URL`: `http://localhost:3000/https://xxx.supabase.co/...`
 - This created completely invalid URLs that couldn't load
 
-**The Fix:**
-1. **ProfileScreen**: Removed `BACKEND_URL` prepending on upload - use response.url directly
-2. **GroupSettingsScreen**: Same fix + replaced duplicate URL parsing logic with shared helper
-3. **Consistent URL Handling**: All screens now use the shared `getFullImageUrl()` helper
+**The Complete Fix (3 Parts):**
+
+### 1. Fixed Frontend Code ✅
+- **ProfileScreen**: Removed `BACKEND_URL` prepending on upload - use response.url directly
+- **GroupSettingsScreen**: Same fix + replaced duplicate URL parsing logic with shared helper
+- **Consistent URL Handling**: All screens now use the shared `getFullImageUrl()` helper
+
+### 2. Enhanced URL Helper with Corruption Detection ✅
+```typescript
+// NEW: Detects and fixes double-prepended URLs
+const supabaseUrlMatch = imageUrl.match(/(https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/.+)/);
+if (supabaseUrlMatch) {
+  // Extract the clean Supabase URL
+  return supabaseUrlMatch[1];
+}
+```
+
+### 3. Database Cleanup Migration ✅
+Created `fix_corrupted_image_urls.sql` to clean up existing corrupted URLs:
+- Fixed **user** table `image` column
+- Fixed **chat** table `image` column  
+- Fixed **message** table `imageUrl` column
+
+**Result:** All URLs are now valid Supabase Storage URLs ✅
 
 **Why Images Now Work:**
-- Upload returns: `https://xxx.supabase.co/storage/v1/object/public/uploads/abc123.jpg`
-- We save that exact URL to the database
-- `getFullImageUrl()` recognizes it's already a full URL and returns it as-is
-- Image component loads it successfully ✅
+1. **Upload**: Returns `https://xxx.supabase.co/storage/v1/object/public/uploads/abc123.jpg`
+2. **Save**: We save that exact URL to the database (no prepending!)
+3. **Load**: `getFullImageUrl()` recognizes it's a Supabase URL and returns it as-is
+4. **Fallback**: Even if corrupted URLs exist, the helper extracts the clean URL
+5. **Display**: Image component receives a valid URL and loads successfully ✅
+
+### Database Verification:
+```sql
+-- All URLs are now valid!
+SELECT image FROM "user" WHERE image IS NOT NULL LIMIT 1;
+-- ✅ "https://xxekfvxdzixesjrbxoju.supabase.co/storage/v1/object/public/uploads/..."
+```
 
 ## Verification Steps
 

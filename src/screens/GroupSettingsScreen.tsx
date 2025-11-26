@@ -2103,6 +2103,13 @@ const GroupSettingsScreen = () => {
                       source={{ uri: getFullImageUrl(member.user.image) }}
                       className="w-12 h-12 rounded-full"
                       resizeMode="cover"
+                      onError={(error) => {
+                        console.error("[GroupSettings] Member image load error:", member.user?.name, error.nativeEvent.error);
+                        console.error("[GroupSettings] Failed URL:", getFullImageUrl(member.user.image));
+                      }}
+                      onLoad={() => {
+                        console.log("[GroupSettings] Member image loaded:", member.user?.name);
+                      }}
                     />
                   ) : (
                     <View

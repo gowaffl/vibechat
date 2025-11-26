@@ -226,6 +226,13 @@ const ProfileScreen = () => {
                     source={{ uri: getFullImageUrl(user.image) }}
                     className="w-32 h-32 rounded-full"
                     resizeMode="cover"
+                    onError={(error) => {
+                      console.error("[ProfileScreen] Image load error:", error.nativeEvent.error);
+                      console.error("[ProfileScreen] Failed URL:", getFullImageUrl(user.image));
+                    }}
+                    onLoad={() => {
+                      console.log("[ProfileScreen] Image loaded successfully:", getFullImageUrl(user.image));
+                    }}
                   />
                 ) : (
                   <View
