@@ -234,9 +234,21 @@ const GroupSettingsScreen = () => {
 
       // Convert relative image URL to full URL
       if (chat.image) {
-        const fullImageUrl = chat.image.startsWith('http')
-          ? chat.image
-          : `${BACKEND_URL}${chat.image}`;
+        let fullImageUrl: string;
+        // If already a full URL, extract the path and reconstruct with current BACKEND_URL
+        // This handles cases where the URL was saved with a different backend URL
+        if (chat.image.startsWith('http://') || chat.image.startsWith('https://')) {
+          try {
+            const url = new URL(chat.image);
+            // Use the pathname (e.g., /uploads/image.jpg) with current BACKEND_URL
+            fullImageUrl = `${BACKEND_URL}${url.pathname}`;
+          } catch {
+            // If URL parsing fails, use as is
+            fullImageUrl = chat.image;
+          }
+        } else {
+          fullImageUrl = `${BACKEND_URL}${chat.image}`;
+        }
         setImageUri(fullImageUrl);
       } else {
         setImageUri(null);
@@ -392,10 +404,12 @@ const GroupSettingsScreen = () => {
       }
     },
     onSuccess: (data) => {
-      const imageUrl = `${BACKEND_URL}${data.url}`;
-      console.log("[GroupSettings] Full image URL:", imageUrl);
-      updateSettingsMutation.mutate({ image: imageUrl });
-      setImageUri(imageUrl);
+      console.log("[GroupSettings] Image uploaded, relative path:", data.url);
+      // Save only the relative path to the database (not full URL)
+      updateSettingsMutation.mutate({ image: data.url });
+      // For display, use the full URL
+      const fullImageUrl = `${BACKEND_URL}${data.url}`;
+      setImageUri(fullImageUrl);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error) => {

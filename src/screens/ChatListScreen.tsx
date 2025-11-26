@@ -148,8 +148,17 @@ const ChatListScreen = () => {
 
   const getFullImageUrl = (imageUrl: string | null | undefined): string => {
     if (!imageUrl) return "";
+    // If already a full URL, extract the path and reconstruct with current BACKEND_URL
+    // This handles cases where the URL was saved with a different backend URL
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-      return imageUrl;
+      try {
+        const url = new URL(imageUrl);
+        // Use the pathname (e.g., /uploads/image.jpg) with current BACKEND_URL
+        return `${BACKEND_URL}${url.pathname}`;
+      } catch {
+        // If URL parsing fails, return as is
+        return imageUrl;
+      }
     }
     return `${BACKEND_URL}${imageUrl}`;
   };
