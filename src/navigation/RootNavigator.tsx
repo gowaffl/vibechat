@@ -1,11 +1,12 @@
 import { View, Text, Pressable, Image, Modal, Platform } from "react-native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createStackNavigator, TransitionPresets } from "@react-navigation/stack";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect } from "react";
 
 import type { RootStackParamList } from "@/navigation/types";
+import { forTrayTransition, transitionSpec } from "@/navigation/TransitionConfig";
 import TabNavigator from "@/navigation/TabNavigator";
 import ChatScreen from "@/screens/ChatScreen";
 import ChatListScreen from "@/screens/ChatListScreen";
@@ -20,37 +21,12 @@ import WelcomeScreen from "@/screens/WelcomeScreen";
 import BirthdateScreen from "@/screens/BirthdateScreen";
 import { useUser } from "@/contexts/UserContext";
 
-// Custom hook to add haptic feedback on navigation
-const useNavigationHaptics = () => {
-  const navigation = useNavigation();
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('transitionStart' as any, () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    });
-
-    return unsubscribe;
-  }, [navigation]);
-};
-
-// Default spring animation config for all screens
-const springAnimationConfig = {
-  animation: 'spring' as const,
-  config: {
-    stiffness: 300,
-    damping: 25,
-    mass: 0.8,
-    overshootClamping: false,
-    restDisplacementThreshold: 0.01,
-    restSpeedThreshold: 0.01,
-  },
-};
-
 /**
  * RootStackNavigator
  * The root navigator for the app with Phone Auth, Onboarding, Chat List, Chat and Profile screens
  */
-const RootStack = createNativeStackNavigator<RootStackParamList>();
+const RootStack = createStackNavigator<RootStackParamList>();
+
 const RootNavigator = () => {
   const { user, loading, isAuthenticated } = useUser();
 
@@ -63,12 +39,6 @@ const RootNavigator = () => {
   if (!isAuthenticated) {
     initialRoute = "Welcome";
   } else if (!user?.birthdate) {
-    // Force birthdate collection for existing users who haven't set it
-    // We need to pass params, but initialRoute doesn't support params directly in this variable assignment
-    // So we'll handle params in the screen component or context, or use a wrapper.
-    // However, for simplicity here, we'll default to Birthdate and let the screen handle missing params if needed (it uses params for user ID)
-    // Actually, BirthdateScreen relies on route params for userId. 
-    // We can grab userId from context inside the screen if params are missing.
     initialRoute = "Birthdate"; 
   } else if (user?.hasCompletedOnboarding) {
     initialRoute = "MainTabs";
@@ -80,89 +50,66 @@ const RootNavigator = () => {
     <RootStack.Navigator 
       initialRouteName={initialRoute}
       screenOptions={{
-        animation: 'default',
-        animationTypeForReplace: 'push',
+        headerShown: false,
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+        // Use custom transition spec for bounce effect
+        transitionSpec: transitionSpec,
+        // Use custom card style interpolator for "Tray" effect
+        cardStyleInterpolator: forTrayTransition,
+        // Ensure background is visible for the "tray" depth effect
+        cardOverlayEnabled: true,
+        headerMode: 'screen',
+      }}
+      screenListeners={{
+        transitionStart: () => {
+          // "Page they were on is dropping...": Tactile thud for the drop
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        },
+        transitionEnd: () => {
+          // "Slides in with a nice little bounce": Tactile feedback for the landing
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        },
       }}
     >
       <RootStack.Screen
         name="Welcome"
         component={WelcomeScreen}
-        options={{
-          headerShown: false,
-          animation: 'fade_from_bottom',
-          animationDuration: 400,
-        }}
       />
       <RootStack.Screen
         name="PhoneAuth"
         component={PhoneAuthScreen}
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 350,
-        }}
       />
       <RootStack.Screen
         name="Birthdate"
         component={BirthdateScreen}
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 350,
-        }}
         initialParams={user ? { userId: user.id, hasCompletedOnboarding: user.hasCompletedOnboarding } : undefined}
       />
       <RootStack.Screen
         name="OnboardingName"
         component={OnboardingNameScreen}
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 350,
-        }}
       />
       <RootStack.Screen
         name="OnboardingPhoto"
         component={OnboardingPhotoScreen}
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 350,
-        }}
       />
       <RootStack.Screen
         name="MainTabs"
         component={TabNavigator}
-        options={{
-          headerShown: false,
-          animation: 'fade',
-          animationDuration: 300,
-        }}
       />
       <RootStack.Screen
         name="ChatList"
         component={ChatListScreen}
-        options={{
-          headerShown: false,
-          animation: 'slide_from_left',
-          animationDuration: 350,
-        }}
       />
       <RootStack.Screen
         name="Chat"
         component={ChatScreen}
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 350,
-          gestureEnabled: true,
-          gestureDirection: 'horizontal',
-        }}
       />
       <RootStack.Screen
         name="InviteMembers"
         component={InviteMembersScreen}
         options={{
+          headerShown: true,
           headerTitle: "Invite Members",
           headerTransparent: true,
           headerBackground: () => (
@@ -173,27 +120,42 @@ const RootNavigator = () => {
               style={{ flex: 1 }}
             />
           ),
-          headerShadowVisible: false,
           headerTintColor: "#FFFFFF",
-          animation: 'slide_from_bottom',
-          animationDuration: 350,
-          gestureEnabled: true,
         }}
       />
       <RootStack.Screen
         name="Invite"
         component={InviteScreen}
         options={{
-          headerShown: false,
-          animation: 'fade_from_bottom',
-          animationDuration: 400,
-          presentation: 'modal',
+          // Modal usually overrides transitions, but we want to keep the custom one unless specific behavior is needed.
+          // If we want standard modal slide up, we'd use TransitionPresets.ModalSlideFromBottomIOS
+          // But user requested the specific animation "Anytime a user goes from one page to the other".
+          // However, for Invite, it is conceptually a modal.
+          // I'll leave it with the default custom transition for consistency with the request.
+          presentation: 'transparentModal', 
+          cardStyle: { backgroundColor: 'transparent' },
+          // We need to override the interpolator if we want a fade or different effect for this specific screen
+          // For now, let's stick to the requested animation or maybe just a simple fade for Invite if it overlays?
+          // "Invite" seems to be an overlay modal in the original code (presentation: 'modal').
+          // Let's use a fade for the Invite screen specifically if it's a popup.
+          cardStyleInterpolator: ({ current: { progress } }) => ({
+            cardStyle: {
+              opacity: progress,
+            },
+            overlayStyle: {
+              opacity: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 0.5],
+              }),
+            },
+          }),
         }}
       />
       <RootStack.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
+          headerShown: true,
           headerTitle: "Profile",
           headerTransparent: true,
           headerBackground: () => (
@@ -204,17 +166,14 @@ const RootNavigator = () => {
               style={{ flex: 1 }}
             />
           ),
-          headerShadowVisible: false,
           headerTintColor: "#FFFFFF",
-          animation: 'slide_from_right',
-          animationDuration: 350,
-          gestureEnabled: true,
         }}
       />
       <RootStack.Screen
         name="GroupSettings"
         component={GroupSettingsScreen}
         options={{
+          headerShown: true,
           headerTitle: "Group Settings",
           headerTransparent: true,
           headerBackground: () => (
@@ -225,11 +184,7 @@ const RootNavigator = () => {
               style={{ flex: 1 }}
             />
           ),
-          headerShadowVisible: false,
           headerTintColor: "#FFFFFF",
-          animation: 'slide_from_right',
-          animationDuration: 350,
-          gestureEnabled: true,
         }}
       />
     </RootStack.Navigator>

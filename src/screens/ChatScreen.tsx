@@ -157,10 +157,19 @@ const ChatHeader = ({
         {/* Left Button - Back to Chat List */}
         <Pressable
           onPress={() => {
-            // Use medium impact for back navigation for a more satisfying feel
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            // Always navigate to the Chats list, not previous screen
-            (navigation as any).navigate("MainTabs", { screen: "Chats" });
+            
+            // Check if we can just pop back to MainTabs (ensures the "Rise Up" animation plays perfectly)
+            const state = navigation.getState();
+            const routes = state.routes;
+            const previousRoute = routes[routes.length - 2];
+            
+            if (previousRoute?.name === "MainTabs") {
+              navigation.goBack();
+            } else {
+              // Fallback: Navigate explicitly (usually acts as a pop if in stack, but ensures we get there)
+              (navigation as any).navigate("MainTabs", { screen: "Chats" });
+            }
           }}
         >
           <View

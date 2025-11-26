@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MessageCircle, Plus, Users, User } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 
 import type { TabParamList } from "@/navigation/types";
 import ChatListScreen from "@/screens/ChatListScreen";
@@ -18,6 +19,11 @@ const Tab = createBottomTabNavigator<TabParamList>();
 export default function TabNavigator() {
   return (
     <Tab.Navigator
+      screenListeners={{
+        tabPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        },
+      }}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {

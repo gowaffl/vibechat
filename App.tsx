@@ -141,8 +141,7 @@ export default function App() {
                   }
                 }}
                 onStateChange={() => {
-                  // Trigger haptic feedback on navigation state changes for tactile UX
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  // Haptics are now handled in the navigator listeners for more precise timing
                 }}
               >
                 <RootStackNavigator />
