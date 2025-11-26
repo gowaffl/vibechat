@@ -71,7 +71,7 @@ const InviteScreen = () => {
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
+        <ActivityIndicator size="large" color="#4FC3F7" />
         <Text style={{ color: "#FFFFFF", marginTop: 16, fontSize: 16 }}>Loading invite...</Text>
       </View>
     );
@@ -104,7 +104,7 @@ const InviteScreen = () => {
           })}
         >
           <LinearGradient
-            colors={["#8B5CF6", "#6366F1"]}
+            colors={["#4FC3F7", "#00A8E8"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -131,12 +131,12 @@ const InviteScreen = () => {
             width: 120,
             height: 120,
             borderRadius: 60,
-            backgroundColor: "rgba(138, 43, 226, 0.2)",
+            backgroundColor: "rgba(79, 195, 247, 0.2)",
             alignItems: "center",
             justifyContent: "center",
             marginBottom: 24,
             borderWidth: 3,
-            borderColor: "rgba(138, 43, 226, 0.4)",
+            borderColor: "rgba(79, 195, 247, 0.4)",
           }}
         >
           {inviteInfo.chatImage ? (
@@ -149,7 +149,7 @@ const InviteScreen = () => {
               }}
             />
           ) : (
-            <Users size={56} color="#8B5CF6" />
+            <Users size={56} color="#4FC3F7" />
           )}
         </View>
 
@@ -190,7 +190,7 @@ const InviteScreen = () => {
           })}
         >
           <LinearGradient
-            colors={["#8B5CF6", "#6366F1"]}
+            colors={["#4FC3F7", "#00A8E8"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{

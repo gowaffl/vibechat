@@ -37,8 +37,8 @@ export default function TabNavigator() {
               style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
             />
           ) : null,
-        tabBarActiveTintColor: "#8B5CF6", // Fallback color
-        tabBarInactiveTintColor: "rgba(255, 255, 255, 0.5)",
+        tabBarActiveTintColor: "#4FC3F7", // Light blue color
+        tabBarInactiveTintColor: "rgba(79, 195, 247, 0.5)", // Light blue at 50% opacity
         tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontSize: 11,
@@ -67,7 +67,7 @@ export default function TabNavigator() {
             >
               {focused && (
                 <LinearGradient
-                  colors={["rgba(139, 92, 246, 0.3)", "rgba(99, 102, 241, 0)"]}
+                  colors={["rgba(79, 195, 247, 0.3)", "rgba(0, 168, 232, 0)"]}
                   style={{
                     position: "absolute",
                     width: 40,
@@ -102,7 +102,7 @@ export default function TabNavigator() {
             >
               {focused && (
                 <LinearGradient
-                  colors={["rgba(139, 92, 246, 0.3)", "rgba(99, 102, 241, 0)"]}
+                  colors={["rgba(79, 195, 247, 0.3)", "rgba(0, 168, 232, 0)"]}
                   style={{
                     position: "absolute",
                     width: 40,
@@ -137,7 +137,7 @@ export default function TabNavigator() {
             >
               {focused && (
                 <LinearGradient
-                  colors={["rgba(139, 92, 246, 0.3)", "rgba(99, 102, 241, 0)"]}
+                  colors={["rgba(79, 195, 247, 0.3)", "rgba(0, 168, 232, 0)"]}
                   style={{
                     position: "absolute",
                     width: 40,
@@ -172,7 +172,7 @@ export default function TabNavigator() {
             >
               {focused && (
                 <LinearGradient
-                  colors={["rgba(139, 92, 246, 0.3)", "rgba(99, 102, 241, 0)"]}
+                  colors={["rgba(79, 195, 247, 0.3)", "rgba(0, 168, 232, 0)"]}
                   style={{
                     position: "absolute",
                     width: 40,

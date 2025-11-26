@@ -267,7 +267,7 @@ const OnboardingPhotoScreen = () => {
         />
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.05)",
+            "rgba(79, 195, 247, 0.05)",
             "rgba(0, 122, 255, 0.03)",
             "transparent",
             "rgba(52, 199, 89, 0.03)",
@@ -296,7 +296,7 @@ const OnboardingPhotoScreen = () => {
             style={{ height: 32, width: "100%" }}
           >
             <LinearGradient
-              colors={["#3B82F6", "#8B5CF6", "#EC4899"]}
+              colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{ flex: 1 }}
@@ -329,7 +329,7 @@ const OnboardingPhotoScreen = () => {
             style={{ overflow: 'hidden', borderRadius: 16 }}
           >
             <LinearGradient
-              colors={["#3B82F6", "#8B5CF6", "#EC4899"]}
+              colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
@@ -378,7 +378,7 @@ const OnboardingPhotoScreen = () => {
             style={{ overflow: 'hidden', borderRadius: 16 }}
           >
             <LinearGradient
-              colors={["#3B82F6", "#8B5CF6", "#EC4899"]}
+              colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
@@ -430,7 +430,7 @@ const OnboardingPhotoScreen = () => {
               disabled={isSubmitting || isUploading}
             >
               <LinearGradient
-                colors={["#8B5CF6", "#3B82F6"]}
+                colors={["#4FC3F7", "#3B82F6"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{

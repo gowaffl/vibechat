@@ -11,7 +11,7 @@ interface GradientIconProps {
   style?: ViewStyle;
 }
 
-export const BRAND_GRADIENT_COLORS = ["#8B5CF6", "#6366F1"] as const;
+export const BRAND_GRADIENT_COLORS = ["#4FC3F7", "#00A8E8"] as const;
 
 export const GradientIcon = ({
   icon,

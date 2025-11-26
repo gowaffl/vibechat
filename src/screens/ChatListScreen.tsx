@@ -185,7 +185,7 @@ const ChatListScreen = () => {
             marginBottom: 12,
             borderRadius: 20,
             overflow: "hidden",
-            shadowColor: unreadCount > 0 ? "#8B5CF6" : "#000",
+            shadowColor: unreadCount > 0 ? "#4FC3F7" : "#000",
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: unreadCount > 0 ? 0.4 : 0.2,
             shadowRadius: 8,
@@ -199,7 +199,7 @@ const ChatListScreen = () => {
               borderRadius: 20,
               borderWidth: 1,
               borderColor: unreadCount > 0
-                ? "rgba(138, 43, 226, 0.4)"
+                ? "rgba(79, 195, 247, 0.4)"
                 : "rgba(255, 255, 255, 0.1)",
               overflow: "hidden",
             }}
@@ -208,9 +208,9 @@ const ChatListScreen = () => {
               colors={
                 unreadCount > 0
                   ? [
-                      "rgba(138, 43, 226, 0.25)",
-                      "rgba(138, 43, 226, 0.15)",
-                      "rgba(138, 43, 226, 0.08)",
+                      "rgba(79, 195, 247, 0.25)",
+                      "rgba(79, 195, 247, 0.15)",
+                      "rgba(79, 195, 247, 0.08)",
                     ]
                   : [
                       "rgba(255, 255, 255, 0.08)",
@@ -235,12 +235,12 @@ const ChatListScreen = () => {
               width: 56,
               height: 56,
               borderRadius: 28,
-              backgroundColor: "rgba(138, 43, 226, 0.2)",
+              backgroundColor: "rgba(79, 195, 247, 0.2)",
               alignItems: "center",
               justifyContent: "center",
               marginRight: 12,
               borderWidth: 2,
-              borderColor: "rgba(138, 43, 226, 0.3)",
+              borderColor: "rgba(79, 195, 247, 0.3)",
               position: "relative",
             }}
           >
@@ -346,12 +346,12 @@ const ChatListScreen = () => {
               {item.isCreator && (
                 <View
                   style={{
-                    backgroundColor: "rgba(138, 43, 226, 0.15)",
+                    backgroundColor: "rgba(79, 195, 247, 0.15)",
                     paddingHorizontal: 8,
                     paddingVertical: 2,
                     borderRadius: 8,
                     borderWidth: 1,
-                    borderColor: "rgba(138, 43, 226, 0.3)",
+                    borderColor: "rgba(79, 195, 247, 0.3)",
                   }}
                 >
                   <GradientText style={{ fontSize: 11, fontWeight: "600" }}>
@@ -412,7 +412,7 @@ const ChatListScreen = () => {
         {/* Subtle animated overlay */}
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.05)",
+            "rgba(79, 195, 247, 0.05)",
             "rgba(0, 122, 255, 0.03)",
             "transparent",
             "rgba(52, 199, 89, 0.03)",
@@ -453,7 +453,7 @@ const ChatListScreen = () => {
         >
           <LinearGradient
             colors={[
-              "rgba(138, 43, 226, 0.15)",
+              "rgba(79, 195, 247, 0.15)",
               "rgba(0, 122, 255, 0.1)",
               "rgba(0, 0, 0, 0)",
             ]}
@@ -722,7 +722,7 @@ const ChatListScreen = () => {
                     <Pressable
                       onPress={handlePinChat}
                       style={({ pressed }) => ({
-                        backgroundColor: pressed ? "rgba(138, 43, 226, 0.15)" : "transparent",
+                        backgroundColor: pressed ? "rgba(79, 195, 247, 0.15)" : "transparent",
                         marginHorizontal: 12,
                         borderRadius: 16,
                         marginVertical: 4,
@@ -741,7 +741,7 @@ const ChatListScreen = () => {
                             width: 42,
                             height: 42,
                             borderRadius: 21,
-                            backgroundColor: "rgba(138, 43, 226, 0.15)",
+                            backgroundColor: "rgba(79, 195, 247, 0.15)",
                             alignItems: "center",
                             justifyContent: "center",
                             marginRight: 16,
@@ -826,7 +826,7 @@ const ChatListScreen = () => {
                     <Pressable
                       onPress={() => setShowContextMenu(false)}
                       style={({ pressed }) => ({
-                        backgroundColor: pressed ? "rgba(138, 43, 226, 0.15)" : "transparent",
+                        backgroundColor: pressed ? "rgba(79, 195, 247, 0.15)" : "transparent",
                         paddingVertical: 16,
                         alignItems: "center",
                         justifyContent: "center",

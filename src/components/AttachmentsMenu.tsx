@@ -274,7 +274,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                         width: 56,
                         height: 56,
                         borderRadius: 28,
-                        backgroundColor: "rgba(138, 43, 226, 0.2)",
+                        backgroundColor: "rgba(79, 195, 247, 0.2)",
                         alignItems: "center",
                         justifyContent: "center",
                         marginBottom: 12,

@@ -198,7 +198,7 @@ export default function PhoneAuthScreen() {
         />
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.05)",
+            "rgba(79, 195, 247, 0.05)",
             "rgba(0, 122, 255, 0.03)",
             "transparent",
             "rgba(52, 199, 89, 0.03)",
@@ -264,7 +264,7 @@ export default function PhoneAuthScreen() {
               colors={
                 loading
                   ? ["#333", "#444"]
-                  : ["#3B82F6", "#8B5CF6", "#EC4899"]
+                  : ["#3B82F6", "#4FC3F7", "#EC4899"]
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}

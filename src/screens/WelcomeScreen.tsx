@@ -66,7 +66,7 @@ const WelcomeScreen = () => {
         />
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.05)",
+            "rgba(79, 195, 247, 0.05)",
             "rgba(0, 122, 255, 0.03)",
             "transparent",
             "rgba(52, 199, 89, 0.03)",
@@ -118,7 +118,7 @@ const WelcomeScreen = () => {
             style={styles.buttonContainer}
           >
             <LinearGradient
-              colors={["#3B82F6", "#8B5CF6", "#EC4899"]} // Blue -> Purple -> Pink
+              colors={["#3B82F6", "#4FC3F7", "#EC4899"]} // Blue -> Light Blue -> Pink
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.buttonGradient}
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
-    shadowColor: "#8B5CF6",
+    shadowColor: "#4FC3F7",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,

@@ -180,7 +180,7 @@ const ProfileScreen = () => {
         />
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.03)",
+            "rgba(79, 195, 247, 0.03)",
             "rgba(0, 122, 255, 0.02)",
             "transparent",
             "rgba(52, 199, 89, 0.02)",
@@ -355,7 +355,7 @@ const ProfileScreen = () => {
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                     {pushNotificationsEnabled ? (
-                      <Bell size={20} color="#8B5CF6" />
+                      <Bell size={20} color="#4FC3F7" />
                     ) : (
                       <BellOff size={20} color="#666666" />
                     )}
@@ -369,12 +369,12 @@ const ProfileScreen = () => {
                     </View>
                   </View>
                   {isUpdatingNotifications ? (
-                    <ActivityIndicator size="small" color="#8B5CF6" />
+                    <ActivityIndicator size="small" color="#4FC3F7" />
                   ) : (
                     <Switch
                       value={pushNotificationsEnabled}
                       onValueChange={handleToggleNotifications}
-                      trackColor={{ false: "#333333", true: "#8B5CF6" }}
+                      trackColor={{ false: "#333333", true: "#4FC3F7" }}
                       thumbColor={pushNotificationsEnabled ? "#FFFFFF" : "#666666"}
                     />
                   )}

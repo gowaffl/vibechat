@@ -970,7 +970,7 @@ const GroupSettingsScreen = () => {
         />
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.03)",
+            "rgba(79, 195, 247, 0.03)",
             "rgba(0, 122, 255, 0.02)",
             "transparent",
             "rgba(52, 199, 89, 0.02)",
@@ -1066,7 +1066,7 @@ const GroupSettingsScreen = () => {
                       borderRadius: 18,
                       overflow: 'hidden',
                       borderWidth: 1.5,
-                      borderColor: 'rgba(138, 43, 226, 0.4)',
+                      borderColor: 'rgba(79, 195, 247, 0.4)',
                       shadowColor: '#8A2BE2',
                       shadowOffset: { width: 0, height: 4 },
                       shadowOpacity: 0.5,
@@ -1077,9 +1077,9 @@ const GroupSettingsScreen = () => {
                     <BlurView intensity={80} tint="dark" style={{ width: 36, height: 36 }}>
                       <LinearGradient
                         colors={[
-                          'rgba(138, 43, 226, 0.6)',
-                          'rgba(138, 43, 226, 0.8)',
-                          'rgba(138, 43, 226, 0.9)',
+                          'rgba(79, 195, 247, 0.6)',
+                          'rgba(79, 195, 247, 0.8)',
+                          'rgba(79, 195, 247, 0.9)',
                         ]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
@@ -2403,7 +2403,7 @@ const GroupSettingsScreen = () => {
                 })}
               >
                 <LinearGradient
-                  colors={["#8B5CF6", "#6366F1"]}
+                  colors={["#4FC3F7", "#00A8E8"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
@@ -2481,7 +2481,7 @@ const GroupSettingsScreen = () => {
                 {/* Code & Link Display */}
                 {generateInviteLinkMutation.isPending ? (
                   <View style={{ padding: 20, alignItems: "center" }}>
-                    <ActivityIndicator size="small" color="#8B5CF6" />
+                    <ActivityIndicator size="small" color="#4FC3F7" />
                     <Text style={{ color: "rgba(255, 255, 255, 0.6)", marginTop: 8, fontSize: 14 }}>
                       Generating invite code...
                     </Text>
@@ -2491,16 +2491,16 @@ const GroupSettingsScreen = () => {
                     {/* Invite Code - Prominent Display */}
                     <View
                       style={{
-                        backgroundColor: "rgba(139, 92, 246, 0.15)",
+                        backgroundColor: "rgba(79, 195, 247, 0.15)",
                         borderRadius: 16,
                         padding: 20,
                         marginBottom: 16,
                         borderWidth: 2,
-                        borderColor: "rgba(139, 92, 246, 0.4)",
+                        borderColor: "rgba(79, 195, 247, 0.4)",
                         alignItems: "center",
                       }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: "600", color: "#8B5CF6", marginBottom: 12 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: "#4FC3F7", marginBottom: 12 }}>
                         INVITE CODE
                       </Text>
                       <Text
@@ -2566,9 +2566,9 @@ const GroupSettingsScreen = () => {
                       >
                         <View
                           style={{
-                            backgroundColor: "rgba(139, 92, 246, 0.15)",
+                            backgroundColor: "rgba(79, 195, 247, 0.15)",
                             borderWidth: 1,
-                            borderColor: "rgba(139, 92, 246, 0.3)",
+                            borderColor: "rgba(79, 195, 247, 0.3)",
                             borderRadius: 12,
                             paddingVertical: 14,
                             flexDirection: "row",
@@ -2578,15 +2578,15 @@ const GroupSettingsScreen = () => {
                         >
                           {linkCopied ? (
                             <>
-                              <Check size={20} color="#8B5CF6" />
-                              <Text style={{ fontSize: 16, fontWeight: "600", color: "#8B5CF6", marginLeft: 8 }}>
+                              <Check size={20} color="#4FC3F7" />
+                              <Text style={{ fontSize: 16, fontWeight: "600", color: "#4FC3F7", marginLeft: 8 }}>
                                 Copied!
                               </Text>
                             </>
                           ) : (
                             <>
-                              <Copy size={20} color="#8B5CF6" />
-                              <Text style={{ fontSize: 16, fontWeight: "600", color: "#8B5CF6", marginLeft: 8 }}>
+                              <Copy size={20} color="#4FC3F7" />
+                              <Text style={{ fontSize: 16, fontWeight: "600", color: "#4FC3F7", marginLeft: 8 }}>
                                 Copy Code
                               </Text>
                             </>
@@ -2611,7 +2611,7 @@ const GroupSettingsScreen = () => {
                         })}
                       >
                         <LinearGradient
-                          colors={["#8B5CF6", "#6366F1"]}
+                          colors={["#4FC3F7", "#00A8E8"]}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 1, y: 1 }}
                           style={{
@@ -2638,7 +2638,7 @@ const GroupSettingsScreen = () => {
                     })}
                   >
                     <LinearGradient
-                      colors={["#8B5CF6", "#6366F1"]}
+                      colors={["#4FC3F7", "#00A8E8"]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={{

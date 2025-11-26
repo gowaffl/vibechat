@@ -54,6 +54,8 @@ import { ReactorMenu } from "@/components/Reactor";
 import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/components/Threads";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
+import { SwipeableMessage } from "@/components/SwipeableMessage";
+import { TruncatedText } from "@/components/TruncatedText";
 import { useCatchUp } from "@/hooks/useCatchUp";
 import { useEvents } from "@/hooks/useEvents";
 import { useReactor } from "@/hooks/useReactor";
@@ -121,7 +123,7 @@ const ChatHeader = ({
       >
         <LinearGradient
           colors={[
-            'rgba(138, 43, 226, 0.15)',
+            'rgba(79, 195, 247, 0.15)',
             'rgba(0, 122, 255, 0.1)',
             'rgba(0, 0, 0, 0)',
           ]}
@@ -129,7 +131,7 @@ const ChatHeader = ({
           end={{ x: 1, y: 1 }}
           style={{
             flex: 1,
-            shadowColor: 'rgba(138, 43, 226, 0.5)',
+            shadowColor: 'rgba(79, 195, 247, 0.5)',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 12,
@@ -3770,60 +3772,65 @@ const ChatScreen = () => {
                 <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
                   {isAI ? (
                     <>
-                      <Markdown
-                        style={{
-                          body: { color: "#FFFFFF", fontSize: 16, lineHeight: 20 },
-                          heading1: { color: "#FFFFFF", fontSize: 24, fontWeight: "bold", marginBottom: 8 },
-                          heading2: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
-                          heading3: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", marginBottom: 4 },
-                          heading4: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
-                          heading5: { color: "#FFFFFF", fontSize: 17, fontWeight: "bold", marginBottom: 2 },
-                          heading6: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
-                          strong: { fontWeight: "bold", color: "#FFFFFF" },
-                          em: { fontStyle: "italic", color: "#FFFFFF" },
-                          link: { color: "#34C759", textDecorationLine: "underline" },
-                          blockquote: {
-                            backgroundColor: "rgba(255, 255, 255, 0.1)",
-                            borderLeftWidth: 3,
-                            borderLeftColor: "#34C759",
-                            paddingLeft: 10,
-                            paddingVertical: 8,
-                            marginVertical: 8
-                          },
-                          code_inline: {
-                            backgroundColor: "rgba(255, 255, 255, 0.2)",
-                            color: "#34C759",
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 4,
-                            fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
-                          },
-                          code_block: {
-                            backgroundColor: "rgba(0, 0, 0, 0.3)",
-                            color: "#FFFFFF",
-                            padding: 12,
-                            borderRadius: 8,
-                            marginVertical: 8,
-                            fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
-                          },
-                          fence: {
-                            backgroundColor: "rgba(0, 0, 0, 0.3)",
-                            color: "#FFFFFF",
-                            padding: 12,
-                            borderRadius: 8,
-                            marginVertical: 8,
-                            fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
-                          },
-                          bullet_list: { marginVertical: 4 },
-                          ordered_list: { marginVertical: 4 },
-                          list_item: { color: "#FFFFFF", fontSize: 16, marginVertical: 2 },
-                          paragraph: { color: "#FFFFFF", fontSize: 16, lineHeight: 20, marginVertical: 4 },
-                          text: { color: "#FFFFFF", fontSize: 16 },
-                          hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
-                        }}
+                      <TruncatedText
+                        maxLines={25}
+                        expandButtonColor="#34C759"
                       >
-                        {message.content}
-                      </Markdown>
+                        <Markdown
+                          style={{
+                            body: { color: "#FFFFFF", fontSize: 16, lineHeight: 20 },
+                            heading1: { color: "#FFFFFF", fontSize: 24, fontWeight: "bold", marginBottom: 8 },
+                            heading2: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
+                            heading3: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", marginBottom: 4 },
+                            heading4: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
+                            heading5: { color: "#FFFFFF", fontSize: 17, fontWeight: "bold", marginBottom: 2 },
+                            heading6: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
+                            strong: { fontWeight: "bold", color: "#FFFFFF" },
+                            em: { fontStyle: "italic", color: "#FFFFFF" },
+                            link: { color: "#34C759", textDecorationLine: "underline" },
+                            blockquote: {
+                              backgroundColor: "rgba(255, 255, 255, 0.1)",
+                              borderLeftWidth: 3,
+                              borderLeftColor: "#34C759",
+                              paddingLeft: 10,
+                              paddingVertical: 8,
+                              marginVertical: 8
+                            },
+                            code_inline: {
+                              backgroundColor: "rgba(255, 255, 255, 0.2)",
+                              color: "#34C759",
+                              paddingHorizontal: 6,
+                              paddingVertical: 2,
+                              borderRadius: 4,
+                              fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
+                            },
+                            code_block: {
+                              backgroundColor: "rgba(0, 0, 0, 0.3)",
+                              color: "#FFFFFF",
+                              padding: 12,
+                              borderRadius: 8,
+                              marginVertical: 8,
+                              fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
+                            },
+                            fence: {
+                              backgroundColor: "rgba(0, 0, 0, 0.3)",
+                              color: "#FFFFFF",
+                              padding: 12,
+                              borderRadius: 8,
+                              marginVertical: 8,
+                              fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
+                            },
+                            bullet_list: { marginVertical: 4 },
+                            ordered_list: { marginVertical: 4 },
+                            list_item: { color: "#FFFFFF", fontSize: 16, marginVertical: 2 },
+                            paragraph: { color: "#FFFFFF", fontSize: 16, lineHeight: 20, marginVertical: 4 },
+                            text: { color: "#FFFFFF", fontSize: 16 },
+                            hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
+                          }}
+                        >
+                          {message.content}
+                        </Markdown>
+                      </TruncatedText>
                       {message.editedAt && (
                         <Text style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)", fontStyle: "italic", marginTop: 4 }}>
                           Edited
@@ -3832,12 +3839,17 @@ const ChatScreen = () => {
                     </>
                   ) : (
                     <>
-                      <MessageText
-                        content={message.content}
-                        mentions={message.mentions}
-                        style={{ fontSize: 16, color: "#FFFFFF", lineHeight: 22 }}
-                        isOwnMessage={isCurrentUser}
-                      />
+                      <TruncatedText
+                        maxLines={25}
+                        expandButtonColor="#007AFF"
+                      >
+                        <MessageText
+                          content={message.content}
+                          mentions={message.mentions}
+                          style={{ fontSize: 16, color: "#FFFFFF", lineHeight: 22 }}
+                          isOwnMessage={isCurrentUser}
+                        />
+                      </TruncatedText>
                       {message.editedAt && (
                         <Text style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)", fontStyle: "italic", marginTop: 4 }}>
                           Edited
@@ -3859,12 +3871,6 @@ const ChatScreen = () => {
               )}
             </>
           )}
-          {/* Timestamp */}
-          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-            <Text className="text-xs" style={{ color: "#8E8E93", fontSize: 13 }}>
-              {messageTime}
-            </Text>
-          </View>
             </LinearGradient>
           </BlurView>
         </View>
@@ -3948,12 +3954,17 @@ const ChatScreen = () => {
             </View>
           )}
           {/* Message Bubble with Long Press or Selection */}
-          <Pressable
-            onLongPress={() => !selectionMode && handleLongPress(message)}
-            onPress={() => selectionMode && toggleMessageSelection(message.id)}
+          <SwipeableMessage
+            timestamp={messageTime}
+            isCurrentUser={isCurrentUser}
           >
-            {renderMessageContent()}
-          </Pressable>
+            <Pressable
+              onLongPress={() => !selectionMode && handleLongPress(message)}
+              onPress={() => selectionMode && toggleMessageSelection(message.id)}
+            >
+              {renderMessageContent()}
+            </Pressable>
+          </SwipeableMessage>
           {/* Reactions */}
           <View
             style={{
@@ -4113,7 +4124,7 @@ const ChatScreen = () => {
         {/* Subtle animated overlay for depth */}
         <LinearGradient
           colors={[
-            "rgba(138, 43, 226, 0.03)",
+            "rgba(79, 195, 247, 0.03)",
             "rgba(0, 122, 255, 0.02)",
             "transparent",
             "rgba(52, 199, 89, 0.02)",

@@ -128,7 +128,7 @@ const CreateChatScreen = () => {
               })}
             >
               <LinearGradient
-                colors={["#8B5CF6", "#6366F1"]}
+                colors={["#4FC3F7", "#00A8E8"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.button}

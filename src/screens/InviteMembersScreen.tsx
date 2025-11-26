@@ -125,14 +125,14 @@ const InviteMembersScreen = () => {
             alignItems: "center",
             padding: 16,
             backgroundColor: isSelected
-              ? "rgba(138, 43, 226, 0.15)"
+              ? "rgba(79, 195, 247, 0.15)"
               : "rgba(255, 255, 255, 0.05)",
             borderRadius: 16,
             marginHorizontal: 16,
             marginBottom: 12,
             borderWidth: 1,
             borderColor: isSelected
-              ? "rgba(138, 43, 226, 0.5)"
+              ? "rgba(79, 195, 247, 0.5)"
               : "rgba(255, 255, 255, 0.1)",
           }}
         >
@@ -146,8 +146,8 @@ const InviteMembersScreen = () => {
                 marginRight: 12,
                 borderWidth: 2,
                 borderColor: isSelected
-                  ? "rgba(138, 43, 226, 0.5)"
-                  : "rgba(138, 43, 226, 0.3)",
+                  ? "rgba(79, 195, 247, 0.5)"
+                  : "rgba(79, 195, 247, 0.3)",
                 overflow: "hidden",
               }}
             >
@@ -173,8 +173,8 @@ const InviteMembersScreen = () => {
                 marginRight: 12,
                 borderWidth: 2,
                 borderColor: isSelected
-                  ? "rgba(138, 43, 226, 0.5)"
-                  : "rgba(138, 43, 226, 0.3)",
+                  ? "rgba(79, 195, 247, 0.5)"
+                  : "rgba(79, 195, 247, 0.3)",
               }}
             >
               <Text
@@ -221,7 +221,7 @@ const InviteMembersScreen = () => {
               height: 28,
               borderRadius: 14,
               backgroundColor: isSelected
-                ? "#8B5CF6"
+                ? "#4FC3F7"
                 : "rgba(255, 255, 255, 0.1)",
               alignItems: "center",
               justifyContent: "center",
@@ -240,7 +240,7 @@ const InviteMembersScreen = () => {
       {/* Content */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#4FC3F7" />
         </View>
       ) : availableUsers.length === 0 ? (
         <View
@@ -318,7 +318,7 @@ const InviteMembersScreen = () => {
                 })}
               >
                 <LinearGradient
-                  colors={["#8B5CF6", "#6366F1"]}
+                  colors={["#4FC3F7", "#00A8E8"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
@@ -327,7 +327,7 @@ const InviteMembersScreen = () => {
                     flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "center",
-                    shadowColor: "#8B5CF6",
+                    shadowColor: "#4FC3F7",
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: 0.4,
                     shadowRadius: 12,

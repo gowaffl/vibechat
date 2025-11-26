@@ -10,7 +10,7 @@ interface GradientTextProps extends TextProps {
   style?: TextStyle;
 }
 
-export const BRAND_GRADIENT_COLORS = ["#8B5CF6", "#6366F1"] as const;
+export const BRAND_GRADIENT_COLORS = ["#4FC3F7", "#00A8E8"] as const;
 
 export const GradientText = ({
   colors = BRAND_GRADIENT_COLORS,
