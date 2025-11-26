@@ -20,11 +20,13 @@ import {
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
   Share,
+  PanResponder,
+  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -1405,6 +1407,7 @@ const ChatScreen = () => {
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const colorScheme = useColorScheme();
 
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
   const chatId = route.params?.chatId || "default-chat";
@@ -1439,6 +1442,7 @@ const ChatScreen = () => {
   } | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editText, setEditText] = useState("");
+  const editModalDragY = useRef(new Animated.Value(0)).current;
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -1451,8 +1455,11 @@ const ChatScreen = () => {
   const [showAttachmentsMenu, setShowAttachmentsMenu] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const searchModalDragY = useRef(new Animated.Value(0)).current;
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [showBookmarksModal, setShowBookmarksModal] = useState(false);
+  const bookmarksModalDragY = useRef(new Animated.Value(0)).current;
+  const eventsModalDragY = useRef(new Animated.Value(0)).current;
   
   // AI Super Features state
   const [showCatchUpModal, setShowCatchUpModal] = useState(false);
@@ -2870,6 +2877,191 @@ const ChatScreen = () => {
     setEditText(message.content);
   };
 
+  // PanResponder for Edit Message modal swipe-down gesture
+  const editModalPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to vertical swipes
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Only allow dragging down (positive dy)
+        if (gestureState.dy > 0) {
+          editModalDragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If dragged down more than 100px or with enough velocity, close
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setEditingMessage(null);
+          // Reset drag position
+          Animated.spring(editModalDragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          // Spring back to original position
+          Animated.spring(editModalDragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        // Reset drag position if gesture is interrupted
+        Animated.spring(editModalDragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // Reset drag position when edit modal closes
+  useEffect(() => {
+    if (!editingMessage) {
+      editModalDragY.setValue(0);
+    }
+  }, [editingMessage]);
+
+  // PanResponder for Search modal swipe-down gesture
+  const searchModalPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          searchModalDragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowSearchModal(false);
+          setSearchQuery("");
+          Animated.spring(searchModalDragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(searchModalDragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(searchModalDragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // PanResponder for Bookmarks modal swipe-down gesture
+  const bookmarksModalPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          bookmarksModalDragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowBookmarksModal(false);
+          Animated.spring(bookmarksModalDragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(bookmarksModalDragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(bookmarksModalDragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // PanResponder for Events modal swipe-down gesture
+  const eventsModalPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          eventsModalDragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowEventsTab(false);
+          Animated.spring(eventsModalDragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(eventsModalDragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(eventsModalDragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // Reset drag positions when modals close
+  useEffect(() => {
+    if (!showSearchModal) {
+      searchModalDragY.setValue(0);
+    }
+  }, [showSearchModal]);
+
+  useEffect(() => {
+    if (!showBookmarksModal) {
+      bookmarksModalDragY.setValue(0);
+    }
+  }, [showBookmarksModal]);
+
+  useEffect(() => {
+    if (!showEventsTab) {
+      eventsModalDragY.setValue(0);
+    }
+  }, [showEventsTab]);
+
   // Handler for unsending message
   const handleUnsend = (message: Message) => {
     Alert.alert(
@@ -3375,22 +3567,23 @@ const ChatScreen = () => {
   }, [catchUpError]);
 
   useEffect(() => {
-    // Listen for keyboard events
+    // Listen for keyboard events with improved timing
     const keyboardWillShow = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
       (e) => {
         setKeyboardHeight(e.endCoordinates.height);
-        // Scroll to bottom when keyboard opens to keep latest messages visible
+        // Scroll to bottom when keyboard opens - reduced delay for smoother UX
         requestAnimationFrame(() => {
           setTimeout(() => {
             scrollToBottom(true);
-          }, 200);
+          }, 100);
         });
       }
     );
     const keyboardWillHide = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
       () => {
+        // Immediately update keyboard height for instant animation
         setKeyboardHeight(0);
       }
     );
@@ -3421,6 +3614,165 @@ const ChatScreen = () => {
   );
 
   const hasContent = useMemo(() => messageText.trim().length > 0, [messageText]);
+
+  // Animated values for smooth color transitions
+  const colorAnimValue = useRef(new Animated.Value(0)).current;
+  const buttonIconRotation = useRef(new Animated.Value(0)).current;
+  const buttonIconScale = useRef(new Animated.Value(1)).current;
+  
+  // Separate opacity values for each gradient state (default, hasContent, isAI)
+  const gradientDefaultOpacity = useRef(new Animated.Value(1)).current;
+  const gradientContentOpacity = useRef(new Animated.Value(0)).current;
+  const gradientAIOpacity = useRef(new Animated.Value(0)).current;
+
+  // Animate color transitions with spring physics for premium feel
+  useEffect(() => {
+    const targetValue = isAIMessage ? 2 : hasContent ? 1 : 0;
+    
+    Animated.spring(colorAnimValue, {
+      toValue: targetValue,
+      useNativeDriver: false,
+      tension: 80,
+      friction: 12,
+      velocity: 2,
+    }).start();
+
+    // Animate gradient layer opacities for smooth transitions
+    if (isAIMessage) {
+      // AI message state
+      Animated.parallel([
+        Animated.spring(gradientDefaultOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+        Animated.spring(gradientContentOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+        Animated.spring(gradientAIOpacity, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+      ]).start();
+    } else if (hasContent) {
+      // Has content state
+      Animated.parallel([
+        Animated.spring(gradientDefaultOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+        Animated.spring(gradientContentOpacity, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+        Animated.spring(gradientAIOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+      ]).start();
+    } else {
+      // Default state
+      Animated.parallel([
+        Animated.spring(gradientDefaultOpacity, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+        Animated.spring(gradientContentOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+        Animated.spring(gradientAIOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 12,
+        }),
+      ]).start();
+    }
+  }, [isAIMessage, hasContent]);
+
+  // Animate button icon transition with rotation
+  useEffect(() => {
+    const showSend = messageText.trim() || selectedImages.length > 0;
+    
+    // Add subtle haptic feedback on transition
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Rotation animation: mic rotates and transforms into arrow
+    // Arrow starts pointing left (-90°) and ends pointing up (0°)
+    Animated.parallel([
+      Animated.spring(buttonIconRotation, {
+        toValue: showSend ? 1 : 0,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 10,
+        velocity: 2,
+      }),
+      Animated.sequence([
+        // Scale down slightly
+        Animated.spring(buttonIconScale, {
+          toValue: 0.7,
+          useNativeDriver: true,
+          tension: 200,
+          friction: 10,
+        }),
+        // Scale back up with subtle haptic
+        Animated.spring(buttonIconScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 200,
+          friction: 10,
+        }),
+      ]),
+    ]).start(() => {
+      // Subtle haptic on animation complete
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    });
+  }, [messageText.trim().length > 0, selectedImages.length > 0]);
+
+  // Interpolated animated colors for input border
+  const animatedBorderColor = colorAnimValue.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [
+      "rgba(255, 255, 255, 0.2)",
+      "rgba(0, 122, 255, 0.4)",
+      "rgba(52, 199, 89, 0.5)",
+    ],
+  });
+
+  const animatedShadowOpacity = colorAnimValue.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [0.1, 0.3, 0.3],
+  });
+
+  // Button rotation transforms
+  // Arrow rotation: starts pointing left (-90°), ends pointing up (0°)
+  const arrowRotateInterpolate = buttonIconRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-90deg", "0deg"],
+  });
+  
+  // Mic stays at natural orientation
+  const micRotateInterpolate = buttonIconRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "0deg"],
+  });
 
   const inputTextColor = useMemo(() => 
     isAIMessage ? "#34C759" : "#FFFFFF",
@@ -4234,18 +4586,23 @@ const ChatScreen = () => {
         </View>
       )}
 
-      {/* Messages FlatList */}
-      <FlatList
-        ref={flatListRef}
-        data={displayData}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          paddingTop: insets.top + 95 + (threads ? 56 : 0) + 20,
-          paddingHorizontal: 16,
-          paddingBottom: 60
-        }}
+      {/* Messages FlatList - Wrapped in Pressable for keyboard dismissal */}
+      <Pressable 
+        style={{ flex: 1 }} 
+        onPress={() => Keyboard.dismiss()}
+        accessible={false}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={displayData}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingTop: insets.top + 95 + (threads ? 56 : 0) + 20,
+            paddingHorizontal: 16,
+            paddingBottom: 60
+          }}
           keyboardShouldPersistTaps="always"
           onScrollBeginDrag={() => Keyboard.dismiss()}
           initialNumToRender={50}
@@ -4450,11 +4807,12 @@ const ChatScreen = () => {
             </View>
           }
       />
+      </Pressable>
 
       {/* Input Bar Area - Fixed at Bottom */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         enabled={true}
       >
         {/* Mention Picker - positioned above input */}
@@ -4772,14 +5130,14 @@ const ChatScreen = () => {
                   </BlurView>
                 </View>
               </Pressable>
-                  <View
+                  <Animated.View
                     style={{
                       flex: 1,
                       borderRadius: 24,
                       overflow: "hidden",
                       shadowColor: inputContainerShadowColor,
                       shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: inputContainerShadowOpacity,
+                      shadowOpacity: animatedShadowOpacity,
                       shadowRadius: 12,
                       elevation: 4,
                     }}
@@ -4790,18 +5148,91 @@ const ChatScreen = () => {
                     style={{
                       flex: 1,
                       borderRadius: 24,
-                      borderWidth: 1.5,
-                      borderColor: inputContainerBorderColor,
                       overflow: "hidden",
                     }}
                   >
-                    <LinearGradient
-                      colors={inputGradientColors}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={{ flex: 1 }}
-                      pointerEvents="box-none"
+                    <Animated.View
+                      style={{
+                        flex: 1,
+                        borderRadius: 24,
+                        borderWidth: 1.5,
+                        borderColor: animatedBorderColor,
+                        overflow: "hidden",
+                      }}
                     >
+                      {/* Layered animated gradient backgrounds for smooth color transitions */}
+                      {/* Default state gradient (white) */}
+                      <Animated.View
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          opacity: gradientDefaultOpacity,
+                        }}
+                        pointerEvents="none"
+                      >
+                        <LinearGradient
+                          colors={[
+                            "rgba(255, 255, 255, 0.12)",
+                            "rgba(255, 255, 255, 0.08)",
+                            "rgba(255, 255, 255, 0.04)",
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{ flex: 1 }}
+                        />
+                      </Animated.View>
+                      
+                      {/* Has content state gradient (blue) */}
+                      <Animated.View
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          opacity: gradientContentOpacity,
+                        }}
+                        pointerEvents="none"
+                      >
+                        <LinearGradient
+                          colors={[
+                            "rgba(0, 122, 255, 0.20)",
+                            "rgba(0, 122, 255, 0.12)",
+                            "rgba(0, 122, 255, 0.05)",
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{ flex: 1 }}
+                        />
+                      </Animated.View>
+                      
+                      {/* AI message state gradient (green) */}
+                      <Animated.View
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          opacity: gradientAIOpacity,
+                        }}
+                        pointerEvents="none"
+                      >
+                        <LinearGradient
+                          colors={[
+                            "rgba(52, 199, 89, 0.25)",
+                            "rgba(52, 199, 89, 0.15)",
+                            "rgba(52, 199, 89, 0.08)",
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{ flex: 1 }}
+                        />
+                      </Animated.View>
+                      
                   <TextInput
                     ref={textInputRef}
                     value={messageText}
@@ -4824,7 +5255,7 @@ const ChatScreen = () => {
                     onSubmitEditing={handleSend}
                     blurOnSubmit={false}
                     keyboardType="default"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                     returnKeyType="default"
                     enablesReturnKeyAutomatically={false}
                     onFocus={() => {
@@ -4837,145 +5268,158 @@ const ChatScreen = () => {
                     showSoftInputOnFocus={true}
                     caretHidden={false}
                   />
-                    </LinearGradient>
+                    </Animated.View>
                   </BlurView>
-                  </View>
-                {/* Mic button - show if no text or image selected */}
-                {!messageText.trim() && selectedImages.length === 0 ? (
-                  <Pressable
-                    onPress={() => setIsRecordingVoice(true)}
-                    disabled={isUploadingVoice}
+                  </Animated.View>
+                {/* Animated Mic/Send button */}
+                <Pressable
+                  onPress={(!messageText.trim() && selectedImages.length === 0) 
+                    ? () => setIsRecordingVoice(true)
+                    : handleSend
+                  }
+                  disabled={
+                    (!messageText.trim() && selectedImages.length === 0) 
+                      ? isUploadingVoice 
+                      : ((!messageText.trim() && selectedImages.length === 0) || sendMessageMutation.isPending || isUploadingImage)
+                  }
+                >
+                  <Animated.View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      overflow: "hidden",
+                      shadowColor: messageText.toLowerCase().includes("@ai")
+                        ? "#34C759"
+                        : messageText.trim() || selectedImages.length > 0
+                        ? "#007AFF"
+                        : "#007AFF",
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: animatedShadowOpacity,
+                      shadowRadius: 8,
+                      elevation: 4,
+                    }}
+                    pointerEvents="box-only"
                   >
-                    <View
+                    <BlurView
+                      intensity={Platform.OS === "ios" ? 50 : 80}
+                      tint="dark"
                       style={{
-                        width: 44,
-                        height: 44,
+                        flex: 1,
                         borderRadius: 22,
-                        overflow: "hidden",
-                        shadowColor: "#007AFF",
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 8,
-                        elevation: 4,
                       }}
-                      pointerEvents="box-only"
                     >
-                      <BlurView
-                        intensity={Platform.OS === "ios" ? 50 : 80}
-                        tint="dark"
+                      <Animated.View
                         style={{
                           flex: 1,
                           alignItems: "center",
                           justifyContent: "center",
                           borderWidth: 1.5,
-                          borderColor: "rgba(255, 255, 255, 0.2)",
+                          borderColor: animatedBorderColor,
                           borderRadius: 22,
                         }}
                       >
-                        <LinearGradient
-                          colors={[
-                            "rgba(255, 255, 255, 0.12)",
-                            "rgba(255, 255, 255, 0.08)",
-                            "rgba(255, 255, 255, 0.04)",
-                          ]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
+                        {/* Layered animated gradient backgrounds for send button */}
+                        {/* Default state gradient (white/gray) */}
+                        <Animated.View
                           style={{
                             position: "absolute",
                             top: 0,
                             left: 0,
                             right: 0,
                             bottom: 0,
+                            opacity: gradientDefaultOpacity,
                           }}
                           pointerEvents="none"
-                        />
-                        {isUploadingVoice ? (
-                          <ActivityIndicator size="small" color="white" />
-                        ) : (
-                          <Mic size={20} color="#FFFFFF" />
-                        )}
-                      </BlurView>
-                    </View>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    onPress={handleSend}
-                    disabled={(!messageText.trim() && selectedImages.length === 0) || sendMessageMutation.isPending || isUploadingImage}
-                  >
-                    <View
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 22,
-                        overflow: "hidden",
-                        shadowColor: messageText.toLowerCase().includes("@ai")
-                          ? "#34C759"
-                          : messageText.trim()
-                          ? "#007AFF"
-                          : "#666",
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: messageText.trim() || selectedImages.length > 0 ? 0.4 : 0.1,
-                        shadowRadius: 8,
-                        elevation: 4,
-                      }}
-                      pointerEvents="box-only"
-                    >
-                      <BlurView
-                        intensity={Platform.OS === "ios" ? 50 : 80}
-                        tint="dark"
-                        style={{
-                          flex: 1,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          borderWidth: 1.5,
-                          borderColor: messageText.toLowerCase().includes("@ai")
-                            ? "rgba(52, 199, 89, 0.5)"
-                            : messageText.trim()
-                            ? "rgba(0, 122, 255, 0.5)"
-                            : "rgba(255, 255, 255, 0.2)",
-                          borderRadius: 22,
-                        }}
-                      >
-                        <LinearGradient
-                          colors={
-                            messageText.toLowerCase().includes("@ai")
-                              ? [
-                                  "rgba(52, 199, 89, 0.30)",
-                                  "rgba(52, 199, 89, 0.20)",
-                                  "rgba(52, 199, 89, 0.10)",
-                                ]
-                              : messageText.trim() || selectedImages.length > 0
-                              ? [
-                                  "rgba(0, 122, 255, 0.30)",
-                                  "rgba(0, 122, 255, 0.20)",
-                                  "rgba(0, 122, 255, 0.10)",
-                                ]
-                              : [
-                                  "rgba(255, 255, 255, 0.08)",
-                                  "rgba(255, 255, 255, 0.05)",
-                                  "rgba(255, 255, 255, 0.02)",
-                                ]
-                          }
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
+                        >
+                          <LinearGradient
+                            colors={[
+                              "rgba(255, 255, 255, 0.08)",
+                              "rgba(255, 255, 255, 0.05)",
+                              "rgba(255, 255, 255, 0.02)",
+                            ]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ flex: 1 }}
+                          />
+                        </Animated.View>
+                        
+                        {/* Has content state gradient (blue) */}
+                        <Animated.View
                           style={{
                             position: "absolute",
                             top: 0,
                             left: 0,
                             right: 0,
                             bottom: 0,
+                            opacity: gradientContentOpacity,
                           }}
                           pointerEvents="none"
-                        />
-                        {sendMessageMutation.isPending || isUploadingImage ? (
-                          <ActivityIndicator size="small" color="white" />
+                        >
+                          <LinearGradient
+                            colors={[
+                              "rgba(0, 122, 255, 0.30)",
+                              "rgba(0, 122, 255, 0.20)",
+                              "rgba(0, 122, 255, 0.10)",
+                            ]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ flex: 1 }}
+                          />
+                        </Animated.View>
+                        
+                        {/* AI message state gradient (green) */}
+                        <Animated.View
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            opacity: gradientAIOpacity,
+                          }}
+                          pointerEvents="none"
+                        >
+                          <LinearGradient
+                            colors={[
+                              "rgba(52, 199, 89, 0.30)",
+                              "rgba(52, 199, 89, 0.20)",
+                              "rgba(52, 199, 89, 0.10)",
+                            ]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ flex: 1 }}
+                          />
+                        </Animated.View>
+                        
+                        {/* Always show animated icons, no loading spinner */}
+                        {(!messageText.trim() && selectedImages.length === 0) ? (
+                          <Animated.View
+                            style={{
+                              transform: [
+                                { rotate: micRotateInterpolate },
+                                { scale: buttonIconScale },
+                              ],
+                            }}
+                          >
+                            <Mic size={20} color="#FFFFFF" />
+                          </Animated.View>
                         ) : (
-                          <Send size={20} color={(messageText.trim() || selectedImages.length > 0) ? "#FFFFFF" : "#666666"} />
+                          <Animated.View
+                            style={{
+                              transform: [
+                                { rotate: arrowRotateInterpolate },
+                                { scale: buttonIconScale },
+                              ],
+                            }}
+                          >
+                            <ArrowUp size={20} color="#FFFFFF" strokeWidth={2.5} />
+                          </Animated.View>
                         )}
-                      </BlurView>
-                    </View>
-                  </Pressable>
-                )}
+                      </Animated.View>
+                    </BlurView>
+                  </Animated.View>
+                </Pressable>
               </View>
             )}
           </ScrollView>
@@ -5051,22 +5495,42 @@ const ChatScreen = () => {
                 justifyContent: "flex-end",
               }}
             >
-              <View
+              <Animated.View
                 style={{
                   backgroundColor: "#1C1C1E",
                   borderTopLeftRadius: 20,
                   borderTopRightRadius: 20,
-                  padding: 20,
-                  paddingBottom: insets.bottom + 20,
+                  maxHeight: "90%",
+                  transform: [{ translateY: editModalDragY }],
                 }}
                 onStartShouldSetResponder={() => true}
               >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "600" }}>Edit Message</Text>
-                  <Pressable onPress={() => setEditingMessage(null)}>
-                    <X size={24} color="#FFFFFF" />
-                  </Pressable>
+                {/* Handle Bar for swipe down */}
+                <View
+                  {...editModalPanResponder.panHandlers}
+                  style={{
+                    alignItems: "center",
+                    paddingTop: 14,
+                    paddingBottom: 8,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 5,
+                      backgroundColor: "rgba(255, 255, 255, 0.25)",
+                      borderRadius: 2.5,
+                    }}
+                  />
                 </View>
+
+                <View style={{ padding: 20, paddingTop: 8, paddingBottom: insets.bottom + 20 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "600" }}>Edit Message</Text>
+                    <Pressable onPress={() => setEditingMessage(null)}>
+                      <X size={24} color="#FFFFFF" />
+                    </Pressable>
+                  </View>
 
                 <TextInput
                   value={editText}
@@ -5126,7 +5590,8 @@ const ChatScreen = () => {
                     )}
                   </Pressable>
                 </View>
-              </View>
+                </View>
+              </Animated.View>
             </Pressable>
           </KeyboardAvoidingView>
         </Modal>
@@ -5254,36 +5719,43 @@ const ChatScreen = () => {
             setSearchQuery("");
           }}
         >
-          <LinearGradient
-            colors={["#0A0A0A", "#1A1A2E", "#16213E"]}
-            style={{ flex: 1 }}
+          <Animated.View
+            style={{
+              flex: 1,
+              transform: [{ translateY: searchModalDragY }],
+            }}
+            {...searchModalPanResponder.panHandlers}
           >
-            <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
-              <View style={{ borderRadius: 16, overflow: "hidden" }}>
-                <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
-                  <LinearGradient
-                    colors={["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.05)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                  />
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Search size={24} color="#FFFFFF" />
-                    <TextInput
-                      value={searchQuery}
-                      onChangeText={setSearchQuery}
-                      placeholder="Search messages..."
-                      placeholderTextColor="#666"
-                      style={{ flex: 1, color: "#FFFFFF", fontSize: 17 }}
-                      autoFocus
+            <LinearGradient
+              colors={["#0A0A0A", "#1A1A2E", "#16213E"]}
+              style={{ flex: 1 }}
+            >
+              <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
+                <View style={{ borderRadius: 16, overflow: "hidden" }}>
+                  <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+                    <LinearGradient
+                      colors={["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.05)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
                     />
-                    <Pressable onPress={() => { setShowSearchModal(false); setSearchQuery(""); }}>
-                      <X size={20} color="#FFFFFF" />
-                    </Pressable>
-                  </View>
-                </BlurView>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <Search size={24} color="#FFFFFF" />
+                      <TextInput
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder="Search messages..."
+                        placeholderTextColor="#666"
+                        style={{ flex: 1, color: "#FFFFFF", fontSize: 17 }}
+                        autoFocus
+                      />
+                      <Pressable onPress={() => { setShowSearchModal(false); setSearchQuery(""); }}>
+                        <X size={20} color="#FFFFFF" />
+                      </Pressable>
+                    </View>
+                  </BlurView>
+                </View>
               </View>
-            </View>
 
             <FlatList
               data={searchResults}
@@ -5330,7 +5802,8 @@ const ChatScreen = () => {
                 </Pressable>
               )}
             />
-          </LinearGradient>
+            </LinearGradient>
+          </Animated.View>
         </Modal>
 
         {/* Bookmarks Modal */}
@@ -5340,26 +5813,33 @@ const ChatScreen = () => {
           animationType="slide"
           onRequestClose={() => setShowBookmarksModal(false)}
         >
-          <LinearGradient colors={["#0A0A0A", "#1A1A2E", "#16213E"]} style={{ flex: 1 }}>
-            <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
-              <View style={{ borderRadius: 16, overflow: "hidden" }}>
-                <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <LinearGradient
-                    colors={["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.05)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                  />
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Bookmark size={24} color="#FFFFFF" />
-                    <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>Bookmarks</Text>
-                  </View>
-                  <Pressable onPress={() => setShowBookmarksModal(false)}>
-                    <X size={20} color="#FFFFFF" />
-                  </Pressable>
-                </BlurView>
+          <Animated.View
+            style={{
+              flex: 1,
+              transform: [{ translateY: bookmarksModalDragY }],
+            }}
+            {...bookmarksModalPanResponder.panHandlers}
+          >
+            <LinearGradient colors={["#0A0A0A", "#1A1A2E", "#16213E"]} style={{ flex: 1 }}>
+              <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
+                <View style={{ borderRadius: 16, overflow: "hidden" }}>
+                  <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <LinearGradient
+                      colors={["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.05)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                    />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <Bookmark size={24} color="#FFFFFF" />
+                      <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>Bookmarks</Text>
+                    </View>
+                    <Pressable onPress={() => setShowBookmarksModal(false)}>
+                      <X size={20} color="#FFFFFF" />
+                    </Pressable>
+                  </BlurView>
+                </View>
               </View>
-            </View>
             <FlatList
               data={bookmarkedMessages}
               keyExtractor={(item) => item.id}
@@ -5389,7 +5869,8 @@ const ChatScreen = () => {
                 </Pressable>
               )}
             />
-          </LinearGradient>
+            </LinearGradient>
+          </Animated.View>
         </Modal>
 
         {/* AI Super Features Modals */}
@@ -5441,26 +5922,33 @@ const ChatScreen = () => {
           animationType="slide"
           onRequestClose={() => setShowEventsTab(false)}
         >
-          <LinearGradient colors={["#0A0A0A", "#1A1A2E", "#16213E"]} style={{ flex: 1 }}>
-            <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
-              <View style={{ borderRadius: 16, overflow: "hidden" }}>
-                <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <LinearGradient
-                    colors={["rgba(10, 149, 255, 0.2)", "rgba(0, 122, 255, 0.1)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                  />
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Text style={{ fontSize: 24 }}>📅</Text>
-                    <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>Events</Text>
-                  </View>
-                  <Pressable onPress={() => setShowEventsTab(false)}>
-                    <X size={20} color="#FFFFFF" />
-                  </Pressable>
-                </BlurView>
+          <Animated.View
+            style={{
+              flex: 1,
+              transform: [{ translateY: eventsModalDragY }],
+            }}
+            {...eventsModalPanResponder.panHandlers}
+          >
+            <LinearGradient colors={["#0A0A0A", "#1A1A2E", "#16213E"]} style={{ flex: 1 }}>
+              <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
+                <View style={{ borderRadius: 16, overflow: "hidden" }}>
+                  <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <LinearGradient
+                      colors={["rgba(10, 149, 255, 0.2)", "rgba(0, 122, 255, 0.1)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                    />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <Text style={{ fontSize: 24 }}>📅</Text>
+                      <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>Events</Text>
+                    </View>
+                    <Pressable onPress={() => setShowEventsTab(false)}>
+                      <X size={20} color="#FFFFFF" />
+                    </Pressable>
+                  </BlurView>
+                </View>
               </View>
-            </View>
             <View style={{ flex: 1, paddingHorizontal: 16 }}>
               <EventsList
                 events={events}
@@ -5655,7 +6143,8 @@ const ChatScreen = () => {
                 </Pressable>
               </Animated.View>
             </View>
-          </LinearGradient>
+            </LinearGradient>
+          </Animated.View>
         </Modal>
 
         {/* Create Event Modal - conditionally rendered so it stacks above Events modal */}

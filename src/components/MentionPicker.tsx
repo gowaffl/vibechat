@@ -144,6 +144,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
               style={{ maxHeight: 280 }}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingVertical: 8 }}
+              keyboardShouldPersistTaps="handled"
             >
               {/* AI Friends Section */}
               {filteredAIFriends.length > 0 && (

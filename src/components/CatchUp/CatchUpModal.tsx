@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   SafeAreaView,
   ActivityIndicator,
+  PanResponder,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -40,6 +41,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   const [fadeAnim] = useState(new Animated.Value(0));
   const [pulseAnim] = useState(new Animated.Value(1));
   const [rotateAnim] = useState(new Animated.Value(0));
+  const dragY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
@@ -111,6 +113,51 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
     onClose();
   };
 
+  // PanResponder for swipe-down gesture
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          dragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onClose();
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(dragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // Reset drag position when modal closes
+  useEffect(() => {
+    if (!visible) {
+      dragY.setValue(0);
+    }
+  }, [visible]);
+
   const getSentimentEmoji = (sentiment?: string) => {
     switch (sentiment) {
       case "positive":
@@ -180,10 +227,32 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
               left: 0,
               right: 0,
               maxHeight: SCREEN_HEIGHT * 0.9,
-              transform: [{ translateY: slideAnim }],
+              transform: [
+                { translateY: slideAnim },
+                { translateY: dragY }
+              ],
             }}
           >
             <SafeAreaView>
+              {/* Handle Bar for swipe down */}
+              <View
+                {...panResponder.panHandlers}
+                style={{
+                  alignItems: "center",
+                  paddingTop: 14,
+                  paddingBottom: 8,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 5,
+                    backgroundColor: "rgba(255, 255, 255, 0.25)",
+                    borderRadius: 2.5,
+                  }}
+                />
+              </View>
+
               <View
                 style={{
                   borderTopLeftRadius: 32,

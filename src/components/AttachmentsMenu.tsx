@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Keyboard,
   Platform,
+  PanResponder,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -44,12 +45,59 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const keyboardHeightAnim = useRef(new Animated.Value(0)).current;
+  const dragY = useRef(new Animated.Value(0)).current;
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // PanResponder for swipe-down gesture
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to vertical swipes
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Only allow dragging down (positive dy)
+        if (gestureState.dy > 0) {
+          dragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If dragged down more than 100px or with enough velocity, close
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onClose();
+          // Reset drag position
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          // Spring back to original position
+          Animated.spring(dragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        // Reset drag position if gesture is interrupted
+        Animated.spring(dragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
     const onShow = (e: any) => {
+      setIsKeyboardVisible(true);
       Animated.timing(keyboardHeightAnim, {
         toValue: e.endCoordinates.height,
         duration: e.duration || 250,
@@ -59,6 +107,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
     };
 
     const onHide = (e: any) => {
+      setIsKeyboardVisible(false);
       Animated.timing(keyboardHeightAnim, {
         toValue: 0,
         duration: e.duration || 250,
@@ -92,6 +141,8 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
         }),
       ]).start();
     } else {
+      // Reset drag position when closing
+      dragY.setValue(0);
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
@@ -160,9 +211,12 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
           bottom: 0,
           left: 0,
           right: 0,
-          maxHeight: SCREEN_HEIGHT * 0.85,
+          maxHeight: isKeyboardVisible ? SCREEN_HEIGHT * 0.5 : SCREEN_HEIGHT * 0.9,
           transform: [{ 
-            translateY: Animated.subtract(slideAnim, keyboardHeightAnim)
+            translateY: Animated.add(
+              Animated.subtract(slideAnim, keyboardHeightAnim),
+              dragY
+            )
           }],
         }}
       >
@@ -186,8 +240,9 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
               borderTopRightRadius: 28,
             }}
           >
-            {/* Handle Bar */}
+            {/* Handle Bar - with pan responder for swipe down */}
             <View
+              {...panResponder.panHandlers}
               style={{
                 alignItems: "center",
                 paddingTop: 14,
@@ -206,9 +261,10 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
 
             <ScrollView
               style={{
-                maxHeight: SCREEN_HEIGHT * 0.75,
+                maxHeight: isKeyboardVisible ? SCREEN_HEIGHT * 0.4 : SCREEN_HEIGHT * 0.8,
               }}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {/* Photo Options */}
               <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>

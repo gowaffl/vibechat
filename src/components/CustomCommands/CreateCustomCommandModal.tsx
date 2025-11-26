@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,6 +36,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
   onCreate,
   isCreating = false,
 }) => {
+  const colorScheme = useColorScheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -274,6 +276,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             onChangeText={setCommand}
                             placeholder="e.g., /summarize, /translate, /joke"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                            keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                             style={{
                               backgroundColor: "rgba(255, 255, 255, 0.08)",
                               borderRadius: 12,
@@ -299,6 +302,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             onChangeText={setPrompt}
                             placeholder="e.g., Summarize the above conversation in 3 bullet points"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                            keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                             style={{
                               backgroundColor: "rgba(255, 255, 255, 0.08)",
                               borderRadius: 12,

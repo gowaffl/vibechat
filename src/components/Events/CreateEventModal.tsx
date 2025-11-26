@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  PanResponder,
+  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -53,8 +55,10 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
   isCreating = false,
   initialEvent,
 }) => {
+  const colorScheme = useColorScheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
+  const dragY = useRef(new Animated.Value(0)).current;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -147,6 +151,51 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
   };
+
+  // PanResponder for swipe-down gesture
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          dragY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onClose();
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(dragY, {
+            toValue: 0,
+            tension: 100,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // Reset drag position when modal closes
+  useEffect(() => {
+    if (!visible) {
+      dragY.setValue(0);
+    }
+  }, [visible]);
 
   const handleCreate = () => {
     console.log("=== [CreateEventModal] handleCreate called ===");
@@ -301,8 +350,11 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
               bottom: 0,
               left: 0,
               right: 0,
-              maxHeight: SCREEN_HEIGHT * 0.85,
-              transform: [{ translateY: slideAnim }],
+              maxHeight: SCREEN_HEIGHT * 0.9,
+              transform: [
+                { translateY: slideAnim },
+                { translateY: dragY }
+              ],
             }}
           >
             <KeyboardAvoidingView
@@ -310,6 +362,25 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
               style={{ flex: 1 }}
             >
               <SafeAreaView>
+                {/* Handle Bar for swipe down */}
+                <View
+                  {...panResponder.panHandlers}
+                  style={{
+                    alignItems: "center",
+                    paddingTop: 14,
+                    paddingBottom: 8,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 5,
+                      backgroundColor: "rgba(255, 255, 255, 0.25)",
+                      borderRadius: 2.5,
+                    }}
+                  />
+                </View>
+
                 <View
                   style={{
                     borderTopLeftRadius: 32,
@@ -409,6 +480,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           onChangeText={setTitle}
                           placeholder="e.g., Movie Night, Dinner Plans..."
                           placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                          keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                           style={{
                             backgroundColor: "rgba(255, 255, 255, 0.08)",
                             borderRadius: 12,
@@ -432,6 +504,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           onChangeText={setDescription}
                           placeholder="Add details about the event..."
                           placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                          keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                           multiline
                           numberOfLines={3}
                           style={{
@@ -741,6 +814,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                         : "Option " + (index + 1)
                                     }
                                     placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                                    keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                                     style={{
                                       backgroundColor: "rgba(255, 255, 255, 0.08)",
                                       borderRadius: 10,

@@ -15,6 +15,7 @@ import {
   PanResponder,
   FlatList,
   Keyboard,
+  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -146,6 +147,7 @@ const GroupSettingsScreen = () => {
   const route = useRoute<RootStackScreenProps<"GroupSettings">["route"]>();
   const navigation = useNavigation<RootStackScreenProps<"GroupSettings">["navigation"]>();
   const { user } = useUser();
+  const colorScheme = useColorScheme();
 
   const { chatId } = route.params;
 
@@ -1449,6 +1451,7 @@ const GroupSettingsScreen = () => {
                         value={aiName}
                         onChangeText={setAiName}
                         className="rounded-lg px-4 py-3 text-base mb-3"
+                        keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                         style={{
                           backgroundColor: "rgba(255, 255, 255, 0.05)",
                           color: "#FFFFFF",
@@ -1520,6 +1523,7 @@ const GroupSettingsScreen = () => {
                         value={aiPersonality}
                         onChangeText={setAiPersonality}
                         className="rounded-lg px-4 py-3 text-base mb-3"
+                        keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                         style={{
                           backgroundColor: "rgba(255, 255, 255, 0.05)",
                           color: "#FFFFFF",

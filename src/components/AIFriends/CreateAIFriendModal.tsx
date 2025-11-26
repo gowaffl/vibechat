@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,6 +36,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
   onCreate,
   isCreating = false,
 }) => {
+  const colorScheme = useColorScheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -286,6 +288,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                             onChangeText={setName}
                             placeholder="e.g., Alex, Helper, Buddy"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                            keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                             style={{
                               backgroundColor: "rgba(255, 255, 255, 0.08)",
                               borderRadius: 12,
@@ -310,6 +313,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                             onChangeText={setPersonality}
                             placeholder="e.g., Helpful and encouraging, always positive"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                            keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                             style={{
                               backgroundColor: "rgba(255, 255, 255, 0.08)",
                               borderRadius: 12,

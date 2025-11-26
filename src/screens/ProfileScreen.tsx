@@ -12,6 +12,7 @@ import {
   Platform,
   Switch,
   Keyboard,
+  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -28,6 +29,7 @@ import { getFullImageUrl } from "@/utils/imageHelpers";
 const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
   const { user, loading, updateUser } = useUser();
+  const colorScheme = useColorScheme();
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [isSaving, setIsSaving] = useState(false);
@@ -301,6 +303,7 @@ const ProfileScreen = () => {
                 onChangeText={setName}
                 placeholder="Enter your name"
                 placeholderTextColor="#666666"
+                keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                 className="rounded-2xl px-5 py-4 text-base"
                 style={{
                   backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -323,6 +326,7 @@ const ProfileScreen = () => {
                 onChangeText={setBio}
                 placeholder="Tell us about yourself"
                 placeholderTextColor="#666666"
+                keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
                 className="rounded-2xl px-5 py-4 text-base"
                 style={{
                   backgroundColor: "rgba(255, 255, 255, 0.1)",
