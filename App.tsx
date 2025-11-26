@@ -8,6 +8,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { UserProvider } from "@/contexts/UserContext";
 import * as Linking from "expo-linking";
+import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 
 const linking = {
@@ -138,6 +139,10 @@ export default function App() {
                       }
                     }, 100);
                   }
+                }}
+                onStateChange={() => {
+                  // Trigger haptic feedback on navigation state changes for tactile UX
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
               >
                 <RootStackNavigator />

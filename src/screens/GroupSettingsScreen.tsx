@@ -285,6 +285,20 @@ const GroupSettingsScreen = () => {
     }
   }, [selectedAiFriendId, aiFriends]);
 
+  // Handle route params for auto-expanding AI Friends section and creating new friend
+  React.useEffect(() => {
+    if (route.params?.expandAIFriends) {
+      setIsAiFriendSectionExpanded(true);
+    }
+    if (route.params?.createAIFriend && isCreator) {
+      setIsAiFriendSectionExpanded(true);
+      // Delay setting create mode to ensure the section is expanded first
+      setTimeout(() => {
+        setIsCreatingAiFriend(true);
+      }, 100);
+    }
+  }, [route.params, isCreator]);
+
   // Update chat settings mutation
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: Omit<UpdateChatRequest, 'userId'>) =>

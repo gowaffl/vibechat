@@ -24,7 +24,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -153,7 +153,8 @@ const ChatHeader = ({
         {/* Left Button - Back to Chat List */}
         <Pressable
           onPress={() => {
-            Haptics.selectionAsync();
+            // Use medium impact for back navigation for a more satisfying feel
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             // Always navigate to the Chats list, not previous screen
             (navigation as any).navigate("MainTabs", { screen: "Chats" });
           }}
@@ -4154,8 +4155,8 @@ const ChatScreen = () => {
         onInvitePress={handleShareInvite}
       />
 
-      {/* Smart Threads Tabs */}
-      {threads && threads.length > 0 && (
+      {/* Smart Threads Tabs - Always show to display Main Chat pill and + button */}
+      {threads && (
         <View
           style={{
             position: "absolute",
@@ -4171,6 +4172,7 @@ const ChatScreen = () => {
             onSelectThread={setCurrentThreadId}
             onReorder={reorderThreads}
             onOpenPanel={() => setShowThreadsPanel(true)}
+            onCreateThread={() => setShowCreateThread(true)}
           />
         </View>
       )}
@@ -4183,7 +4185,7 @@ const ChatScreen = () => {
         keyExtractor={(item) => item.id}
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingTop: insets.top + 95 + (threads && threads.length > 0 ? 56 : 0) + 20,
+          paddingTop: insets.top + 95 + (threads ? 56 : 0) + 20,
           paddingHorizontal: 16,
           paddingBottom: 60
         }}
@@ -4249,13 +4251,149 @@ const ChatScreen = () => {
             }
           }}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center py-20">
-              <Text className="text-base font-medium mb-2" style={{ color: "#8E8E93" }}>
-                No messages yet
-              </Text>
-              <Text className="text-sm" style={{ color: "#666666" }}>
-                Be the first to say hi!
-              </Text>
+            <View className="flex-1 items-center justify-center px-8" style={{ paddingVertical: 60 }}>
+              {/* Premium Empty State Card */}
+              <View style={{ 
+                width: '100%', 
+                maxWidth: 300,
+                borderRadius: 20,
+                overflow: 'hidden',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.12,
+                shadowRadius: 16,
+                elevation: 6,
+              }}>
+                <BlurView intensity={35} tint="dark" style={{ overflow: 'hidden', borderRadius: 20 }}>
+                  <LinearGradient
+                    colors={[
+                      'rgba(255, 255, 255, 0.04)',
+                      'rgba(255, 255, 255, 0.02)',
+                      'rgba(0, 0, 0, 0.02)',
+                    ]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{
+                      padding: 28,
+                      borderWidth: 1,
+                      borderColor: 'rgba(255, 255, 255, 0.08)',
+                      borderRadius: 20,
+                    }}
+                  >
+                    {/* Logo Icon Container */}
+                    <View style={{
+                      alignSelf: 'center',
+                      width: 56,
+                      height: 56,
+                      borderRadius: 28,
+                      marginBottom: 20,
+                      overflow: 'hidden',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255, 255, 255, 0.1)',
+                      shadowColor: '#4FC3F7',
+                      shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 10,
+                      elevation: 3,
+                    }}>
+                      <Image
+                        source={require("../../assets/image-1762790557.jpeg")}
+                        style={{ width: 56, height: 56 }}
+                        resizeMode="cover"
+                      />
+                    </View>
+
+                    {/* Heading */}
+                    <Text style={{
+                      fontSize: 20,
+                      fontWeight: '700',
+                      color: '#FFFFFF',
+                      textAlign: 'center',
+                      marginBottom: 6,
+                      letterSpacing: -0.4,
+                    }}>
+                      No messages yet
+                    </Text>
+
+                    {/* Subheading */}
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: '500',
+                      color: 'rgba(255, 255, 255, 0.65)',
+                      textAlign: 'center',
+                      lineHeight: 20,
+                      marginBottom: 22,
+                    }}>
+                      Be the first to say hi, or create{'\n'}an AI friend to start chatting
+                    </Text>
+
+                    {/* CTA Button */}
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        navigation.navigate("GroupSettings", { 
+                          chatId, 
+                          expandAIFriends: true, 
+                          createAIFriend: true 
+                        });
+                      }}
+                      style={({ pressed }) => ({
+                        opacity: pressed ? 0.88 : 1,
+                        transform: [{ scale: pressed ? 0.98 : 1 }],
+                      })}
+                    >
+                      <View style={{
+                        borderRadius: 14,
+                        overflow: 'hidden',
+                        shadowColor: '#34C759',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 12,
+                        elevation: 4,
+                      }}>
+                        <LinearGradient
+                          colors={[
+                            '#34C759',
+                            '#2DB34F',
+                            '#28A745',
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{
+                            paddingVertical: 13,
+                            paddingHorizontal: 20,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Sparkles size={17} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 8 }} />
+                          <Text style={{
+                            fontSize: 15,
+                            fontWeight: '700',
+                            color: '#FFFFFF',
+                            letterSpacing: 0.2,
+                          }}>
+                            Create AI Friend
+                          </Text>
+                        </LinearGradient>
+                      </View>
+                    </Pressable>
+
+                    {/* Helper Text */}
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '500',
+                      color: 'rgba(255, 255, 255, 0.45)',
+                      textAlign: 'center',
+                      marginTop: 16,
+                      lineHeight: 17,
+                    }}>
+                      Always ready to chat and help
+                    </Text>
+                  </LinearGradient>
+                </BlurView>
+              </View>
             </View>
           }
       />

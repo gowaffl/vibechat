@@ -1,6 +1,9 @@
 import { View, Text, Pressable, Image, Modal, Platform } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+import { useNavigation } from "@react-navigation/native";
+import { useEffect } from "react";
 
 import type { RootStackParamList } from "@/navigation/types";
 import TabNavigator from "@/navigation/TabNavigator";
@@ -16,6 +19,32 @@ import PhoneAuthScreen from "@/screens/PhoneAuthScreen";
 import WelcomeScreen from "@/screens/WelcomeScreen";
 import BirthdateScreen from "@/screens/BirthdateScreen";
 import { useUser } from "@/contexts/UserContext";
+
+// Custom hook to add haptic feedback on navigation
+const useNavigationHaptics = () => {
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('transitionStart' as any, () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+};
+
+// Default spring animation config for all screens
+const springAnimationConfig = {
+  animation: 'spring' as const,
+  config: {
+    stiffness: 300,
+    damping: 25,
+    mass: 0.8,
+    overshootClamping: false,
+    restDisplacementThreshold: 0.01,
+    restSpeedThreshold: 0.01,
+  },
+};
 
 /**
  * RootStackNavigator
@@ -48,12 +77,20 @@ const RootNavigator = () => {
   }
 
   return (
-    <RootStack.Navigator initialRouteName={initialRoute}>
+    <RootStack.Navigator 
+      initialRouteName={initialRoute}
+      screenOptions={{
+        animation: 'default',
+        animationTypeForReplace: 'push',
+      }}
+    >
       <RootStack.Screen
         name="Welcome"
         component={WelcomeScreen}
         options={{
           headerShown: false,
+          animation: 'fade_from_bottom',
+          animationDuration: 400,
         }}
       />
       <RootStack.Screen
@@ -61,6 +98,8 @@ const RootNavigator = () => {
         component={PhoneAuthScreen}
         options={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 350,
         }}
       />
       <RootStack.Screen
@@ -68,6 +107,8 @@ const RootNavigator = () => {
         component={BirthdateScreen}
         options={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 350,
         }}
         initialParams={user ? { userId: user.id, hasCompletedOnboarding: user.hasCompletedOnboarding } : undefined}
       />
@@ -76,6 +117,8 @@ const RootNavigator = () => {
         component={OnboardingNameScreen}
         options={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 350,
         }}
       />
       <RootStack.Screen
@@ -83,6 +126,8 @@ const RootNavigator = () => {
         component={OnboardingPhotoScreen}
         options={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 350,
         }}
       />
       <RootStack.Screen
@@ -90,6 +135,8 @@ const RootNavigator = () => {
         component={TabNavigator}
         options={{
           headerShown: false,
+          animation: 'fade',
+          animationDuration: 300,
         }}
       />
       <RootStack.Screen
@@ -97,6 +144,8 @@ const RootNavigator = () => {
         component={ChatListScreen}
         options={{
           headerShown: false,
+          animation: 'slide_from_left',
+          animationDuration: 350,
         }}
       />
       <RootStack.Screen
@@ -104,6 +153,10 @@ const RootNavigator = () => {
         component={ChatScreen}
         options={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 350,
+          gestureEnabled: true,
+          gestureDirection: 'horizontal',
         }}
       />
       <RootStack.Screen
@@ -122,6 +175,9 @@ const RootNavigator = () => {
           ),
           headerShadowVisible: false,
           headerTintColor: "#FFFFFF",
+          animation: 'slide_from_bottom',
+          animationDuration: 350,
+          gestureEnabled: true,
         }}
       />
       <RootStack.Screen
@@ -129,6 +185,9 @@ const RootNavigator = () => {
         component={InviteScreen}
         options={{
           headerShown: false,
+          animation: 'fade_from_bottom',
+          animationDuration: 400,
+          presentation: 'modal',
         }}
       />
       <RootStack.Screen
@@ -147,6 +206,9 @@ const RootNavigator = () => {
           ),
           headerShadowVisible: false,
           headerTintColor: "#FFFFFF",
+          animation: 'slide_from_right',
+          animationDuration: 350,
+          gestureEnabled: true,
         }}
       />
       <RootStack.Screen
@@ -165,6 +227,9 @@ const RootNavigator = () => {
           ),
           headerShadowVisible: false,
           headerTintColor: "#FFFFFF",
+          animation: 'slide_from_right',
+          animationDuration: 350,
+          gestureEnabled: true,
         }}
       />
     </RootStack.Navigator>

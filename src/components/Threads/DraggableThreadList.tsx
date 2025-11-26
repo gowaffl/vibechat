@@ -36,6 +36,7 @@ interface DraggableThreadListProps {
   onSelectThread: (threadId: string | null) => void;
   onReorder: (items: { threadId: string; sortOrder: number }[]) => void;
   onOpenPanel: () => void;
+  onCreateThread: () => void;
 }
 
 // --- Main Component ---
@@ -46,6 +47,7 @@ const DraggableThreadList: React.FC<DraggableThreadListProps> = ({
   onSelectThread,
   onReorder,
   onOpenPanel,
+  onCreateThread,
 }) => {
   const [scrollEnabled, setScrollEnabled] = useState(true);
   
@@ -117,60 +119,93 @@ const DraggableThreadList: React.FC<DraggableThreadListProps> = ({
           justifyContent: "center",
         }}
       >
-        {/* Main Chat Pill (Fixed) */}
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onSelectThread(null);
-          }}
-          style={{ marginRight: GAP, zIndex: 1 }}
-        >
-          <BlurView
-            intensity={currentThreadId === null ? 70 : 40}
-            tint="dark"
-            style={[
-              styles.pill,
-              currentThreadId === null && styles.activePill,
-            ]}
+        {/* Show Main Chat pill only if there are threads, or always show it in the top bar if no threads exist */}
+        {threads.length > 0 && (
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onSelectThread(null);
+            }}
+            style={{ marginRight: GAP, zIndex: 1 }}
           >
-            <Text
+            <BlurView
+              intensity={currentThreadId === null ? 70 : 40}
+              tint="dark"
               style={[
-                styles.text,
-                currentThreadId === null && styles.activeText,
+                styles.pill,
+                currentThreadId === null && styles.activePill,
               ]}
             >
-              Main Chat
-            </Text>
-          </BlurView>
-        </Pressable>
+              <Text
+                style={[
+                  styles.text,
+                  currentThreadId === null && styles.activeText,
+                ]}
+              >
+                Main Chat
+              </Text>
+            </BlurView>
+          </Pressable>
+        )}
+
+        {threads.length === 0 && (
+          /* Show Main Chat pill when no threads exist */
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onSelectThread(null);
+            }}
+            style={{ marginRight: GAP, zIndex: 1 }}
+          >
+            <BlurView
+              intensity={currentThreadId === null ? 70 : 40}
+              tint="dark"
+              style={[
+                styles.pill,
+                currentThreadId === null && styles.activePill,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.text,
+                  currentThreadId === null && styles.activeText,
+                ]}
+              >
+                Main Chat
+              </Text>
+            </BlurView>
+          </Pressable>
+        )}
 
         {/* Draggable Items Container */}
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {threads.map((thread, index) => (
-            <SortableItem
-              key={thread.id}
-              id={thread.id}
-              thread={thread}
-              index={index}
-              isActive={currentThreadId === thread.id}
-              onSelect={() => onSelectThread(thread.id)}
-              widths={widths}
-              positions={positions}
-              draggingId={draggingId}
-              originalOrder={originalOrder}
-              onWidthMeasure={handleWidthMeasure}
-              onDragStart={handleDragStart}
-              onReorderChange={handleReorderChange}
-              onDragEnd={handleDragEnd}
-            />
-          ))}
-        </View>
+        {threads.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {threads.map((thread, index) => (
+              <SortableItem
+                key={thread.id}
+                id={thread.id}
+                thread={thread}
+                index={index}
+                isActive={currentThreadId === thread.id}
+                onSelect={() => onSelectThread(thread.id)}
+                widths={widths}
+                positions={positions}
+                draggingId={draggingId}
+                originalOrder={originalOrder}
+                onWidthMeasure={handleWidthMeasure}
+                onDragStart={handleDragStart}
+                onReorderChange={handleReorderChange}
+                onDragEnd={handleDragEnd}
+              />
+            ))}
+          </View>
+        )}
 
-        {/* Add/Menu Button */}
+        {/* Add/Menu Button - Opens Create Thread directly */}
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onOpenPanel();
+            onCreateThread();
           }}
           style={{ marginLeft: GAP }}
         >
