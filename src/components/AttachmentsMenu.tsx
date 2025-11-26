@@ -12,7 +12,8 @@ import {
   Platform,
 } from "react-native";
 import { BlurView } from "expo-blur";
-import { Camera, Image as ImageIcon, Sparkles, Wand2, Search, Globe } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Camera, Image as ImageIcon, Sparkles, Wand2, Plus, Zap } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import type { CustomSlashCommand } from "@/shared/contracts";
 
@@ -175,9 +176,12 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
             paddingBottom: 34,
           }}
         >
-          <View
+          <LinearGradient
+            colors={[
+              "rgba(28, 28, 30, 0.98)",
+              "rgba(18, 18, 20, 0.98)",
+            ]}
             style={{
-              backgroundColor: "rgba(28, 28, 30, 0.95)",
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
             }}
@@ -186,15 +190,15 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
             <View
               style={{
                 alignItems: "center",
-                paddingTop: 12,
-                paddingBottom: 16,
+                paddingTop: 14,
+                paddingBottom: 20,
               }}
             >
               <View
                 style={{
-                  width: 36,
+                  width: 40,
                   height: 5,
-                  backgroundColor: "rgba(255, 255, 255, 0.3)",
+                  backgroundColor: "rgba(255, 255, 255, 0.25)",
                   borderRadius: 2.5,
                 }}
               />
@@ -207,7 +211,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
               showsVerticalScrollIndicator={false}
             >
               {/* Photo Options */}
-              <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+              <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
                 <View
                   style={{
                     flexDirection: "row",
@@ -220,38 +224,55 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                     onPress={() => handlePhotoAction(onTakePhoto)}
                     style={({ pressed }) => ({
                       flex: 1,
-                      backgroundColor: pressed
-                        ? "rgba(255, 255, 255, 0.12)"
-                        : "rgba(255, 255, 255, 0.08)",
+                      overflow: "hidden",
                       borderRadius: 20,
-                      padding: 20,
-                      alignItems: "center",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.15)",
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <View
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 28,
-                        backgroundColor: "rgba(0, 122, 255, 0.2)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginBottom: 12,
-                      }}
-                    >
-                      <Camera size={28} color="#007AFF" />
-                    </View>
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: "600",
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      Camera
-                    </Text>
+                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 20, overflow: "hidden" }}>
+                      <LinearGradient
+                        colors={[
+                          "rgba(0, 122, 255, 0.15)",
+                          "rgba(0, 122, 255, 0.08)",
+                        ]}
+                        style={{
+                          padding: 16,
+                          alignItems: "center",
+                          borderWidth: 1,
+                          borderColor: "rgba(0, 122, 255, 0.25)",
+                          borderRadius: 20,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 24,
+                            backgroundColor: "rgba(0, 122, 255, 0.2)",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginBottom: 10,
+                            shadowColor: "#007AFF",
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 6,
+                          }}
+                        >
+                          <Camera size={24} color="#007AFF" strokeWidth={2.5} />
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: "600",
+                            color: "#FFFFFF",
+                            letterSpacing: -0.2,
+                          }}
+                        >
+                          Camera
+                        </Text>
+                      </LinearGradient>
+                    </BlurView>
                   </Pressable>
 
                   {/* Photo Library */}
@@ -259,38 +280,55 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                     onPress={() => handlePhotoAction(onPickImage)}
                     style={({ pressed }) => ({
                       flex: 1,
-                      backgroundColor: pressed
-                        ? "rgba(255, 255, 255, 0.12)"
-                        : "rgba(255, 255, 255, 0.08)",
+                      overflow: "hidden",
                       borderRadius: 20,
-                      padding: 20,
-                      alignItems: "center",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.15)",
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <View
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 28,
-                        backgroundColor: "rgba(79, 195, 247, 0.2)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginBottom: 12,
-                      }}
-                    >
-                      <ImageIcon size={28} color="#8A2BE2" />
-                    </View>
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: "600",
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      Photos
-                    </Text>
+                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 20, overflow: "hidden" }}>
+                      <LinearGradient
+                        colors={[
+                          "rgba(138, 43, 226, 0.15)",
+                          "rgba(138, 43, 226, 0.08)",
+                        ]}
+                        style={{
+                          padding: 16,
+                          alignItems: "center",
+                          borderWidth: 1,
+                          borderColor: "rgba(138, 43, 226, 0.25)",
+                          borderRadius: 20,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 24,
+                            backgroundColor: "rgba(138, 43, 226, 0.2)",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginBottom: 10,
+                            shadowColor: "#8A2BE2",
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 6,
+                          }}
+                        >
+                          <ImageIcon size={24} color="#8A2BE2" strokeWidth={2.5} />
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: "600",
+                            color: "#FFFFFF",
+                            letterSpacing: -0.2,
+                          }}
+                        >
+                          Photos
+                        </Text>
+                      </LinearGradient>
+                    </BlurView>
                   </Pressable>
                 </View>
               </View>
@@ -299,147 +337,251 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
               <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 }}>
                 <Text
                   style={{
-                    fontSize: 13,
-                    fontWeight: "600",
-                    color: "rgba(255, 255, 255, 0.6)",
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: "rgba(255, 255, 255, 0.4)",
                     textTransform: "uppercase",
-                    letterSpacing: 0.5,
+                    letterSpacing: 1,
                     marginBottom: 12,
+                    marginLeft: 4,
                   }}
                 >
                   AI Tools
                 </Text>
-                {builtInCommands.map((cmd) => {
-                  const Icon = cmd.icon;
-                  return (
-                    <Pressable
-                      key={cmd.command}
-                      onPress={() => handleCommandAction(() => onSelectCommand(cmd.command))}
-                      style={({ pressed }) => ({
-                        flexDirection: "row",
-                        alignItems: "center",
-                        backgroundColor: pressed
-                          ? "rgba(255, 255, 255, 0.08)"
-                          : "rgba(255, 255, 255, 0.05)",
-                        borderRadius: 16,
-                        padding: 16,
-                        marginBottom: 8,
-                        borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.1)",
-                      })}
-                    >
-                      <View
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 22,
-                          backgroundColor: `${cmd.color}20`,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: 12,
-                        }}
+                <View style={{ gap: 8 }}>
+                  {builtInCommands.map((cmd) => {
+                    const Icon = cmd.icon;
+                    return (
+                      <Pressable
+                        key={cmd.command}
+                        onPress={() => handleCommandAction(() => onSelectCommand(cmd.command))}
+                        style={({ pressed }) => ({
+                          overflow: "hidden",
+                          borderRadius: 18,
+                          opacity: pressed ? 0.85 : 1,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                        })}
                       >
-                        <Icon size={22} color={cmd.color} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{
-                            fontSize: 17,
-                            fontWeight: "600",
-                            color: "#FFFFFF",
-                            marginBottom: 2,
-                          }}
-                        >
-                          {cmd.command}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            color: "rgba(255, 255, 255, 0.7)",
-                          }}
-                        >
-                          {cmd.description}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
+                        <BlurView intensity={25} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                          <LinearGradient
+                            colors={[
+                              `${cmd.color}15`,
+                              `${cmd.color}08`,
+                            ]}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              padding: 12,
+                              borderWidth: 1,
+                              borderColor: `${cmd.color}30`,
+                              borderRadius: 18,
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: `${cmd.color}25`,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                marginRight: 12,
+                                shadowColor: cmd.color,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 4,
+                              }}
+                            >
+                              <Icon size={20} color={cmd.color} strokeWidth={2.5} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                style={{
+                                  fontSize: 16,
+                                  fontWeight: "600",
+                                  color: "#FFFFFF",
+                                  marginBottom: 2,
+                                  letterSpacing: -0.2,
+                                }}
+                              >
+                                {cmd.command}
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  color: "rgba(255, 255, 255, 0.6)",
+                                  lineHeight: 16,
+                                }}
+                              >
+                                {cmd.description}
+                              </Text>
+                            </View>
+                          </LinearGradient>
+                        </BlurView>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
 
               {/* Custom Commands Section */}
-              {customCommands.length > 0 && (
-                <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 }}>
+              <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, marginLeft: 4 }}>
                   <Text
                     style={{
-                      fontSize: 13,
-                      fontWeight: "600",
-                      color: "rgba(255, 255, 255, 0.6)",
+                      fontSize: 11,
+                      fontWeight: "700",
+                      color: "rgba(255, 255, 255, 0.4)",
                       textTransform: "uppercase",
-                      letterSpacing: 0.5,
-                      marginBottom: 12,
+                      letterSpacing: 1,
                     }}
                   >
                     Custom Commands
                   </Text>
-                  {customCommands.map((cmd) => (
-                    <Pressable
-                      key={cmd.id}
-                      onPress={() => handleCommandAction(() => onSelectCommand(cmd.command))}
-                      style={({ pressed }) => ({
+                  {customCommands.length > 0 && (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "600",
+                        color: "rgba(255, 255, 255, 0.3)",
+                      }}
+                    >
+                      {customCommands.length}
+                    </Text>
+                  )}
+                </View>
+
+                {customCommands.length > 0 ? (
+                  <View style={{ gap: 8, marginBottom: 12 }}>
+                    {customCommands.map((cmd) => (
+                      <Pressable
+                        key={cmd.id}
+                        onPress={() => handleCommandAction(() => onSelectCommand(cmd.command))}
+                        style={({ pressed }) => ({
+                          overflow: "hidden",
+                          borderRadius: 18,
+                          opacity: pressed ? 0.85 : 1,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                        })}
+                      >
+                        <BlurView intensity={25} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                          <LinearGradient
+                            colors={[
+                              "rgba(255, 159, 10, 0.15)", // Orange #FF9F0A
+                              "rgba(255, 159, 10, 0.08)",
+                            ]}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              padding: 12,
+                              borderWidth: 1,
+                              borderColor: "rgba(255, 159, 10, 0.3)",
+                              borderRadius: 18,
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: "rgba(255, 159, 10, 0.25)",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                marginRight: 12,
+                                shadowColor: "#FF9F0A",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 4,
+                              }}
+                            >
+                              <Zap size={20} color="#FF9F0A" strokeWidth={2.5} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                style={{
+                                  fontSize: 16,
+                                  fontWeight: "600",
+                                  color: "#FFFFFF",
+                                  marginBottom: 2,
+                                  letterSpacing: -0.2,
+                                }}
+                              >
+                                {cmd.command}
+                              </Text>
+                              <Text
+                                numberOfLines={1}
+                                style={{
+                                  fontSize: 13,
+                                  color: "rgba(255, 255, 255, 0.6)",
+                                  lineHeight: 16,
+                                }}
+                              >
+                                {cmd.prompt}
+                              </Text>
+                            </View>
+                          </LinearGradient>
+                        </BlurView>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Create New Command Button */}
+                <Pressable
+                  onPress={() => handleCommandAction(onCreateCommand)}
+                  style={({ pressed }) => ({
+                    overflow: "hidden",
+                    borderRadius: 18,
+                    opacity: pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                  })}
+                >
+                  <BlurView intensity={30} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                    <LinearGradient
+                      colors={[
+                        "rgba(255, 159, 10, 0.12)", // Orange
+                        "rgba(255, 159, 10, 0.06)",
+                      ]}
+                      style={{
                         flexDirection: "row",
                         alignItems: "center",
-                        backgroundColor: pressed
-                          ? "rgba(255, 255, 255, 0.08)"
-                          : "rgba(255, 255, 255, 0.05)",
-                        borderRadius: 16,
-                        padding: 16,
-                        marginBottom: 8,
+                        justifyContent: "center",
+                        padding: 14,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.1)",
-                      })}
+                        borderColor: "rgba(255, 159, 10, 0.3)",
+                        borderRadius: 18,
+                        borderStyle: "dashed",
+                      }}
                     >
                       <View
                         style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 22,
-                          backgroundColor: "rgba(52, 199, 89, 0.2)",
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: "rgba(255, 159, 10, 0.2)",
                           alignItems: "center",
                           justifyContent: "center",
-                          marginRight: 12,
+                          marginRight: 10,
                         }}
                       >
-                        <Sparkles size={22} color="#34C759" />
+                        <Plus size={18} color="#FF9F0A" strokeWidth={3} />
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{
-                            fontSize: 17,
-                            fontWeight: "600",
-                            color: "#FFFFFF",
-                            marginBottom: 2,
-                          }}
-                        >
-                          {cmd.command}
-                        </Text>
-                        <Text
-                          numberOfLines={2}
-                          style={{
-                            fontSize: 14,
-                            color: "rgba(255, 255, 255, 0.7)",
-                          }}
-                        >
-                          {cmd.prompt.length > 60
-                            ? `${cmd.prompt.substring(0, 60)}...`
-                            : cmd.prompt}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "600",
+                          color: "#FFFFFF",
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        Create Custom Command
+                      </Text>
+                    </LinearGradient>
+                  </BlurView>
+                </Pressable>
+              </View>
             </ScrollView>
-          </View>
+          </LinearGradient>
         </BlurView>
       </Animated.View>
     </View>

@@ -52,6 +52,8 @@ import { CatchUpModal, CatchUpButton } from "@/components/CatchUp";
 import { EventsList, CreateEventModal, EventNotificationCard } from "@/components/Events";
 import { ReactorMenu } from "@/components/Reactor";
 import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/components/Threads";
+import { CreateCustomCommandModal } from "@/components/CustomCommands";
+import { CreateAIFriendModal } from "@/components/AIFriends";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
 import { SwipeableMessage } from "@/components/SwipeableMessage";
@@ -1464,6 +1466,8 @@ const ChatScreen = () => {
   const [editingThread, setEditingThread] = useState<Thread | null>(null);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [catchUpDismissed, setCatchUpDismissed] = useState(false);
+  const [showCreateCustomCommand, setShowCreateCustomCommand] = useState(false);
+  const [showCreateAIFriend, setShowCreateAIFriend] = useState(false);
   
   // Mentions state
   const [showMentionPicker, setShowMentionPicker] = useState(false);
@@ -2023,6 +2027,57 @@ const ChatScreen = () => {
       console.error("Error unsending message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", error?.message || "Failed to unsend message");
+    },
+  });
+
+  // Create custom command mutation
+  const createCustomCommandMutation = useMutation({
+    mutationFn: ({ command, prompt }: { command: string; prompt: string }) =>
+      api.post("/api/custom-commands", {
+        chatId,
+        userId: user?.id,
+        command,
+        prompt,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customCommands", chatId] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowCreateCustomCommand(false);
+    },
+    onError: (error: any) => {
+      console.error("Error creating custom command:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", error?.message || "Failed to create custom command");
+    },
+  });
+
+  // Create AI friend mutation
+  const createAIFriendMutation = useMutation({
+    mutationFn: ({ name, personality, tone, engagementMode, engagementPercent }: { 
+      name: string; 
+      personality: string; 
+      tone: string; 
+      engagementMode: "on-call" | "percentage" | "off";
+      engagementPercent?: number;
+    }) =>
+      aiFriendsApi.createAIFriend({
+        chatId,
+        userId: user?.id || "",
+        name,
+        personality: personality || null,
+        tone: tone || null,
+        engagementMode,
+        engagementPercent: engagementMode === "percentage" ? engagementPercent : null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["aiFriends", chatId] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowCreateAIFriend(false);
+    },
+    onError: (error: any) => {
+      console.error("Error creating AI friend:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", error?.message || "Failed to create AI friend");
     },
   });
 
@@ -3031,8 +3086,10 @@ const ChatScreen = () => {
 
       // Save all selected images
       for (const msg of imageMessages) {
-        const fullImageUrl = getFullImageUrl(msg.imageUrl);
-        const fileUri = `${FileSystem.cacheDirectory}downloaded-image-${msg.id}.jpg`;
+        const fullImageUrl = getFullImageUrl(msg.imageUrl!); // Assert non-null as filtered above
+        const extension = fullImageUrl.split(".").pop()?.split("?")[0] || "jpg";
+        const fileUri = `${FileSystem.cacheDirectory}vibechat_${msg.id}.${extension}`;
+        
         const downloadResult = await FileSystem.downloadAsync(fullImageUrl, fileUri);
         await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
       }
@@ -4331,11 +4388,7 @@ const ChatScreen = () => {
                     <Pressable
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        navigation.navigate("GroupSettings", { 
-                          chatId, 
-                          expandAIFriends: true, 
-                          createAIFriend: true 
-                        });
+                        setShowCreateAIFriend(true);
                       }}
                       style={({ pressed }) => ({
                         opacity: pressed ? 0.88 : 1,
@@ -5182,7 +5235,8 @@ const ChatScreen = () => {
             setMessageText(command + " ");
           }}
           onCreateCommand={() => {
-            navigation.navigate("GroupSettings", { chatId });
+            setShowAttachmentsMenu(false);
+            setTimeout(() => setShowCreateCustomCommand(true), 300);
           }}
           onOpenSettings={() => {
             navigation.navigate("GroupSettings", { chatId });
@@ -5789,6 +5843,32 @@ const ChatScreen = () => {
             }
           }}
           isCreating={isCreatingThread}
+        />
+
+        {/* Create Custom Command Modal */}
+        <CreateCustomCommandModal
+          visible={showCreateCustomCommand}
+          onClose={() => setShowCreateCustomCommand(false)}
+          onCreate={(command, prompt) => {
+            createCustomCommandMutation.mutate({ command, prompt });
+          }}
+          isCreating={createCustomCommandMutation.isPending}
+        />
+
+        {/* Create AI Friend Modal */}
+        <CreateAIFriendModal
+          visible={showCreateAIFriend}
+          onClose={() => setShowCreateAIFriend(false)}
+          onCreate={(name, personality, tone, engagementMode, engagementPercent) => {
+            createAIFriendMutation.mutate({ 
+              name, 
+              personality, 
+              tone, 
+              engagementMode, 
+              engagementPercent 
+            });
+          }}
+          isCreating={createAIFriendMutation.isPending}
         />
       </View>
     );

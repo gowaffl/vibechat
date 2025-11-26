@@ -18,7 +18,9 @@
         "NSCalendarsWriteOnlyAccessUsageDescription": "VibeChat needs to add events to your calendar for group chat scheduling.",
         "NSCalendarsFullAccessUsageDescription": "VibeChat needs full calendar access to create and manage event reminders for your group chats.",
         "NSRemindersUsageDescription": "VibeChat needs access to reminders to help you keep track of important group events.",
-        "NSRemindersFullAccessUsageDescription": "VibeChat needs full reminders access to create and manage tasks for your group chats."
+        "NSRemindersFullAccessUsageDescription": "VibeChat needs full reminders access to create and manage tasks for your group chats.",
+        "NSPhotoLibraryUsageDescription": "VibeChat needs access to your photos to let you save and share them.",
+        "NSPhotoLibraryAddUsageDescription": "VibeChat needs permission to save images to your gallery."
       },
       "entitlements": {
         "aps-environment": "development"

@@ -15,6 +15,7 @@ interface LiquidGlassButtonProps {
   textStyle?: TextStyle;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
+  color?: string;
 }
 
 const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
@@ -28,6 +29,7 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
   textStyle,
   icon,
   iconPosition = "left",
+  color,
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
@@ -69,14 +71,16 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
 
   const variantStyles = {
     primary: {
-      borderColor: "rgba(0, 122, 255, 0.5)",
+      borderColor: color ? `${color}80` : "rgba(0, 122, 255, 0.5)",
       borderWidth: 1,
-      shadowColor: "rgba(0, 122, 255, 0.5)",
-      gradientColors: [
-        "rgba(0, 122, 255, 0.3)",
-        "rgba(0, 122, 255, 0.2)",
-        "rgba(0, 122, 255, 0.1)",
-      ] as const,
+      shadowColor: color ? `${color}80` : "rgba(0, 122, 255, 0.5)",
+      gradientColors: color
+        ? [`${color}4D`, `${color}33`, `${color}1A`]
+        : ([
+            "rgba(0, 122, 255, 0.3)",
+            "rgba(0, 122, 255, 0.2)",
+            "rgba(0, 122, 255, 0.1)",
+          ] as const),
     },
     secondary: {
       borderColor: "rgba(255, 255, 255, 0.3)",

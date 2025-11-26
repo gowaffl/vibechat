@@ -182,6 +182,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
   const handleSaveImage = async () => {
     try {
       setIsSaving(true);
+      console.log("Attempting to save image...");
 
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
@@ -189,8 +190,15 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
         return;
       }
 
-      const fileUri = `${FileSystem.cacheDirectory}downloaded-image.jpg`;
+      // Get file extension from URL or default to jpg
+      const extension = imageUrl.split(".").pop()?.split("?")[0] || "jpg";
+      const fileName = `vibechat_${Date.now()}.${extension}`;
+      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+      
+      console.log("Downloading to:", fileUri);
       const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      
+      console.log("Saving to library...");
       await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
 
       Alert.alert("Success", "Image saved to your library!");
