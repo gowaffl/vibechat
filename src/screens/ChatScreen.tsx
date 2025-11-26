@@ -59,33 +59,7 @@ import { useEvents } from "@/hooks/useEvents";
 import { useReactor } from "@/hooks/useReactor";
 import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
-
-// Helper function to convert relative image URLs to full URLs
-const getFullImageUrl = (imageUrl: string | null | undefined): string => {
-  if (!imageUrl) return "";
-  
-  // If already a full URL
-  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-    try {
-      const url = new URL(imageUrl);
-      
-      // Check if this is a Supabase storage URL - if so, return as-is
-      if (url.pathname.includes('/storage/v1/object/')) {
-        return imageUrl;
-      }
-      
-      // For other full URLs (e.g., old backend URLs), extract path and use current BACKEND_URL
-      // This handles cases where the URL was saved with a different backend URL
-      return `${BACKEND_URL}${url.pathname}`;
-    } catch {
-      // If URL parsing fails, return as is
-      return imageUrl;
-    }
-  }
-  
-  // Convert relative URL to full URL
-  return `${BACKEND_URL}${imageUrl}`;
-};
+import { getFullImageUrl } from "@/utils/imageHelpers";
 
 // Custom Chat Header Component
 const ChatHeader = ({ 
@@ -126,7 +100,7 @@ const ChatHeader = ({
         top: 0,
         left: 0,
         right: 0,
-        height: 95 + insets.top,
+        height: 85 + insets.top,
         zIndex: 100,
       }}
     >
@@ -169,9 +143,9 @@ const ChatHeader = ({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingTop: insets.top + 10,
+          paddingTop: insets.top + 6,
           paddingHorizontal: 16,
-          paddingBottom: 10,
+          paddingBottom: 8,
         }}
       >
         {/* Left Button - Back to Chat List */}
@@ -214,26 +188,26 @@ const ChatHeader = ({
               <Image
                 source={{ uri: groupImageUrl }}
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  marginBottom: 6,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  marginBottom: 4,
                 }}
                 resizeMode="cover"
               />
             ) : (
               <View
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
                   backgroundColor: "rgba(255, 255, 255, 0.15)",
                   alignItems: "center",
                   justifyContent: "center",
-                  marginBottom: 6,
+                  marginBottom: 4,
                 }}
               >
-                <Users size={22} color="#FFFFFF" />
+                <Users size={26} color="#FFFFFF" />
               </View>
             )}
             {/* Group Name */}

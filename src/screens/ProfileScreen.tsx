@@ -23,6 +23,7 @@ import { useUser } from "@/contexts/UserContext";
 import { BACKEND_URL, api } from "@/lib/api";
 import type { UploadImageResponse } from "@/shared/contracts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
+import { getFullImageUrl } from "@/utils/imageHelpers";
 
 const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
@@ -92,9 +93,9 @@ const ProfileScreen = () => {
         const response: UploadImageResponse = JSON.parse(uploadResult.body);
         console.log("[ProfileScreen] Parsed response:", response);
         if (response.success) {
-          const fullImageUrl = `${BACKEND_URL}${response.url}`;
-          console.log("[ProfileScreen] Full image URL:", fullImageUrl);
-          await updateUser({ image: fullImageUrl });
+          // The response.url is already a full Supabase storage URL, don't prepend BACKEND_URL
+          console.log("[ProfileScreen] Image URL:", response.url);
+          await updateUser({ image: response.url });
           Alert.alert("Success", "Profile photo updated!");
         }
       } else {
@@ -220,10 +221,11 @@ const ProfileScreen = () => {
                   elevation: 8,
                 }}
               >
-                {user?.image ? (
+                {user?.image && getFullImageUrl(user.image) ? (
                   <Image
-                    source={{ uri: user.image.startsWith("http") ? user.image : `${BACKEND_URL}${user.image}` }}
+                    source={{ uri: getFullImageUrl(user.image) }}
                     className="w-32 h-32 rounded-full"
+                    resizeMode="cover"
                   />
                 ) : (
                   <View

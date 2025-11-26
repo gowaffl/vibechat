@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import type { User, Thread, AIFriend } from "@/shared/contracts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
+import { getFullImageUrl } from "@/utils/imageHelpers";
 
 interface MentionPickerProps {
   visible: boolean;
@@ -26,8 +27,6 @@ interface MentionPickerProps {
   // Deprecated: use aiFriends instead
   aiName?: string;
 }
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
 const MentionPicker: React.FC<MentionPickerProps> = ({
   visible,
@@ -296,13 +295,9 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                             }}
                           >
                             {/* User Avatar */}
-                            {user.image ? (
+                            {user.image && getFullImageUrl(user.image) ? (
                               <Image
-                                source={{
-                                  uri: user.image.startsWith("http")
-                                    ? user.image
-                                    : `${BACKEND_URL}${user.image}`,
-                                }}
+                                source={{ uri: getFullImageUrl(user.image) }}
                                 style={{
                                   width: 32,
                                   height: 32,

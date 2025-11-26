@@ -22,6 +22,7 @@ import { TapGestureHandler, State } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import { api, BACKEND_URL } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
+import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { ChatWithMetadata, GetUserChatsResponse, UnreadCount } from "@/shared/contracts";
 import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
@@ -144,29 +145,6 @@ const ChatListScreen = () => {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     return date.toLocaleDateString();
-  };
-
-  const getFullImageUrl = (imageUrl: string | null | undefined): string => {
-    if (!imageUrl) return "";
-    
-    // If already a full URL
-    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-      try {
-        const url = new URL(imageUrl);
-        
-        // Check if this is a Supabase storage URL - if so, return as-is
-        if (url.pathname.includes('/storage/v1/object/')) {
-          return imageUrl;
-        }
-        
-        // For other full URLs, extract path and use current BACKEND_URL
-        return `${BACKEND_URL}${url.pathname}`;
-      } catch {
-        // If URL parsing fails, return as is
-        return imageUrl;
-      }
-    }
-    return `${BACKEND_URL}${imageUrl}`;
   };
 
   // Filter chats based on search query

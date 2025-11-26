@@ -8,6 +8,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, BACKEND_URL } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
+import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { GetInviteInfoResponse, JoinChatViaInviteResponse } from "@/shared/contracts";
 
@@ -65,29 +66,6 @@ const InviteScreen = () => {
     } finally {
       setIsJoining(false);
     }
-  };
-
-  const getFullImageUrl = (imageUrl: string | null | undefined): string => {
-    if (!imageUrl) return "";
-    
-    // If already a full URL
-    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-      try {
-        const url = new URL(imageUrl);
-        
-        // Check if this is a Supabase storage URL - if so, return as-is
-        if (url.pathname.includes('/storage/v1/object/')) {
-          return imageUrl;
-        }
-        
-        // For other full URLs, extract path and use current BACKEND_URL
-        return `${BACKEND_URL}${url.pathname}`;
-      } catch {
-        // If URL parsing fails, return as is
-        return imageUrl;
-      }
-    }
-    return `${BACKEND_URL}${imageUrl}`;
   };
 
   if (isLoading) {

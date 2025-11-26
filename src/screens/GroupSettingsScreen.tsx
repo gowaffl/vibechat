@@ -30,6 +30,8 @@ import { api, BACKEND_URL } from "@/lib/api";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
+import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
+import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type {
   Chat,
@@ -232,32 +234,9 @@ const GroupSettingsScreen = () => {
         setInviteLink(`vibechat://invite?token=${chat.inviteToken}`);
       }
 
-      // Convert relative image URL to full URL
-      if (chat.image) {
-        let fullImageUrl: string;
-        // If already a full URL
-        if (chat.image.startsWith('http://') || chat.image.startsWith('https://')) {
-          try {
-            const url = new URL(chat.image);
-            
-            // Check if this is a Supabase storage URL - if so, use as-is
-            if (url.pathname.includes('/storage/v1/object/')) {
-              fullImageUrl = chat.image;
-            } else {
-              // For other full URLs, extract path and use current BACKEND_URL
-              fullImageUrl = `${BACKEND_URL}${url.pathname}`;
-            }
-          } catch {
-            // If URL parsing fails, use as is
-            fullImageUrl = chat.image;
-          }
-        } else {
-          fullImageUrl = `${BACKEND_URL}${chat.image}`;
-        }
-        setImageUri(fullImageUrl);
-      } else {
-        setImageUri(null);
-      }
+      // Convert relative image URL to full URL using shared helper
+      const fullImageUrl = getFullImageUrl(chat.image);
+      setImageUri(fullImageUrl || null);
     }
   }, [chat]);
 
@@ -409,12 +388,11 @@ const GroupSettingsScreen = () => {
       }
     },
     onSuccess: (data) => {
-      console.log("[GroupSettings] Image uploaded, relative path:", data.url);
-      // Save only the relative path to the database (not full URL)
+      console.log("[GroupSettings] Image uploaded, URL:", data.url);
+      // Save the URL to the database (it's already a full Supabase storage URL)
       updateSettingsMutation.mutate({ image: data.url });
-      // For display, use the full URL
-      const fullImageUrl = `${BACKEND_URL}${data.url}`;
-      setImageUri(fullImageUrl);
+      // For display, use the URL as-is
+      setImageUri(data.url);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error) => {
@@ -2120,13 +2098,9 @@ const GroupSettingsScreen = () => {
                   className="flex-row items-center py-3"
                   style={{ borderBottomWidth: 0.5, borderBottomColor: "rgba(255, 255, 255, 0.1)" }}
                 >
-                  {member.user?.image ? (
+                  {member.user?.image && getFullImageUrl(member.user.image) ? (
                     <Image
-                      source={{
-                        uri: member.user.image.startsWith('http')
-                          ? member.user.image
-                          : `${BACKEND_URL}${member.user.image}`
-                      }}
+                      source={{ uri: getFullImageUrl(member.user.image) }}
                       className="w-12 h-12 rounded-full"
                       resizeMode="cover"
                     />
@@ -2134,13 +2108,19 @@ const GroupSettingsScreen = () => {
                     <View
                       className="w-12 h-12 rounded-full items-center justify-center"
                       style={{
-                        backgroundColor: "rgba(0, 122, 255, 0.15)",
+                        backgroundColor: getColorFromName(member.user?.name),
                         borderWidth: 1,
-                        borderColor: "rgba(0, 122, 255, 0.3)",
+                        borderColor: "rgba(255, 255, 255, 0.2)",
                       }}
                     >
-                      <Text className="font-semibold text-lg" style={{ color: "#007AFF" }}>
-                        {member.user?.name?.charAt(0).toUpperCase() || "?"}
+                      <Text
+                        style={{
+                          color: "#FFFFFF",
+                          fontSize: 18,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {getInitials(member.user?.name)}
                       </Text>
                     </View>
                   )}
