@@ -562,13 +562,54 @@ const ChatListScreen = () => {
         </View>
       ) : chats.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
-          <MessageCircle size={64} color="rgba(255, 255, 255, 0.2)" strokeWidth={1.5} />
-          <Text style={{ fontSize: 20, fontWeight: "600", color: "#FFFFFF", marginTop: 16, textAlign: "center" }}>
-            No Chats Yet
+          <Image
+            source={require("../../assets/vibechat mascot logo.png")}
+            style={{ width: 280, height: 280, marginBottom: 24 }}
+            resizeMode="contain"
+          />
+          <Text style={{ fontSize: 16, fontWeight: "500", color: "rgba(255, 255, 255, 0.7)", marginBottom: 32, textAlign: "center", lineHeight: 22 }}>
+            🦎 Meet Glitch the Gecko — He licked a{'\n'}glowing fiber optic cable and gained{'\n'}the power to connect any vibe, anywhere
           </Text>
-          <Text style={{ fontSize: 15, color: "rgba(255, 255, 255, 0.6)", marginTop: 8, textAlign: "center" }}>
-            Use the Create or Join tabs below to get started
+          <Text style={{ fontSize: 20, fontWeight: "600", color: "#FFFFFF", marginBottom: 24, textAlign: "center" }}>
+            No chats yet
           </Text>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              navigation.navigate("CreateChat");
+            }}
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <View
+              style={{
+                borderRadius: 16,
+                overflow: "hidden",
+                shadowColor: "#4FC3F7",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 12,
+                elevation: 8,
+              }}
+            >
+              <LinearGradient
+                colors={["#4FC3F7", "#007AFF", "#34C759"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  paddingHorizontal: 32,
+                  paddingVertical: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 17, fontWeight: "700", color: "#000000" }}>
+                  Create a Chat
+                </Text>
+              </LinearGradient>
+            </View>
+          </Pressable>
         </View>
       ) : (
         <FlatList

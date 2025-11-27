@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,11 @@ import {
   Platform,
   Alert,
   StyleSheet,
+  Image,
+  Animated,
+  Keyboard,
+  TouchableWithoutFeedback,
+  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,12 +21,34 @@ import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 
+const { height } = Dimensions.get("window");
+
 const JoinChatScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
 
   const [inviteCode, setInviteCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Animation refs
+  const imageScaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidHideListener.remove();
+      keyboardDidShowListener.remove();
+    };
+  }, []);
 
   const handleJoinChat = async () => {
     if (!inviteCode.trim()) {
@@ -45,70 +72,99 @@ const JoinChatScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Background */}
-      <View style={styles.backgroundContainer}>
-        <LinearGradient
-          colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        {/* Background */}
+        <View style={styles.backgroundContainer}>
+          <LinearGradient
+            colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.flexOne}
+          />
+        </View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.flexOne}
-        />
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.flexOne}
-      >
-        <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
-          <Text style={styles.title}>Join Chat</Text>
-          <Text style={styles.subtitle}>Enter an invite code to join a group</Text>
-
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                Invite Code <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                value={inviteCode}
-                onChangeText={setInviteCode}
-                placeholder="Enter 8-character code..."
-                placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                maxLength={8}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-              />
-              <Text style={styles.helperText}>
-                Enter the invite code shared with you
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={handleJoinChat}
-              disabled={isJoining || !inviteCode.trim()}
-              style={({ pressed }) => ({
-                opacity: pressed || isJoining || !inviteCode.trim() ? 0.7 : 1,
-                marginTop: 20,
-              })}
+        >
+          <View style={[styles.content, { paddingTop: insets.top + 40 }]}>
+            {/* Glitch Thinking Image - Top Center */}
+            <Animated.View
+              style={[
+                styles.imageContainer,
+                {
+                  opacity: isKeyboardVisible ? 0.5 : 1,
+                  transform: [
+                    { scale: isKeyboardVisible ? 0.7 : 1 },
+                    { translateY: isKeyboardVisible ? -40 : 0 }
+                  ],
+                  height: isKeyboardVisible ? height * 0.2 : height * 0.35,
+                }
+              ]}
             >
-              <LinearGradient
-                colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.button}
+              {/* Glowing background circle */}
+              <View style={styles.glowingCircle} />
+              
+              <Image
+                source={require("../../assets/glitch_thinking.png")}
+                style={styles.glitchImage}
+                resizeMode="contain"
+              />
+            </Animated.View>
+
+            {/* Form - Bottom */}
+            <View style={styles.formContainer}>
+            <Text style={styles.title}>Join Chat</Text>
+            <Text style={styles.subtitle}>Enter an invite code to join a group</Text>
+
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>
+                  Invite Code <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput
+                  value={inviteCode}
+                  onChangeText={setInviteCode}
+                  placeholder="Enter 8-character code..."
+                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                  maxLength={8}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+                <Text style={styles.helperText}>
+                  Enter the invite code shared with you
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={handleJoinChat}
+                disabled={isJoining || !inviteCode.trim()}
+                style={({ pressed }) => ({
+                  opacity: pressed || isJoining || !inviteCode.trim() ? 0.7 : 1,
+                  marginTop: 20,
+                })}
               >
-                {isJoining ? (
-                  <LuxeLogoLoader size={20} />
-                ) : (
-                  <Text style={styles.buttonText}>Join Chat</Text>
-                )}
-              </LinearGradient>
-            </Pressable>
+                <LinearGradient
+                  colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.button}
+                >
+                  {isJoining ? (
+                    <LuxeLogoLoader size={20} />
+                  ) : (
+                    <Text style={styles.buttonText}>Join Chat</Text>
+                  )}
+                </LinearGradient>
+              </Pressable>
+            </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
-    </View>
+        </KeyboardAvoidingView>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
@@ -130,6 +186,25 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
+  },
+  imageContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 20,
+  },
+  glowingCircle: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    backgroundColor: "rgba(79, 195, 247, 0.15)",
+    borderRadius: 110,
+  },
+  glitchImage: {
+    width: 300,
+    height: 300,
+  },
+  formContainer: {
+    paddingBottom: 100,
   },
   title: {
     fontSize: 32,

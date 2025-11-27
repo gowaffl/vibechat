@@ -4728,9 +4728,9 @@ const ChatScreen = () => {
                     {/* Logo Icon Container */}
                     <View style={{
                       alignSelf: 'center',
-                      width: 56,
-                      height: 56,
-                      borderRadius: 28,
+                      width: 80,
+                      height: 80,
+                      borderRadius: 40,
                       marginBottom: 20,
                       overflow: 'hidden',
                       borderWidth: 1,
@@ -4742,8 +4742,8 @@ const ChatScreen = () => {
                       elevation: 3,
                     }}>
                       <Image
-                        source={require("../../assets/image-1762790557.jpeg")}
-                        style={{ width: 56, height: 56 }}
+                        source={require("../../assets/vibechat icon main.png")}
+                        style={{ width: 80, height: 80 }}
                         resizeMode="cover"
                       />
                     </View>
