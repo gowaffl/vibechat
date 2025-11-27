@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../db";
+import { db, createUserClient } from "../db";
 import type { AppType } from "../index";
 import {
   createChatRequestSchema,
@@ -32,8 +32,11 @@ chats.get("/", async (c) => {
   }
 
   try {
+    const token = c.req.header("Authorization")?.replace("Bearer ", "");
+    const client = token ? createUserClient(token) : db;
+
     // Get all chats where user is a member
-    const { data: chatMemberships, error } = await db
+    const { data: chatMemberships, error } = await client
       .from("chat_member")
       .select("*, chatId, isPinned, pinnedAt")
       .eq("userId", userId)
@@ -47,7 +50,7 @@ chats.get("/", async (c) => {
 
     // Fetch chat details for each membership
     const chatIds = chatMemberships?.map((m: any) => m.chatId) || [];
-    const { data: chats = [] } = await db
+    const { data: chats = [] } = await client
       .from("chat")
       .select("*")
       .in("id", chatIds);
@@ -55,7 +58,7 @@ chats.get("/", async (c) => {
     // Fetch last messages for each chat
     const lastMessages = await Promise.all(
       chatIds.map(async (chatId: string) => {
-        const { data } = await db
+        const { data } = await client
           .from("message")
           .select("*")
           .eq("chatId", chatId)
@@ -68,7 +71,7 @@ chats.get("/", async (c) => {
     // Fetch member counts for each chat
     const memberCounts = await Promise.all(
       chatIds.map(async (chatId: string) => {
-        const { count } = await db
+        const { count } = await client
           .from("chat_member")
           .select("*", { count: "exact", head: true })
           .eq("chatId", chatId);
@@ -124,37 +127,28 @@ chats.post("/", async (c) => {
   try {
     const body = await c.req.json();
     const validated = createChatRequestSchema.parse(body);
+    const token = c.req.header("Authorization")?.replace("Bearer ", "");
 
-    // Create the chat
-    const { data: newChat, error: chatError } = await db
-      .from("chat")
-      .insert({
-        name: validated.name,
-        bio: validated.bio || null,
-        image: validated.image || null,
-        creatorId: validated.creatorId,
-      })
-      .select("*")
-      .single();
+    console.log(`[Chats] Creating chat. Creator: ${validated.creatorId}, Token present: ${!!token}`);
+
+    // Use user-scoped client if token is available to respect RLS and set auth.uid()
+    const client = token ? createUserClient(token) : db;
+
+    // Create the chat using RPC function to safely bypass RLS and ensure atomicity
+    const { data: newChat, error: chatError } = await client.rpc("create_chat", {
+      name: validated.name,
+      creator_id: validated.creatorId,
+      bio: validated.bio || null,
+      image: validated.image || null,
+    }).single();
 
     if (chatError || !newChat) {
       console.error("[Chats] Error creating chat:", chatError);
       return c.json({ error: "Failed to create chat" }, 500);
     }
 
-    // Add creator as first member
-    const { error: memberError } = await db
-      .from("chat_member")
-      .insert({
-        chatId: newChat.id,
-        userId: validated.creatorId,
-      });
-
-    if (memberError) {
-      console.error("[Chats] Error adding creator as member:", memberError);
-      // Note: Chat was created but member addition failed
-    }
-
+    // Note: Member addition is handled inside the create_chat RPC function now
+    
     return c.json({
       id: newChat.id,
       name: newChat.name,
@@ -185,8 +179,11 @@ chats.get("/unread-counts", async (c) => {
       return c.json({ error: "userId is required" }, 400);
     }
 
+    const token = c.req.header("Authorization")?.replace("Bearer ", "");
+    const client = token ? createUserClient(token) : db;
+
     // Get all chats the user is a member of
-    const { data: memberships, error: memberError } = await db
+    const { data: memberships, error: memberError } = await client
       .from("chat_member")
       .select("chatId")
       .eq("userId", userId);
@@ -202,7 +199,7 @@ chats.get("/unread-counts", async (c) => {
     const unreadCounts = await Promise.all(
       chatIds.map(async (chatId: string) => {
         // Get all messages in this chat (excluding current user and system messages)
-        const { data: messages = [] } = await db
+        const { data: messages = [] } = await client
           .from("message")
           .select("id")
           .eq("chatId", chatId)
@@ -216,7 +213,7 @@ chats.get("/unread-counts", async (c) => {
         }
 
         // Count messages that don't have a read receipt from this user
-        const { data: readReceipts = [] } = await db
+        const { data: readReceipts = [] } = await client
           .from("read_receipt")
           .select("messageId")
           .eq("userId", userId)
@@ -250,8 +247,11 @@ chats.get("/:id", async (c) => {
   }
 
   try {
+    const token = c.req.header("Authorization")?.replace("Bearer ", "");
+    const client = token ? createUserClient(token) : db;
+
     // Check if user is a member
-    const { data: membership } = await db
+    const { data: membership } = await client
       .from("chat_member")
       .select("*")
       .eq("chatId", chatId)
