@@ -15,8 +15,8 @@
     },
     "preview": {
       "distribution": "internal",
-      "android": {
-        "buildType": "apk"
+      "env": {
+        "APP_VARIANT": "preview"
       }
     },
     "production": {}
