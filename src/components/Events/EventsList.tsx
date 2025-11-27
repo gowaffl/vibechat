@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, ScrollView, ActivityIndicator } from "react-native";
 import EventCard from "./EventCard";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import type { Event } from "@shared/contracts";
 
 interface EventsListProps {
@@ -29,7 +30,7 @@ const EventsList: React.FC<EventsListProps> = ({
   if (isLoading) {
     return (
       <View style={{ alignItems: "center", padding: 32 }}>
-        <ActivityIndicator size="large" color="#0A95FF" />
+        <LuxeLogoLoader size="large" />
         <Text
           style={{
             marginTop: 12,

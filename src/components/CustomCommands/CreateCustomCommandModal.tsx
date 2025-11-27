@@ -366,7 +366,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                           size="large"
                           disabled={!canCreate}
                           loading={isCreating}
-                          color="#FF9F0A"
+                          color="#0061FF"
                         >
                           Create Command ✨
                         </LiquidGlassButton>

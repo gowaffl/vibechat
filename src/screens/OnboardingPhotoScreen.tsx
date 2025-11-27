@@ -3,12 +3,14 @@ import {
   View,
   Text,
   Pressable,
-  Image,
+  Image as RNImage,
   ActivityIndicator,
   Alert,
   Animated,
   Easing,
+  Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
@@ -18,10 +20,14 @@ import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import { Camera, Image as ImageIcon } from "lucide-react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { OnboardingProgress } from "@/components/OnboardingProgress";
 import type { RootStackScreenProps } from "@/navigation/types";
 import { useUser } from "@/contexts/UserContext";
 import { api, BACKEND_URL } from "@/lib/api";
 import type { UploadImageResponse, JoinChatViaInviteResponse, GetInviteInfoResponse } from "@/shared/contracts";
+
+const { width, height } = Dimensions.get("window");
 
 const OnboardingPhotoScreen = () => {
   const navigation = useNavigation<RootStackScreenProps<"OnboardingPhoto">["navigation"]>();
@@ -36,6 +42,7 @@ const OnboardingPhotoScreen = () => {
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -49,6 +56,12 @@ const OnboardingPhotoScreen = () => {
       Animated.spring(slideAnim, {
         toValue: 0,
         tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(imageScaleAnim, {
+        toValue: 1,
+        tension: 40,
         friction: 7,
         useNativeDriver: true,
       }),
@@ -128,7 +141,6 @@ const OnboardingPhotoScreen = () => {
     try {
       setIsUploading(true);
 
-      // Use FileSystem.uploadAsync for proper file upload in React Native
       const uploadResult = await FileSystem.uploadAsync(
         `${BACKEND_URL}/api/upload/image`,
         uri,
@@ -136,7 +148,6 @@ const OnboardingPhotoScreen = () => {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: "image",
-          // Don't set Content-Type header - let FileSystem set it automatically with boundary
         }
       );
 
@@ -158,23 +169,15 @@ const OnboardingPhotoScreen = () => {
 
   const handlePendingInvite = async (userId: string) => {
     try {
-      // Check if there's a pending invite token
       const pendingToken = await SecureStore.getItemAsync("pendingInviteToken");
       if (pendingToken) {
         console.log("[Onboarding] Found pending invite token:", pendingToken);
-
-        // Join the chat via invite
         const response = await api.post<JoinChatViaInviteResponse>(`/api/invite/${pendingToken}/join`, { userId });
-
-        // Clear the pending token
         await SecureStore.deleteItemAsync("pendingInviteToken");
 
         if (response.success) {
           console.log("[Onboarding] Successfully joined chat via invite");
-          // Fetch chat info to get the name
           const inviteInfo = await api.get<GetInviteInfoResponse>(`/api/invite/${pendingToken}`);
-
-          // Navigate to the chat instead of chat list
           navigation.replace("Chat", {
             chatId: response.chatId,
             chatName: inviteInfo.chatName || "Chat",
@@ -185,7 +188,6 @@ const OnboardingPhotoScreen = () => {
       return false;
     } catch (error) {
       console.error("[Onboarding] Error handling pending invite:", error);
-      // Continue to chat list if invite fails
       return false;
     }
   };
@@ -206,10 +208,8 @@ const OnboardingPhotoScreen = () => {
         hasCompletedOnboarding: true,
       });
 
-      // Check for pending invite and navigate accordingly
       if (user?.id) {
         const handledInvite = await handlePendingInvite(user.id);
-
         if (!handledInvite) {
           navigation.replace("ChatList", undefined);
         }
@@ -236,10 +236,8 @@ const OnboardingPhotoScreen = () => {
         hasCompletedOnboarding: true,
       });
 
-      // Check for pending invite and navigate accordingly
       if (user?.id) {
         const handledInvite = await handlePendingInvite(user.id);
-
         if (!handledInvite) {
           navigation.replace("ChatList", undefined);
         }
@@ -278,45 +276,85 @@ const OnboardingPhotoScreen = () => {
         />
       </View>
       
+      <View style={{ flex: 1, paddingTop: 60 }}>
+         {/* Top Progress Bar */}
+         <View style={{ alignItems: "center", marginBottom: 20 }}>
+           <OnboardingProgress totalSteps={4} currentStep={3} />
+         </View>
+
+         {/* Glitch Mascot - Centered Top */}
+         <Animated.View
+            style={{
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 10,
+              transform: [{ scale: imageScaleAnim }],
+              height: height * 0.25,
+            }}
+          >
+             {/* Glowing background effect */}
+             <View style={{
+               position: "absolute",
+               width: 180,
+               height: 180,
+               backgroundColor: "rgba(59, 130, 246, 0.15)", // Blue glow
+               borderRadius: 90,
+               top: "15%",
+             }} />
+             
+            <Image
+              source={require("../../assets/glitch_photo.png")}
+              style={{ 
+                width: width * 0.6, 
+                height: width * 0.6,
+                maxWidth: 300,
+                maxHeight: 300,
+              }}
+              contentFit="contain"
+            />
+          </Animated.View>
+      
       <Animated.View
-        className="flex-1 px-6 pt-24 pb-8"
+            className="flex-1 px-6 pb-8"
         style={{
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
+              justifyContent: "flex-end",
         }}
       >
         {/* Header */}
         <View className="items-center mb-8">
-          <MaskedView
-            maskElement={
-              <Text className="text-2xl font-bold text-center">
-                Add a Profile Photo
+              <Text style={{ fontSize: 28, fontWeight: "700", color: "#FFFFFF", marginBottom: 12, textAlign: "center" }}>
+                One last thing...
               </Text>
-            }
-            style={{ height: 32, width: "100%" }}
-          >
-            <LinearGradient
-              colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{ flex: 1 }}
-            />
-          </MaskedView>
-          <Text className="text-base text-gray-600 text-center mt-2">
-            Help others recognize you (optional)
+              <Text style={{ fontSize: 16, color: "rgba(255, 255, 255, 0.6)", textAlign: "center", paddingHorizontal: 16 }}>
+                Add a profile photo so your friends can recognize you.
           </Text>
         </View>
 
-        {/* Photo Display */}
+            {/* Photo Preview */}
         <View className="items-center mb-8">
-          <View className="w-40 h-40 rounded-full bg-gray-200 items-center justify-center mb-4 overflow-hidden">
+              <View 
+                style={{
+                    width: 120, 
+                    height: 120, 
+                    borderRadius: 60, 
+                    backgroundColor: "rgba(255,255,255,0.1)", 
+                    alignItems: "center", 
+                    justifyContent: "center", 
+                    overflow: "hidden",
+                    borderWidth: 2,
+                    borderColor: image ? "#3B82F6" : "rgba(255,255,255,0.2)"
+                }}
+              >
             {image ? (
               <Image
                 source={{ uri: image }}
-                style={{ width: 160, height: 160 }}
+                    style={{ width: 120, height: 120 }}
+                    contentFit="cover"
               />
             ) : (
-              <ImageIcon size={60} color="#9CA3AF" />
+                  <ImageIcon size={48} color="rgba(255,255,255,0.3)" />
             )}
           </View>
         </View>
@@ -329,7 +367,7 @@ const OnboardingPhotoScreen = () => {
             style={{ overflow: 'hidden', borderRadius: 16 }}
           >
             <LinearGradient
-              colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
+                  colors={["rgba(59, 130, 246, 0.2)", "rgba(59, 130, 246, 0.1)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
@@ -337,38 +375,14 @@ const OnboardingPhotoScreen = () => {
                 flexDirection: 'row',
                 alignItems: "center",
                 justifyContent: "center",
+                    borderWidth: 1,
+                    borderColor: "rgba(59, 130, 246, 0.5)"
               }}
             >
-              <Camera size={20} color="#FFFFFF" />
+                  <Camera size={20} color="#3B82F6" />
               <Text className="text-white text-base font-semibold ml-2">
                 Take Photo
               </Text>
-
-              {/* Shimmer Overlay */}
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  bottom: 0,
-                  width: 60,
-                  transform: [
-                    { translateX: shimmerTranslate },
-                    { skewX: "-20deg" }
-                  ],
-                }}
-              >
-                <LinearGradient
-                  colors={[
-                    "transparent",
-                    "rgba(255, 255, 255, 0.4)",
-                    "transparent",
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ flex: 1 }}
-                />
-              </Animated.View>
             </LinearGradient>
           </Pressable>
 
@@ -378,7 +392,7 @@ const OnboardingPhotoScreen = () => {
             style={{ overflow: 'hidden', borderRadius: 16 }}
           >
             <LinearGradient
-              colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
+                  colors={["rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.05)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
@@ -386,64 +400,40 @@ const OnboardingPhotoScreen = () => {
                 flexDirection: 'row',
                 alignItems: "center",
                 justifyContent: "center",
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 255, 255, 0.2)"
               }}
             >
               <ImageIcon size={20} color="#FFFFFF" />
               <Text className="text-white text-base font-semibold ml-2">
                 Choose from Library
               </Text>
-
-              {/* Shimmer Overlay */}
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  bottom: 0,
-                  width: 60,
-                  transform: [
-                    { translateX: shimmerTranslate },
-                    { skewX: "-20deg" }
-                  ],
-                }}
-              >
-                <LinearGradient
-                  colors={[
-                    "transparent",
-                    "rgba(255, 255, 255, 0.4)",
-                    "transparent",
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ flex: 1 }}
-                />
-              </Animated.View>
             </LinearGradient>
           </Pressable>
         </View>
 
         {/* Buttons */}
-        <View className="mt-auto gap-3">
+            <View className="gap-3">
           {image && (
             <Pressable
               onPress={handleContinueWithPhoto}
               disabled={isSubmitting || isUploading}
+                  style={{ borderRadius: 16, overflow: "hidden", marginBottom: 8 }}
             >
               <LinearGradient
-                colors={["#4FC3F7", "#3B82F6"]}
+                    colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{
-                  paddingVertical: 16,
-                  borderRadius: 12,
+                      paddingVertical: 18,
                   alignItems: "center",
                 }}
               >
                 {isSubmitting || isUploading ? (
-                  <ActivityIndicator color="white" />
+                  <LuxeLogoLoader size={20} />
                 ) : (
-                  <Text className="text-white text-base font-semibold">
-                    Continue with Photo
+                      <Text className="text-white text-lg font-bold">
+                        Looks Good!
                   </Text>
                 )}
               </LinearGradient>
@@ -455,12 +445,13 @@ const OnboardingPhotoScreen = () => {
             disabled={isSubmitting || isUploading}
             className="py-4"
           >
-            <Text style={{ color: "rgba(255, 255, 255, 0.7)", textAlign: "center", fontSize: 16, fontWeight: "500" }}>
-              Skip for Now
+                <Text style={{ color: "rgba(255, 255, 255, 0.5)", textAlign: "center", fontSize: 16, fontWeight: "500" }}>
+                  {image ? "Cancel" : "Skip for Now"}
             </Text>
           </Pressable>
         </View>
       </Animated.View>
+      </View>
     </View>
   );
 };

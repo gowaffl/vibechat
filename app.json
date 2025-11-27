@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "description": "Making group chats great again. Your friend group chats with custom ChatGPT in them.",
     "orientation": "portrait",
-    "icon": "./assets/image-1762790557.jpeg",
+    "icon": "./assets/vibechat icon main.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -30,7 +30,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.vibecodeapp.vibechat",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/image-1762790557.jpeg",
+        "foregroundImage": "./assets/vibechat icon main.png",
         "backgroundColor": "#1a1a2e"
       }
     },

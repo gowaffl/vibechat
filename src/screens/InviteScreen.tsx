@@ -7,6 +7,7 @@ import { Users, ArrowRight } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, BACKEND_URL } from "@/lib/api";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useUser } from "@/contexts/UserContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
@@ -71,7 +72,7 @@ const InviteScreen = () => {
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator size="large" color="#4FC3F7" />
+        <LuxeLogoLoader size="large" />
         <Text style={{ color: "#FFFFFF", marginTop: 16, fontSize: 16 }}>Loading invite...</Text>
       </View>
     );
@@ -104,7 +105,7 @@ const InviteScreen = () => {
           })}
         >
           <LinearGradient
-            colors={["#4FC3F7", "#00A8E8"]}
+            colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -190,7 +191,7 @@ const InviteScreen = () => {
           })}
         >
           <LinearGradient
-            colors={["#4FC3F7", "#00A8E8"]}
+            colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -202,7 +203,7 @@ const InviteScreen = () => {
             }}
           >
             {isJoining ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <LuxeLogoLoader size={20} />
             ) : (
               <>
                 <Text style={{ fontSize: 17, fontWeight: "600", color: "#FFFFFF", marginRight: 8 }}>

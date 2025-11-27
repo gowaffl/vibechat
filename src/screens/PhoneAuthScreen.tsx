@@ -9,17 +9,22 @@ import {
   Alert,
   Animated,
   Easing,
-  ActivityIndicator,
   StyleSheet,
   Keyboard,
+  Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { api } from "@/lib/api";
-import { authClient, supabaseClient } from "@/lib/authClient"; // Keep for onAuthStateChange if needed
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { OnboardingProgress } from "@/components/OnboardingProgress";
+import { authClient, supabaseClient } from "@/lib/authClient";
 import type { User } from "@/shared/contracts";
+
+const { width, height } = Dimensions.get("window");
 
 export default function PhoneAuthScreen() {
   const navigation = useNavigation<any>();
@@ -32,6 +37,7 @@ export default function PhoneAuthScreen() {
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -44,6 +50,12 @@ export default function PhoneAuthScreen() {
       Animated.spring(slideAnim, {
         toValue: 0,
         tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(imageScaleAnim, {
+        toValue: 1,
+        tension: 40,
         friction: 7,
         useNativeDriver: true,
       }),
@@ -81,7 +93,6 @@ export default function PhoneAuthScreen() {
       return;
     }
 
-    // Ensure E.164 format (start with +)
     const formattedPhone = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
 
     Haptics.selectionAsync();
@@ -89,13 +100,10 @@ export default function PhoneAuthScreen() {
     try {
       console.log("[PhoneAuth] Sending OTP to:", formattedPhone);
       
-      // Use backend proxy for better logging and control
       const response = await api.post<{ success: boolean; message?: string; error?: string }>(
         "/api/auth/send-otp", 
         { phone: formattedPhone }
       );
-
-      console.log("[PhoneAuth] Send OTP response:", response);
 
       if (response.error) {
         throw new Error(response.error);
@@ -110,7 +118,6 @@ export default function PhoneAuthScreen() {
       setStep("code");
     } catch (error: any) {
       console.error("[PhoneAuth] Error sending code:", error);
-      // Show detailed error from backend if available
       const errorMessage = error.message || "Failed to send verification code. Please try again.";
       Alert.alert("Error", errorMessage);
     } finally {
@@ -125,7 +132,6 @@ export default function PhoneAuthScreen() {
       return;
     }
 
-    // Ensure E.164 format
     const formattedPhone = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
 
     Haptics.selectionAsync();
@@ -133,20 +139,15 @@ export default function PhoneAuthScreen() {
     try {
       console.log("[PhoneAuth] Verifying OTP for:", formattedPhone);
 
-      // Use backend proxy to verify and get/create user in one step
       const response = await api.post<{ token: string; refreshToken: string; user: User }>(
         "/api/auth/verify-otp",
         { phone: formattedPhone, code }
       );
 
-      console.log("[PhoneAuth] Verify OTP response:", response);
-
       if (!response.token || !response.refreshToken || !response.user) {
         throw new Error("Invalid response from server");
       }
 
-      // Manually set the session in the frontend Supabase client
-      // This ensures authClient.getToken() works for subsequent API calls
       const { error: sessionError } = await supabaseClient.auth.setSession({
         access_token: response.token,
         refresh_token: response.refreshToken,
@@ -158,13 +159,9 @@ export default function PhoneAuthScreen() {
       }
 
       const { user } = response;
-
-      // Success feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Navigate to Birthdate Screen if new user or hasn't completed onboarding
       if (!user.birthdate) {
-         // Add a small delay for effect
          setTimeout(() => {
              navigation.navigate("Birthdate", { 
                  userId: user.id, 
@@ -209,28 +206,73 @@ export default function PhoneAuthScreen() {
         />
       </View>
 
+      <View style={{ flex: 1, paddingTop: 60 }}>
+        {/* Top Progress Bar */}
+        <View style={{ alignItems: "center", marginBottom: 20 }}>
+          <OnboardingProgress totalSteps={4} currentStep={0} />
+        </View>
+
+        {/* Main Content */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flexOne}
       >
+          <View style={{ flex: 1 }}>
+            {/* Glitch Mascot - Centered Top */}
+            <Animated.View
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 20,
+                opacity: isKeyboardVisible ? 0.5 : 1, // Fade out slightly when keyboard is open
+                transform: [
+                  { scale: isKeyboardVisible ? 0.8 : imageScaleAnim }, // Shrink slightly when keyboard open
+                  { translateY: isKeyboardVisible ? -20 : 0 }
+                ],
+                height: height * 0.35,
+              }}
+            >
+               {/* Glowing background effect behind Glitch */}
+               <View style={{
+                 position: "absolute",
+                 width: 200,
+                 height: 200,
+                 backgroundColor: "rgba(59, 130, 246, 0.15)",
+                 borderRadius: 100,
+                 top: "15%",
+               }} />
+               
+              <Image
+                source={require("../../assets/glitch_phonenumber.png")}
+                style={{ 
+                  width: width * 0.8, 
+                  height: width * 0.8,
+                  maxWidth: 350,
+                  maxHeight: 350,
+                }}
+                contentFit="contain"
+              />
+            </Animated.View>
+
+            {/* Bottom Input Section */}
         <Animated.View
           style={[
-            styles.content,
+                styles.bottomSheet,
             {
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
-              paddingBottom: isKeyboardVisible ? 20 : 60,
+                  paddingBottom: isKeyboardVisible ? 20 : 50,
             },
           ]}
         >
           <View style={styles.header}>
             <Text style={styles.title}>
-              {step === "phone" ? "Enter your phone number" : "Verify your number"}
+                  {step === "phone" ? "What's your number?" : "Verify it's you"}
             </Text>
             <Text style={styles.subtitle}>
               {step === "phone"
-                ? "VibeChat will need to verify your account. Carrier charges may apply."
-                : `Enter the code we sent to ${phone}`}
+                    ? "We'll text you a code to verify your phone."
+                    : `Enter the code sent to ${phone}`}
             </Text>
           </View>
 
@@ -242,12 +284,12 @@ export default function PhoneAuthScreen() {
               >
                 <TextInput
                   style={styles.input}
-                  placeholder={step === "phone" ? "+1 239 699 8960" : "000 000"}
+                      placeholder={step === "phone" ? "+1 555 000 0000" : "000 000"}
                   placeholderTextColor="rgba(255, 255, 255, 0.3)"
                   value={step === "phone" ? phone : code}
                   onChangeText={step === "phone" ? (t) => setPhone(formatPhoneNumber(t)) : setCode}
                   keyboardType={step === "phone" ? "phone-pad" : "number-pad"}
-                  autoFocus
+                      autoFocus={false} 
                   maxLength={step === "phone" ? 15 : 6}
                   selectionColor="#3B82F6"
                 />
@@ -264,14 +306,14 @@ export default function PhoneAuthScreen() {
               colors={
                 loading
                   ? ["#333", "#444"]
-                  : ["#3B82F6", "#4FC3F7", "#EC4899"]
+                  : ["#0061FF", "#00C6FF", "#00E676"] // New VibeChat Gradient
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.buttonGradient}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <LuxeLogoLoader size={20} />
               ) : (
                 <Text style={styles.buttonText}>
                   {step === "phone" ? "Next" : "Verify"}
@@ -282,11 +324,13 @@ export default function PhoneAuthScreen() {
 
           {step === "code" && (
             <Pressable onPress={() => setStep("phone")} style={styles.backButton}>
-              <Text style={styles.backButtonText}>Change Phone Number</Text>
+                  <Text style={styles.backButtonText}>Change Number</Text>
             </Pressable>
           )}
         </Animated.View>
+          </View>
       </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }
@@ -313,20 +357,20 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  content: {
+  bottomSheet: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-end",
     paddingHorizontal: 24,
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 30,
   },
   title: {
     fontSize: 28,
     fontWeight: "700",
     color: "#FFFFFF",
-    marginBottom: 16,
+    marginBottom: 12,
     textAlign: "center",
   },
   subtitle: {
@@ -339,7 +383,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     borderRadius: 16,
     overflow: "hidden",
-    marginBottom: 32,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
@@ -365,6 +409,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
+    marginBottom: 10,
   },
   buttonGradient: {
     paddingVertical: 18,
@@ -378,7 +423,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   backButton: {
-    marginTop: 24,
+    marginTop: 16,
     alignItems: "center",
     padding: 12,
   },

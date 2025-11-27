@@ -10,6 +10,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  Dimensions,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,6 +18,9 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import type { RootStackScreenProps } from "@/navigation/types";
+import { OnboardingProgress } from "@/components/OnboardingProgress";
+
+const { width, height } = Dimensions.get("window");
 
 const OnboardingNameScreen = () => {
   const navigation = useNavigation<RootStackScreenProps<"OnboardingName">["navigation"]>();
@@ -27,6 +31,7 @@ const OnboardingNameScreen = () => {
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -56,6 +61,12 @@ const OnboardingNameScreen = () => {
       Animated.spring(slideAnim, {
         toValue: 0,
         tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(imageScaleAnim, {
+        toValue: 1,
+        tension: 40,
         friction: 7,
         useNativeDriver: true,
       }),
@@ -116,66 +127,89 @@ const OnboardingNameScreen = () => {
         />
       </View>
       
+      <View style={{ flex: 1, paddingTop: 60 }}>
+         {/* Top Progress Bar */}
+         <View style={{ alignItems: "center", marginBottom: 20 }}>
+           <OnboardingProgress totalSteps={4} currentStep={2} />
+      </View>
+      
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={0}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+                contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           bounces={false}
-        >
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={{ flex: 1 }}>
+                    {/* Glitch Mascot - Centered Top */}
+                    <Animated.View
+                      style={{
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginTop: 10,
+                        opacity: isKeyboardVisible ? 0.5 : 1,
+                        transform: [
+                          { scale: isKeyboardVisible ? 0.7 : imageScaleAnim },
+                          { translateY: isKeyboardVisible ? -40 : 0 }
+                        ],
+                        height: isKeyboardVisible ? height * 0.2 : height * 0.35,
+                      }}
+                    >
+                       {/* Glowing background effect */}
+                       <View style={{
+                         position: "absolute",
+                         width: 200,
+                         height: 200,
+                         backgroundColor: "rgba(52, 211, 153, 0.15)", // Green glow
+                         borderRadius: 100,
+                         top: "15%",
+                       }} />
+                       
+                      <Image
+                        source={require("../../assets/glitch_bio.png")}
+                        style={{ 
+                          width: width * 0.8, 
+                          height: width * 0.8,
+                          maxWidth: 350,
+                          maxHeight: 350,
+                        }}
+                        contentFit="contain"
+                      />
+                    </Animated.View>
+
+                    {/* Bottom Content */}
           <Animated.View
-            className="flex-1 px-6 pt-8"
+                        className="flex-1 px-6 pb-8"
             style={{
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
-              paddingBottom: isKeyboardVisible ? 20 : 32,
-              justifyContent: "center",
+                          justifyContent: "flex-end",
             }}
           >
-            {/* Header */}
-            <View className="items-center mb-8">
-              <View
-                style={{
-                  width: 180,
-                  height: 180,
-                  borderRadius: 90,
-                  marginBottom: 32,
-                  overflow: "hidden",
-                  borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.1)",
-                }}
-              >
-                <Image
-                  source={require("../../assets/image-1762790557.jpeg")}
-                  style={{ width: 180, height: 180 }}
-                  contentFit="cover"
-                />
-              </View>
-              <Text style={{ fontSize: 32, fontWeight: "bold", color: "#FFFFFF", marginBottom: 16, textAlign: "center" }}>
-                The Ultimate Group Chat
+                        <View style={{ alignItems: "center", marginBottom: 32 }}>
+                          <Text style={{ fontSize: 28, fontWeight: "700", color: "#FFFFFF", marginBottom: 12, textAlign: "center" }}>
+                            What should we call you?
               </Text>
-              <Text style={{ fontSize: 17, color: "rgba(255, 255, 255, 0.8)", textAlign: "center", paddingHorizontal: 16, lineHeight: 24 }}>
-                Work or play, VibeChat adapts to you. Create custom AI agents that actually help (or roast), summon powerful tools with slash commands, and keep chaos under control with smart, dynamic threads. It’s your group, supercharged.
+                          <Text style={{ fontSize: 16, color: "rgba(255, 255, 255, 0.6)", textAlign: "center", paddingHorizontal: 16 }}>
+                            This is how you'll appear to your friends. You can always change it later.
               </Text>
             </View>
 
             {/* Name Input */}
-            <View style={{ marginBottom: 24 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFFFFF", marginBottom: 8 }}>
-                Name *
-              </Text>
+                        <View style={{ marginBottom: 20 }}>
               <View style={{ borderRadius: 16, overflow: "hidden" }}>
                 <BlurView intensity={Platform.OS === "ios" ? 40 : 80} tint="dark" style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.2)" }}>
                   <LinearGradient colors={["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.05)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <TextInput
                       value={name}
                       onChangeText={setName}
-                      placeholder="Enter your name"
+                                  placeholder="Your Name"
                       placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                      style={{ paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: "#FFFFFF" }}
+                                  style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 18, color: "#FFFFFF", fontWeight: "500" }}
                       autoCapitalize="words"
                       maxLength={50}
                       returnKeyType="next"
@@ -187,33 +221,26 @@ const OnboardingNameScreen = () => {
 
             {/* Bio Input */}
             <View style={{ marginBottom: 32 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFFFFF", marginBottom: 8 }}>
-                Bio (Optional)
-              </Text>
               <View style={{ borderRadius: 16, overflow: "hidden" }}>
                 <BlurView intensity={Platform.OS === "ios" ? 40 : 80} tint="dark" style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.2)" }}>
                   <LinearGradient colors={["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.05)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <TextInput
                       value={bio}
                       onChangeText={setBio}
-                      placeholder="Tell us about yourself..."
+                                  placeholder="Short bio (optional)"
                       placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                      style={{ paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: "#FFFFFF", minHeight: 100, textAlignVertical: "top" }}
+                                  style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 16, color: "#FFFFFF", minHeight: 80, textAlignVertical: "top" }}
                       multiline
-                      numberOfLines={4}
+                                  numberOfLines={3}
                       maxLength={200}
                       returnKeyType="done"
                     />
                   </LinearGradient>
                 </BlurView>
               </View>
-              <Text style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.5)", marginTop: 4 }}>
-                {bio.length}/200
-              </Text>
             </View>
 
             {/* Continue Button */}
-            <View>
               <Pressable
                 onPress={handleContinue}
                 disabled={!name.trim()}
@@ -223,7 +250,7 @@ const OnboardingNameScreen = () => {
                   colors={
                     !name.trim()
                       ? ["rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.05)"]
-                      : ["#3B82F6", "#4FC3F7", "#EC4899"] // Blue -> Light Blue -> Pink
+                                  : ["#0061FF", "#00C6FF", "#00E676"] // New VibeChat Gradient
                   }
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -237,7 +264,6 @@ const OnboardingNameScreen = () => {
                     Continue
                   </Text>
                   
-                  {/* Shimmer Overlay */}
                   {!!name.trim() && (
                     <Animated.View
                       style={{
@@ -266,10 +292,11 @@ const OnboardingNameScreen = () => {
                   )}
                 </LinearGradient>
               </Pressable>
+                    </Animated.View>
             </View>
-          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

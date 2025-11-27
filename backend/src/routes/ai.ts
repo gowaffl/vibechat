@@ -217,6 +217,20 @@ Someone mentioned you. Respond naturally like a friend would.`;
 
 Respond naturally and concisely based on the conversation.`;
 
+    // Token limit check (approx 4 chars per token)
+    // This prevents abuse of AI token usage and API calls
+    const totalInputLength = systemPrompt.length + userInput.length;
+    const estimatedTokens = Math.ceil(totalInputLength / 4);
+    
+    if (estimatedTokens > 10000) {
+      console.log(`[AI] ❌ Request rejected: Input too long (${estimatedTokens} tokens)`);
+      // finally block will release the lock
+      return c.json({ 
+        error: "Whoa, this convo is getting super long! 📚",
+        details: `I can't read this much history at once (over 10k tokens!). Let's start a fresh chat to keep the vibes flowing perfectly. ✨`
+      }, 400);
+    }
+
     const tools = [
       { type: "web_search" },
       { type: "image_generation" },

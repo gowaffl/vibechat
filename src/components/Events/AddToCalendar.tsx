@@ -185,7 +185,7 @@ const AddToCalendar: React.FC<AddToCalendarProps> = ({
         })}
       >
         <LinearGradient
-          colors={["#34C759", "#28A745"]}
+          colors={["#0061FF", "#00C6FF", "#00E676"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{

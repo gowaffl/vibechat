@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 
 const JoinChatScreen = () => {
   const insets = useSafeAreaInsets();
@@ -92,13 +93,13 @@ const JoinChatScreen = () => {
               })}
             >
               <LinearGradient
-                colors={["#4FC3F7", "#00A8E8"]}
+                colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.button}
               >
                 {isJoining ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <LuxeLogoLoader size={20} />
                 ) : (
                   <Text style={styles.buttonText}>Join Chat</Text>
                 )}

@@ -17,6 +17,7 @@ import {
   Keyboard,
   useColorScheme,
 } from "react-native";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,7 +31,6 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { api, BACKEND_URL } from "@/lib/api";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
-import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
@@ -956,7 +956,7 @@ const GroupSettingsScreen = () => {
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: "#000000", justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
+        <LuxeLogoLoader size="large" />
       </View>
     );
   }
@@ -1067,7 +1067,7 @@ const GroupSettingsScreen = () => {
                   )}
                   {uploadImageMutation.isPending && (
                     <View className="absolute inset-0 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-                      <ActivityIndicator color="white" />
+                      <LuxeLogoLoader size={20} />
                     </View>
                   )}
                   
@@ -1120,7 +1120,7 @@ const GroupSettingsScreen = () => {
                           }}
                         >
                           {generateAvatarMutation.isPending ? (
-                            <ActivityIndicator color="#FFFFFF" size="small" />
+                            <LuxeLogoLoader size="small" />
                           ) : (
                             <Sparkles size={16} color="#FFFFFF" strokeWidth={2.5} />
                           )}
@@ -1554,7 +1554,7 @@ const GroupSettingsScreen = () => {
                             }}
                           >
                             {updateAIFriendMutation.isPending ? (
-                              <ActivityIndicator color="#34C759" size="small" />
+                              <LuxeLogoLoader size="small" />
                             ) : (
                               <Text className="font-semibold" style={{ color: "#34C759" }}>Save</Text>
                             )}
@@ -1924,7 +1924,7 @@ const GroupSettingsScreen = () => {
                         }}
                       >
                         {createCommandMutation.isPending ? (
-                          <ActivityIndicator color="#FF9F0A" size="small" />
+                          <LuxeLogoLoader size="small" />
                         ) : (
                           <Text className="font-semibold" style={{ color: "#FF9F0A" }}>Create</Text>
                         )}
@@ -2002,7 +2002,7 @@ const GroupSettingsScreen = () => {
                         }}
                       >
                         {updateCommandMutation.isPending ? (
-                          <ActivityIndicator color="#FF9F0A" size="small" />
+                          <LuxeLogoLoader size="small" />
                         ) : (
                           <Text className="font-semibold" style={{ color: "#FF9F0A" }}>Update</Text>
                         )}
@@ -2211,7 +2211,7 @@ const GroupSettingsScreen = () => {
                 }}
               >
                 {clearMessagesMutation.isPending ? (
-                  <ActivityIndicator color="#FF3B30" size="small" />
+                  <LuxeLogoLoader size="small" />
                 ) : (
                   <>
                     <Trash2 size={20} color="#FF3B30" />
@@ -2239,7 +2239,7 @@ const GroupSettingsScreen = () => {
                     }}
                   >
                     {deleteChatMutation.isPending ? (
-                      <ActivityIndicator color="#FF3B30" size="small" />
+                      <LuxeLogoLoader size="small" />
                     ) : (
                       <>
                         <Trash2 size={20} color="#FF3B30" />
@@ -2431,7 +2431,7 @@ const GroupSettingsScreen = () => {
                   }}
                 >
                   {updateSettingsMutation.isPending ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <LuxeLogoLoader size={20} />
                   ) : (
                     <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "bold" }}>
                       Save Changes
@@ -2499,7 +2499,7 @@ const GroupSettingsScreen = () => {
                 {/* Code & Link Display */}
                 {generateInviteLinkMutation.isPending ? (
                   <View style={{ padding: 20, alignItems: "center" }}>
-                    <ActivityIndicator size="small" color="#4FC3F7" />
+                    <LuxeLogoLoader size="small" />
                     <Text style={{ color: "rgba(255, 255, 255, 0.6)", marginTop: 8, fontSize: 14 }}>
                       Generating invite code...
                     </Text>

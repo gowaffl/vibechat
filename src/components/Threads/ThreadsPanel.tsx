@@ -546,9 +546,9 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                     <BlurView intensity={80} tint="dark" style={{ width: 80, height: 80, borderRadius: 40, overflow: "hidden" }}>
                       <LinearGradient
                         colors={[
-                          "rgba(20, 184, 166, 0.5)",
-                          "rgba(13, 148, 136, 0.4)",
-                          "rgba(15, 118, 110, 0.3)",
+                          "#0061FF",
+                          "#00C6FF",
+                          "#00E676",
                         ]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}

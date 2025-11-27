@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,15 +9,24 @@ import {
   Platform,
   Alert,
   StyleSheet,
+  Dimensions,
+  Animated,
+  Keyboard,
+  Easing,
+  TouchableWithoutFeedback,
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { api } from "@/lib/api";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useUser } from "@/contexts/UserContext";
 import type { CreateChatRequest, CreateChatResponse } from "@/shared/contracts";
+
+const { width, height } = Dimensions.get("window");
 
 const CreateChatScreen = () => {
   const insets = useSafeAreaInsets();
@@ -28,6 +37,49 @@ const CreateChatScreen = () => {
   const [newChatName, setNewChatName] = useState("");
   const [newChatBio, setNewChatBio] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(imageScaleAnim, {
+        toValue: 1,
+        tension: 40,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidHideListener.remove();
+      keyboardDidShowListener.remove();
+    };
+  }, []);
 
   // Create chat mutation
   const createChatMutation = useMutation({
@@ -39,7 +91,6 @@ const CreateChatScreen = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       // Navigate to the new chat
-      // We need to go to the Chat screen which is in the RootStack
       navigation.navigate("Chat", {
         chatId: newChat.id,
         chatName: newChat.name,
@@ -80,68 +131,131 @@ const CreateChatScreen = () => {
           end={{ x: 1, y: 1 }}
           style={styles.flexOne}
         />
+        <LinearGradient
+          colors={[
+            "rgba(79, 195, 247, 0.05)",
+            "rgba(0, 122, 255, 0.03)",
+            "transparent",
+            "rgba(52, 199, 89, 0.03)",
+          ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.overlayGradient}
+        />
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flexOne}
       >
-        <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
-          <Text style={styles.title}>Create New Chat</Text>
-          <Text style={styles.subtitle}>Start a new group conversation</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={{ flex: 1 }}>
+            {/* Mascot Logo - Centered Top */}
+          <Animated.View
+            style={{
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: insets.top + 20,
+              opacity: isKeyboardVisible ? 0.5 : 1,
+              transform: [
+                { scale: isKeyboardVisible ? 0.7 : imageScaleAnim },
+                { translateY: isKeyboardVisible ? -30 : 0 }
+              ],
+              height: isKeyboardVisible ? height * 0.2 : height * 0.35,
+            }}
+          >
+             {/* Glowing background effect */}
+             <View style={{
+               position: "absolute",
+               width: 220,
+               height: 220,
+               backgroundColor: "rgba(0, 198, 255, 0.15)",
+               borderRadius: 110,
+               top: "15%",
+             }} />
+             
+            <Image
+              source={require("../../assets/vibechat mascot logo.png")}
+              style={{ 
+                width: width * 0.85, 
+                height: width * 0.85,
+                maxWidth: 380,
+                maxHeight: 380,
+              }}
+              contentFit="contain"
+            />
+          </Animated.View>
 
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                Chat Name <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                value={newChatName}
-                onChangeText={setNewChatName}
-                placeholder="Enter chat name..."
-                placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                maxLength={100}
-                style={styles.input}
-              />
+          {/* Bottom Input Section */}
+          <Animated.View
+            style={[
+              styles.bottomSheet,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+                paddingBottom: isKeyboardVisible ? 20 : 40,
+              },
+            ]}
+          >
+            <View style={styles.header}>
+              <Text style={styles.title}>Create New Chat</Text>
+              <Text style={styles.subtitle}>Start a new group conversation</Text>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Description (Optional)</Text>
-              <TextInput
-                value={newChatBio}
-                onChangeText={setNewChatBio}
-                placeholder="What's this chat about?"
-                placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                maxLength={200}
-                multiline
-                numberOfLines={3}
-                style={[styles.input, styles.textArea]}
-              />
-            </View>
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>
+                  Chat Name <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput
+                  value={newChatName}
+                  onChangeText={setNewChatName}
+                  placeholder="Enter chat name..."
+                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                  maxLength={100}
+                  style={styles.input}
+                />
+              </View>
 
-            <Pressable
-              onPress={handleCreateChat}
-              disabled={isCreating || !newChatName.trim()}
-              style={({ pressed }) => ({
-                opacity: pressed || isCreating || !newChatName.trim() ? 0.7 : 1,
-                marginTop: 20,
-              })}
-            >
-              <LinearGradient
-                colors={["#4FC3F7", "#00A8E8"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.button}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Description (Optional)</Text>
+                <TextInput
+                  value={newChatBio}
+                  onChangeText={setNewChatBio}
+                  placeholder="What's this chat about?"
+                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                  maxLength={200}
+                  multiline
+                  numberOfLines={3}
+                  style={[styles.input, styles.textArea]}
+                />
+              </View>
+
+              <Pressable
+                onPress={handleCreateChat}
+                disabled={isCreating || !newChatName.trim()}
+                style={({ pressed }) => ({
+                  opacity: pressed || isCreating || !newChatName.trim() ? 0.7 : 1,
+                  marginTop: 10,
+                })}
               >
-                {isCreating ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.buttonText}>Create Chat</Text>
-                )}
-              </LinearGradient>
-            </Pressable>
+                <LinearGradient
+                  colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.button}
+                >
+                  {isCreating ? (
+                    <LuxeLogoLoader size={20} />
+                  ) : (
+                    <Text style={styles.buttonText}>Create Chat</Text>
+                  )}
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </Animated.View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </View>
   );
@@ -162,23 +276,36 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  content: {
+  overlayGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  bottomSheet: {
     flex: 1,
+    justifyContent: "center",
     paddingHorizontal: 24,
   },
+  header: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
+    fontSize: 28,
+    fontWeight: "700",
     color: "#FFFFFF",
     marginBottom: 8,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
     color: "rgba(255, 255, 255, 0.6)",
-    marginBottom: 32,
+    textAlign: "center",
   },
   form: {
-    gap: 24,
+    gap: 16,
   },
   inputGroup: {
     gap: 8,
@@ -187,15 +314,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
+    marginLeft: 4,
   },
   required: {
     color: "#EF4444",
   },
   input: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
@@ -206,17 +334,22 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   button: {
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#0061FF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   buttonText: {
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
     color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
 });
 
 export default CreateChatScreen;
-

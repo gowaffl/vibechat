@@ -45,6 +45,7 @@ import type { AIFriend } from "@shared/contracts";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { VoicePlayer } from "@/components/VoicePlayer";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import AttachmentsMenu from "@/components/AttachmentsMenu";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, Event } from "@/shared/contracts";
@@ -488,7 +489,7 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
     return (
       <View className="mr-2" style={{ width: 32, height: 32 }}>
         <Image
-          source={require("../../assets/image-1762790557.jpeg")}
+          source={require("../../assets/vibechat icon main.png")}
           style={{ width: 32, height: 32, borderRadius: 16 }}
           resizeMode="cover"
         />
@@ -653,7 +654,7 @@ const AITypingIndicator = ({ aiName = "AI Friend", aiColor = "#34C759" }: { aiNa
       {/* AI Profile Photo - VibeChat Icon */}
       <View className="mr-2" style={{ width: 32, height: 32 }}>
         <Image
-          source={require("../../assets/image-1762790557.jpeg")}
+          source={require("../../assets/vibechat icon main.png")}
           style={{ width: 32, height: 32, borderRadius: 16 }}
           resizeMode="cover"
         />
@@ -1151,12 +1152,14 @@ const ImageSelectionToolbar = ({
   selectedCount,
   onSave,
   onShare,
+  onAIReactor,
   onDelete,
   onCancel,
 }: {
   selectedCount: number;
   onSave: () => void;
   onShare: () => void;
+  onAIReactor: () => void;
   onDelete: () => void;
   onCancel: () => void;
 }) => {
@@ -1218,7 +1221,7 @@ const ImageSelectionToolbar = ({
           <View
             style={{
               flexDirection: "row",
-              gap: 12,
+              gap: 8,
               marginBottom: 12,
             }}
           >
@@ -1229,14 +1232,14 @@ const ImageSelectionToolbar = ({
                 flex: 1,
                 backgroundColor: selectedCount > 0 ? "rgba(52, 199, 89, 0.2)" : "rgba(255, 255, 255, 0.05)",
                 borderRadius: 12,
-                padding: 12,
+                padding: 8,
                 alignItems: "center",
                 borderWidth: 1,
                 borderColor: selectedCount > 0 ? "rgba(52, 199, 89, 0.4)" : "rgba(255, 255, 255, 0.1)",
               }}
             >
-              <Download size={20} color={selectedCount > 0 ? "#34C759" : "#8E8E93"} />
-              <Text style={{ color: selectedCount > 0 ? "#34C759" : "#8E8E93", fontSize: 12, marginTop: 4, fontWeight: "600" }}>
+              <Download size={18} color={selectedCount > 0 ? "#34C759" : "#8E8E93"} />
+              <Text style={{ color: selectedCount > 0 ? "#34C759" : "#8E8E93", fontSize: 10, marginTop: 4, fontWeight: "600" }}>
                 Save
               </Text>
             </Pressable>
@@ -1248,15 +1251,34 @@ const ImageSelectionToolbar = ({
                 flex: 1,
                 backgroundColor: selectedCount > 0 ? "rgba(0, 122, 255, 0.2)" : "rgba(255, 255, 255, 0.05)",
                 borderRadius: 12,
-                padding: 12,
+                padding: 8,
                 alignItems: "center",
                 borderWidth: 1,
                 borderColor: selectedCount > 0 ? "rgba(0, 122, 255, 0.4)" : "rgba(255, 255, 255, 0.1)",
               }}
             >
-              <Share2 size={20} color={selectedCount > 0 ? "#007AFF" : "#8E8E93"} />
-              <Text style={{ color: selectedCount > 0 ? "#007AFF" : "#8E8E93", fontSize: 12, marginTop: 4, fontWeight: "600" }}>
+              <Share2 size={18} color={selectedCount > 0 ? "#007AFF" : "#8E8E93"} />
+              <Text style={{ color: selectedCount > 0 ? "#007AFF" : "#8E8E93", fontSize: 10, marginTop: 4, fontWeight: "600" }}>
                 Share
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onAIReactor}
+              disabled={selectedCount !== 1}
+              style={{
+                flex: 1,
+                backgroundColor: selectedCount === 1 ? "rgba(175, 82, 222, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                borderRadius: 12,
+                padding: 8,
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: selectedCount === 1 ? "rgba(175, 82, 222, 0.4)" : "rgba(255, 255, 255, 0.1)",
+              }}
+            >
+              <Sparkles size={18} color={selectedCount === 1 ? "#AF52DE" : "#8E8E93"} />
+              <Text style={{ color: selectedCount === 1 ? "#AF52DE" : "#8E8E93", fontSize: 10, marginTop: 4, fontWeight: "600" }}>
+                Reactor
               </Text>
             </Pressable>
 
@@ -1267,14 +1289,14 @@ const ImageSelectionToolbar = ({
                 flex: 1,
                 backgroundColor: selectedCount > 0 ? "rgba(255, 59, 48, 0.2)" : "rgba(255, 255, 255, 0.05)",
                 borderRadius: 12,
-                padding: 12,
+                padding: 8,
                 alignItems: "center",
                 borderWidth: 1,
                 borderColor: selectedCount > 0 ? "rgba(255, 59, 48, 0.4)" : "rgba(255, 255, 255, 0.1)",
               }}
             >
-              <Trash2 size={20} color={selectedCount > 0 ? "#FF3B30" : "#8E8E93"} />
-              <Text style={{ color: selectedCount > 0 ? "#FF3B30" : "#8E8E93", fontSize: 12, marginTop: 4, fontWeight: "600" }}>
+              <Trash2 size={18} color={selectedCount > 0 ? "#FF3B30" : "#8E8E93"} />
+              <Text style={{ color: selectedCount > 0 ? "#FF3B30" : "#8E8E93", fontSize: 10, marginTop: 4, fontWeight: "600" }}>
                 Delete
               </Text>
             </Pressable>
@@ -4087,7 +4109,7 @@ const ChatScreen = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <ActivityIndicator size="large" color="#FFFFFF" />
+                      <LuxeLogoLoader size="large" />
                     </View>
                   )}
                   {/* Actual Image */}
@@ -4464,7 +4486,7 @@ const ChatScreen = () => {
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: "#000000", justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
+        <LuxeLogoLoader size="large" />
       </View>
     );
   }
@@ -4772,9 +4794,9 @@ const ChatScreen = () => {
                       }}>
                         <LinearGradient
                           colors={[
-                            '#34C759',
-                            '#2DB34F',
-                            '#28A745',
+                            '#0061FF', // Deep Blue
+                            '#00C6FF', // Bright Cyan
+                            '#00E676', // Neon Green
                           ]}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 1, y: 1 }}
@@ -5063,7 +5085,7 @@ const ChatScreen = () => {
                             justifyContent: "center",
                           }}
                         >
-                          <ActivityIndicator size="small" color="#FFFFFF" />
+                          <LuxeLogoLoader size="small" />
                           <Text style={{ color: "#FFFFFF", marginTop: 4, fontSize: 10 }}>
                             Uploading...
                           </Text>
@@ -5593,7 +5615,7 @@ const ChatScreen = () => {
                     }}
                   >
                     {editMessageMutation.isPending ? (
-                      <ActivityIndicator color="#FFFFFF" />
+                      <LuxeLogoLoader size={20} />
                     ) : (
                       <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Save</Text>
                     )}
@@ -5693,6 +5715,14 @@ const ChatScreen = () => {
             selectedCount={selectedImageMessageIds.size}
             onSave={handleSaveSelectedImages}
             onShare={handleShareSelectedImages}
+            onAIReactor={() => {
+              if (selectedImageMessageIds.size === 1) {
+                const messageId = selectedImageMessageIds.values().next().value;
+                setReactorMessageId(messageId);
+                setShowReactorMenu(true);
+                cancelImageSelectionMode();
+              }
+            }}
             onDelete={handleDeleteSelectedImages}
             onCancel={cancelImageSelectionMode}
           />

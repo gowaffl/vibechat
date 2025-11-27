@@ -8,14 +8,19 @@ import {
   Animated,
   Easing,
   Alert,
-  ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { api } from "@/lib/api";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { OnboardingProgress } from "@/components/OnboardingProgress";
+
+const { width, height } = Dimensions.get("window");
 
 export default function BirthdateScreen() {
   const navigation = useNavigation<any>();
@@ -28,6 +33,7 @@ export default function BirthdateScreen() {
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -40,6 +46,12 @@ export default function BirthdateScreen() {
       Animated.spring(slideAnim, {
         toValue: 0,
         tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(imageScaleAnim, {
+        toValue: 1,
+        tension: 40,
         friction: 7,
         useNativeDriver: true,
       }),
@@ -113,9 +125,50 @@ export default function BirthdateScreen() {
         />
       </View>
 
+      <View style={{ flex: 1, paddingTop: 60 }}>
+         {/* Top Progress Bar */}
+         <View style={{ alignItems: "center", marginBottom: 20 }}>
+           <OnboardingProgress totalSteps={4} currentStep={1} />
+         </View>
+
+         {/* Main Content */}
+         <View style={{ flex: 1 }}>
+            {/* Glitch Mascot - Centered Top */}
+            <Animated.View
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 10,
+                transform: [{ scale: imageScaleAnim }],
+                height: height * 0.35,
+              }}
+            >
+               {/* Glowing background effect behind Glitch */}
+               <View style={{
+                 position: "absolute",
+                 width: 200,
+                 height: 200,
+                 backgroundColor: "rgba(236, 72, 153, 0.15)", // Pink glow for Bday
+                 borderRadius: 100,
+                 top: "15%",
+               }} />
+               
+              <Image
+                source={require("../../assets/glitch_bday.png")}
+                style={{ 
+                  width: width * 0.8, 
+                  height: width * 0.8,
+                  maxWidth: 350,
+                  maxHeight: 350,
+                }}
+                contentFit="contain"
+              />
+            </Animated.View>
+
+            {/* Bottom Input Section */}
       <Animated.View
         style={[
-          styles.content,
+                styles.bottomSheet,
           {
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
@@ -123,9 +176,9 @@ export default function BirthdateScreen() {
         ]}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>When were you born?</Text>
+                <Text style={styles.title}>When's your birthday?</Text>
           <Text style={styles.subtitle}>
-            This is required to ensure safety settings. Your birthdate will not be shown publicly.
+                  Just to make sure you're old enough to vibe. We won't show this on your profile.
           </Text>
         </View>
 
@@ -154,19 +207,21 @@ export default function BirthdateScreen() {
           style={styles.buttonContainer}
         >
           <LinearGradient
-            colors={["#3B82F6", "#4FC3F7", "#EC4899"]}
+            colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.buttonGradient}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <LuxeLogoLoader size={20} />
             ) : (
               <Text style={styles.buttonText}>Continue</Text>
             )}
           </LinearGradient>
         </Pressable>
       </Animated.View>
+         </View>
+      </View>
     </View>
   );
 }
@@ -193,20 +248,21 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  content: {
+  bottomSheet: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-end",
     paddingHorizontal: 32,
+    paddingBottom: 50,
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 30,
   },
   title: {
     fontSize: 28,
     fontWeight: "700",
     color: "#FFFFFF",
-    marginBottom: 16,
+    marginBottom: 12,
     textAlign: "center",
   },
   subtitle: {
@@ -225,13 +281,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)",
   },
   blurContainer: {
-    padding: 20,
+    padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   datePicker: {
     width: "100%",
-    height: 200,
+    height: 180,
   },
   buttonContainer: {
     overflow: "hidden",
@@ -254,4 +310,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
-

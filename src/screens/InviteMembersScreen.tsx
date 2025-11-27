@@ -15,6 +15,7 @@ import { UserPlus, Check } from "lucide-react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { api, BACKEND_URL } from "@/lib/api";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useUser } from "@/contexts/UserContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
@@ -240,7 +241,7 @@ const InviteMembersScreen = () => {
       {/* Content */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color="#4FC3F7" />
+          <LuxeLogoLoader size="large" />
         </View>
       ) : availableUsers.length === 0 ? (
         <View
@@ -318,7 +319,7 @@ const InviteMembersScreen = () => {
                 })}
               >
                 <LinearGradient
-                  colors={["#4FC3F7", "#00A8E8"]}
+                  colors={["#0061FF", "#00C6FF", "#00E676"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
@@ -334,7 +335,7 @@ const InviteMembersScreen = () => {
                   }}
                 >
                   {isInviting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <LuxeLogoLoader size={20} />
                   ) : (
                     <>
                       <UserPlus size={20} color="#FFFFFF" strokeWidth={2.5} />

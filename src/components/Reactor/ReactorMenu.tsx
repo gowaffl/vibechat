@@ -18,6 +18,7 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
 
 interface ReactorMenuProps {
@@ -312,7 +313,7 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
                               gap: 12,
                             }}
                           >
-                            <ActivityIndicator size="small" color="#A855F7" />
+                            <LuxeLogoLoader size="small" />
                             <Text
                               style={{
                                 fontSize: 14,

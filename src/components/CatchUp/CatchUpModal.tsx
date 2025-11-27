@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import type { ConversationSummary } from "@shared/contracts";
 
 interface CatchUpModalProps {
@@ -354,27 +355,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                       {isLoading ? (
                         // Loading State
                         <View style={{ alignItems: "center", paddingVertical: 60 }}>
-                          <Animated.View
-                            style={{
-                              transform: [
-                                { scale: pulseAnim },
-                                { rotate: spin },
-                              ],
-                              marginBottom: 24,
-                            }}
-                          >
-                            <View
-                              style={{
-                                width: 80,
-                                height: 80,
-                                borderRadius: 40,
-                                borderWidth: 3,
-                                borderColor: "#FF9052",
-                                borderTopColor: "transparent",
-                                borderLeftColor: "rgba(255, 144, 82, 0.3)",
-                              }}
-                            />
-                          </Animated.View>
+                          <LuxeLogoLoader size={80} style={{ marginBottom: 24 }} />
                           
                           <Text
                             style={{

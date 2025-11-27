@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Camera, User as UserIcon, Bell, BellOff } from "lucide-react-native";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import { useUser } from "@/contexts/UserContext";
@@ -152,7 +153,7 @@ const ProfileScreen = () => {
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: "#000000", justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
+        <LuxeLogoLoader size="large" />
       </View>
     );
   }
@@ -280,7 +281,7 @@ const ProfileScreen = () => {
                     }}
                   >
                     {isUploadingImage ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <LuxeLogoLoader size="small" />
                     ) : (
                       <Camera size={20} color="#FFFFFF" />
                     )}
@@ -373,7 +374,7 @@ const ProfileScreen = () => {
                     </View>
                   </View>
                   {isUpdatingNotifications ? (
-                    <ActivityIndicator size="small" color="#4FC3F7" />
+                    <LuxeLogoLoader size="small" />
                   ) : (
                     <Switch
                       value={pushNotificationsEnabled}
@@ -390,26 +391,34 @@ const ProfileScreen = () => {
             <Pressable
               onPress={handleSave}
               disabled={isSaving || (name === user?.name && bio === (user?.bio || "")) || !name.trim()}
-              className="rounded-2xl"
-              style={{
-                backgroundColor: (name !== user?.name || bio !== (user?.bio || "")) && name.trim()
-                  ? "rgba(0, 122, 255, 0.15)"
-                  : "rgba(255, 255, 255, 0.1)",
-                borderWidth: 1,
-                borderColor: (name !== user?.name || bio !== (user?.bio || "")) && name.trim()
-                  ? "#007AFF"
-                  : "rgba(255, 255, 255, 0.2)",
-                padding: 16,
-                alignItems: "center",
-                shadowColor: (name !== user?.name || bio !== (user?.bio || "")) && name.trim() ? "#007AFF" : "transparent",
+              style={({ pressed }) => ({
+                opacity: pressed || isSaving || (name === user?.name && bio === (user?.bio || "")) || !name.trim() ? 0.7 : 1,
+                borderRadius: 16,
+                overflow: "hidden",
+                marginTop: 20,
+                shadowColor: (name !== user?.name || bio !== (user?.bio || "")) && name.trim() ? "#0061FF" : "transparent",
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.5,
-                shadowRadius: 12,
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
                 elevation: 4,
+              })}
+            >
+              <LinearGradient
+                colors={
+                  (name !== user?.name || bio !== (user?.bio || "")) && name.trim()
+                    ? ["#0061FF", "#00C6FF", "#00E676"] // New VibeChat Gradient
+                    : ["rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.05)"]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  padding: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
               }}
             >
               {isSaving ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <LuxeLogoLoader size={20} />
               ) : (
                 <Text
                   className="font-semibold text-lg"
@@ -418,6 +427,7 @@ const ProfileScreen = () => {
                   Save Changes
                 </Text>
               )}
+              </LinearGradient>
             </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>

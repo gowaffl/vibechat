@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { BlurView } from "expo-blur";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { LinearGradient } from "expo-linear-gradient";
 import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
@@ -473,7 +474,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
                         }}
                       >
                         {isSaving ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
+                          <LuxeLogoLoader size="small" />
                         ) : (
                           <Download size={22} color="#FFFFFF" />
                         )}

@@ -27,6 +27,7 @@ import type { RootStackScreenProps } from "@/navigation/types";
 import type { ChatWithMetadata, GetUserChatsResponse, UnreadCount } from "@/shared/contracts";
 import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 
 const ChatListScreen = () => {
   const insets = useSafeAreaInsets();
@@ -557,7 +558,7 @@ const ChatListScreen = () => {
       {/* Chat List */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color={BRAND_GRADIENT_COLORS[0]} />
+          <LuxeLogoLoader size="large" />
         </View>
       ) : chats.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>

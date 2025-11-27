@@ -3,6 +3,7 @@ import { Pressable, Text, Animated, ViewStyle, TextStyle, ActivityIndicator } fr
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 
 interface LiquidGlassButtonProps {
   onPress: () => void;
@@ -71,16 +72,12 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
 
   const variantStyles = {
     primary: {
-      borderColor: color ? `${color}80` : "rgba(0, 122, 255, 0.5)",
+      borderColor: color ? `${color}80` : "#0061FF",
       borderWidth: 1,
-      shadowColor: color ? `${color}80` : "rgba(0, 122, 255, 0.5)",
+      shadowColor: color ? `${color}80` : "#0061FF",
       gradientColors: color
         ? [`${color}4D`, `${color}33`, `${color}1A`]
-        : ([
-            "rgba(0, 122, 255, 0.3)",
-            "rgba(0, 122, 255, 0.2)",
-            "rgba(0, 122, 255, 0.1)",
-          ] as const),
+        : (["#0061FF", "#00C6FF", "#00E676"] as const),
     },
     secondary: {
       borderColor: "rgba(255, 255, 255, 0.3)",
@@ -166,7 +163,7 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
             }}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <LuxeLogoLoader size={20} />
             ) : (
               <>
                 {icon && iconPosition === "left" && icon}

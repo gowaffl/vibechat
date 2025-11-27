@@ -21,8 +21,11 @@ const WelcomeScreen = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const bounceAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Initial Entry Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -43,6 +46,40 @@ const WelcomeScreen = () => {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Slow Breathing/Pulsing Animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+            Animated.timing(pulseAnim, {
+                toValue: 1.05,
+                duration: 3000,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+            }),
+            Animated.timing(bounceAnim, {
+                toValue: -10,
+                duration: 3000,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+            })
+        ]),
+        Animated.parallel([
+            Animated.timing(pulseAnim, {
+                toValue: 1,
+                duration: 3000,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+            }),
+            Animated.timing(bounceAnim, {
+                toValue: 0,
+                duration: 3000,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+            })
+        ])
+      ])
+    ).start();
   }, []);
 
   const handleAgreeAndContinue = () => {
@@ -88,15 +125,23 @@ const WelcomeScreen = () => {
       >
         {/* Logo & Branding */}
         <View style={styles.logoContainer}>
-          <View style={styles.logoWrapper}>
+          <Animated.View 
+            style={[
+                styles.logoWrapper,
+                {
+                    transform: [
+                        { scale: pulseAnim },
+                        { translateY: bounceAnim }
+                    ]
+                }
+            ]}
+          >
             <Image
-              source={require("../../assets/image-1762790557.jpeg")}
+              source={require("../../assets/vibechat logo main.png")}
               style={styles.logo}
-              contentFit="cover"
+              contentFit="contain"
             />
-          </View>
-          <Text style={styles.appName}>VibeChat</Text>
-          <Text style={styles.tagline}>Group Chats with Super Powers</Text>
+          </Animated.View>
         </View>
 
         {/* Bottom Section */}
@@ -118,7 +163,7 @@ const WelcomeScreen = () => {
             style={styles.buttonContainer}
           >
             <LinearGradient
-              colors={["#3B82F6", "#4FC3F7", "#EC4899"]} // Blue -> Light Blue -> Pink
+              colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient: Deep Blue -> Bright Cyan -> Neon Green
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.buttonGradient}
@@ -166,22 +211,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logoWrapper: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    marginBottom: 32,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    shadowColor: "#4FC3F7",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    width: 280,
+    height: 280,
+    alignItems: "center",
+    justifyContent: "center",
   },
   logo: {
-    width: 200,
-    height: 200,
+    width: "100%",
+    height: "100%",
   },
   appName: {
     fontSize: 42,
@@ -234,4 +271,3 @@ const styles = StyleSheet.create({
 });
 
 export default WelcomeScreen;
-
