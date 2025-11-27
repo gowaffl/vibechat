@@ -12,7 +12,7 @@ import Animated, {
 import { Image } from 'expo-image';
 
 // Use the app icon from assets
-const APP_ICON = require('../../assets/image-1762790557.jpeg');
+const APP_ICON = require('../../assets/vibechat icon main.png');
 
 interface LuxeLogoLoaderProps {
   size?: 'small' | 'large' | number;
