@@ -211,10 +211,10 @@ const OnboardingPhotoScreen = () => {
       if (user?.id) {
         const handledInvite = await handlePendingInvite(user.id);
         if (!handledInvite) {
-          navigation.replace("ChatList", undefined);
+          navigation.replace("MainTabs");
         }
       } else {
-        navigation.replace("ChatList", undefined);
+        navigation.replace("MainTabs");
       }
     } catch (error) {
       console.error("Error completing onboarding:", error);
@@ -239,10 +239,10 @@ const OnboardingPhotoScreen = () => {
       if (user?.id) {
         const handledInvite = await handlePendingInvite(user.id);
         if (!handledInvite) {
-          navigation.replace("ChatList", undefined);
+          navigation.replace("MainTabs");
         }
       } else {
-        navigation.replace("ChatList", undefined);
+        navigation.replace("MainTabs");
       }
     } catch (error) {
       console.error("Error completing onboarding:", error);

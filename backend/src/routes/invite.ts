@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../db";
+import { db, createUserClient } from "../db";
 import type { AppType } from "../index";
 import {
   joinChatViaInviteRequestSchema,
@@ -58,7 +58,18 @@ invite.post("/:token/join", async (c) => {
     const body = await c.req.json();
     const validated = joinChatViaInviteRequestSchema.parse(body);
 
+    // Check for user auth token
+    const authHeader = c.req.header("Authorization");
+    const userToken = authHeader?.startsWith("Bearer ") 
+      ? authHeader.substring(7) 
+      : null;
+
+    // Use user client if token available, otherwise fallback to admin db
+    const client = userToken ? createUserClient(userToken) : db;
+
     // Find the chat with this invite token
+    // Note: We use the admin db here because a non-member user might not be able to see the chat yet
+    // via RLS, but we need to validate the invite token.
     const { data: chat, error: chatError } = await db
       .from("chat")
       .select("*")
@@ -75,6 +86,7 @@ invite.post("/:token/join", async (c) => {
     }
 
     // Check if user is already a member
+    // We check with admin db to be sure
     const { data: existingMember } = await db
       .from("chat_member")
       .select("*")
@@ -102,7 +114,8 @@ invite.post("/:token/join", async (c) => {
     }
 
     // Add user as member
-    const { error: memberError } = await db
+    // Use the client selected above (user client if available) to respect RLS "is_self" policy
+    const { error: memberError } = await client
       .from("chat_member")
       .insert({
         chatId: chat.id,
@@ -111,7 +124,23 @@ invite.post("/:token/join", async (c) => {
 
     if (memberError) {
       console.error("[Invite] Error adding member:", memberError);
-      return c.json({ error: "Failed to join chat" }, 500);
+      // If user client failed, try admin client as fallback (in case token was invalid but validated.userId is correct)
+      if (client !== db) {
+        console.log("[Invite] Retrying with admin client...");
+        const { error: retryError } = await db
+          .from("chat_member")
+          .insert({
+            chatId: chat.id,
+            userId: validated.userId,
+          });
+        
+        if (retryError) {
+          console.error("[Invite] Retry failed:", retryError);
+          return c.json({ error: "Failed to join chat" }, 500);
+        }
+      } else {
+        return c.json({ error: "Failed to join chat" }, 500);
+      }
     }
 
     // Create a system join message

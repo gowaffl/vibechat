@@ -28,7 +28,7 @@ messages.get("/", async (c) => {
     .select(`
       *,
       user:user!message_userId_fkey(*),
-      replyTo:message!message_replyToId_fkey(
+      replyTo:message(
         *,
         user:user!message_userId_fkey(*)
       ),

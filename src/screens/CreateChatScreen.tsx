@@ -90,6 +90,9 @@ const CreateChatScreen = () => {
       setNewChatBio("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      // Reset the tab to Chats so back button goes to list
+      navigation.navigate("Chats");
+
       // Navigate to the new chat
       navigation.navigate("Chat", {
         chatId: newChat.id,

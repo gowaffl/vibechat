@@ -36,8 +36,11 @@ const InviteScreen = () => {
       queryClient.invalidateQueries({ queryKey: ["user-chats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Navigate to the chat
-      navigation.navigate("Chat", {
+      // Ensure background tab is Chats
+      (navigation as any).navigate("MainTabs", { screen: "Chats" });
+
+      // Replace invite screen with chat to avoid going back to invite
+      navigation.replace("Chat", {
         chatId: response.chatId,
         chatName: inviteInfo?.chatName || "Chat",
       });
