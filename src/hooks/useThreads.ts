@@ -120,8 +120,8 @@ export function useThreadMessages(threadId: string | null, userId: string) {
       return result;
     },
     enabled: !!threadId, // Only run query if threadId is provided
-    staleTime: 0, // Always refetch
-    gcTime: 0, // Don't cache results
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    gcTime: 1000 * 60 * 30, // Keep in memory for 30 minutes
   });
 
   console.log('[useThreadMessages Hook] Query state:', {

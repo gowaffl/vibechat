@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  FlatList,
   Pressable,
   ActivityIndicator,
-  Image,
+  Image as RNImage,
   Alert,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
@@ -159,7 +160,7 @@ const InviteMembersScreen = () => {
                   height: 44,
                   borderRadius: 22,
                 }}
-                resizeMode="cover"
+                contentFit="cover"
               />
             </View>
           ) : (
@@ -291,9 +292,10 @@ const InviteMembersScreen = () => {
             </Text>
           </View>
 
-          <FlatList
+          <FlashList
             data={availableUsers}
             keyExtractor={(item) => item.id}
+            estimatedItemSize={80}
             renderItem={renderUserItem}
             contentContainerStyle={{
               paddingTop: 8,

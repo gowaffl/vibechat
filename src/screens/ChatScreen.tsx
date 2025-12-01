@@ -7,7 +7,7 @@ import {
   Pressable,
   Platform,
   ActivityIndicator,
-  Image,
+  Image as RNImage,
   Keyboard,
   Modal,
   Alert,
@@ -22,10 +22,12 @@ import {
   PanResponder,
   useColorScheme,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import Reanimated, { FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS } from "react-native-reanimated";
+import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
 import { BlurView } from "expo-blur";
@@ -72,6 +74,8 @@ import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+
+const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
 // Custom Chat Header Component
 const ChatHeader = ({ 
@@ -212,7 +216,7 @@ const ChatHeader = ({
                   borderRadius: 24,
                   marginBottom: 4,
                 }}
-                resizeMode="cover"
+                contentFit="cover"
               />
             ) : (
               <View
@@ -329,7 +333,7 @@ const ChatHeader = ({
                       marginRight: 12,
                     }}
                   >
-                    <Image
+                    <RNImage
                       source={require("../../assets/smarth threads icon (1).png")}
                       style={{ width: 40, height: 40 }}
                       resizeMode="contain"
@@ -1472,7 +1476,7 @@ const ChatScreen = () => {
   const chatId = route.params?.chatId || "default-chat";
   const chatName = route.params?.chatName || "VibeChat";
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlashList<any>>(null);
   const textInputRef = useRef<TextInput>(null);
   const isInputFocused = useRef(false);
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
@@ -1513,6 +1517,7 @@ const ChatScreen = () => {
   const [selectedImageMessageIds, setSelectedImageMessageIds] = useState<Set<string>>(new Set());
   const [typingUsers, setTypingUsers] = useState<{ id: string; name: string }[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingSentAt = useRef<number>(0);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [showAttachmentsMenu, setShowAttachmentsMenu] = useState(false);
@@ -1611,6 +1616,9 @@ const ChatScreen = () => {
     };
   });
 
+  // Thread Switch Animation
+  // Using key-based re-mounting with entering animation for smoothest transition without flash
+
   // Fetch chat details (includes members)
   const { data: chat } = useQuery<GetChatResponse>({
     queryKey: ["chat", chatId],
@@ -1691,7 +1699,10 @@ const ChatScreen = () => {
 
   // Define active messages based on thread view or main chat
   const activeMessages = useMemo(() => {
-    return currentThreadId && threadMessages !== undefined ? threadMessages : messages;
+    if (currentThreadId) {
+      return threadMessages || [];
+    }
+    return messages;
   }, [currentThreadId, threadMessages, messages]);
 
   // Sync reactor processing state with AI typing indicator
@@ -3634,7 +3645,6 @@ const ChatScreen = () => {
   // Handler for typing indicator
   const handleTyping = (text: string) => {
     setActiveInput("main");
-    console.log('[Mentions] handleTyping called with text:', text);
     setMessageText(text);
     
     // Detect @ mention
@@ -3642,36 +3652,21 @@ const ChatScreen = () => {
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf("@");
     
-    console.log('[Mentions] Detection details:', {
-      text,
-      textLength: text.length,
-      lastAtIndex,
-      chatMembersCount: chatMembers.length,
-      chatMembersNames: chatMembers.map(m => m.name),
-      currentShowMentionPicker: showMentionPicker,
-    });
-    
     if (lastAtIndex !== -1) {
       const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
       
-      console.log('[Mentions] @ found at index:', lastAtIndex, 'textAfterAt:', textAfterAt);
-      
       // Check if there's a space after @, if so, close picker
       if (textAfterAt.includes(" ")) {
-        console.log('[Mentions] Space found after @, closing picker');
         setShowMentionPicker(false);
         setMentionSearch("");
         setMentionStartIndex(-1);
       } else {
         // Show mention picker with search
-        console.log('[Mentions] Setting showMentionPicker to TRUE');
-        console.log('[Mentions] Search query:', textAfterAt);
         setShowMentionPicker(true);
         setMentionSearch(textAfterAt);
         setMentionStartIndex(lastAtIndex);
       }
     } else {
-      console.log('[Mentions] No @ found, hiding picker');
       setShowMentionPicker(false);
       setMentionSearch("");
       setMentionStartIndex(-1);
@@ -3679,17 +3674,23 @@ const ChatScreen = () => {
     
     if (!user?.id) return;
 
-    // Clear existing timeout
+    // Clear existing timeout for stopping typing
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
+    const now = Date.now();
+    const THROTTLE_MS = 2000; // Only send "is typing" every 2 seconds
+
     if (text.trim().length > 0) {
-      // Send typing indicator
-      api.post(`/api/chats/${chatId}/typing`, {
-        userId: user.id,
-        isTyping: true,
-      }).catch((err) => console.error("Error sending typing indicator:", err));
+      // Send typing indicator if throttled
+      if (now - lastTypingSentAt.current > THROTTLE_MS) {
+        lastTypingSentAt.current = now;
+        api.post(`/api/chats/${chatId}/typing`, {
+          userId: user.id,
+          isTyping: true,
+        }).catch((err) => console.error("Error sending typing indicator:", err));
+      }
 
       // Set timeout to stop typing after 3 seconds of inactivity
       typingTimeoutRef.current = setTimeout(() => {
@@ -3697,6 +3698,7 @@ const ChatScreen = () => {
           userId: user.id,
           isTyping: false,
         }).catch((err) => console.error("Error clearing typing indicator:", err));
+        lastTypingSentAt.current = 0; // Reset so next typing immediately sends indicator
       }, 3000);
     } else {
       // Stop typing indicator if text is empty
@@ -3704,6 +3706,7 @@ const ChatScreen = () => {
         userId: user.id,
         isTyping: false,
       }).catch((err) => console.error("Error clearing typing indicator:", err));
+      lastTypingSentAt.current = 0;
     }
   };
 
@@ -4892,14 +4895,18 @@ const ChatScreen = () => {
       )}
 
       {/* Messages FlatList - Wrapped in Reanimated View for keyboard animation */}
-      <Reanimated.View style={[{ flex: 1 }, chatListContainerAnimatedStyle]}>
-        <Reanimated.FlatList
+      <Reanimated.View 
+        key={currentThreadId || 'main'}
+        entering={FadeIn.duration(200)}
+        style={[{ flex: 1 }, chatListContainerAnimatedStyle]}
+      >
+        <AnimatedFlashList
           ref={flatListRef}
           data={displayData}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
+          estimatedItemSize={120}
           inverted={true}
-          style={{ flex: 1 }}
           contentContainerStyle={{
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
             // Padding bottom creates space for header/threads
@@ -4912,10 +4919,6 @@ const ChatScreen = () => {
           ListHeaderComponent={<View style={{ height: 120 }} />}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="interactive"
-          initialNumToRender={20}
-          maxToRenderPerBatch={20}
-          windowSize={21}
-          removeClippedSubviews={false}
           onScrollToIndexFailed={(info) => {
             console.log('[ScrollToIndex] Failed at index', info.index, 'average item length:', info.averageItemLength);
             // Wait for list to settle and render more items, then retry
@@ -4983,7 +4986,7 @@ const ChatScreen = () => {
                       shadowRadius: 10,
                       elevation: 3,
                     }}>
-                      <Image
+                      <RNImage
                         source={require("../../assets/vibechat icon main.png")}
                         style={{ width: 80, height: 80 }}
                         resizeMode="cover"
@@ -5079,7 +5082,7 @@ const ChatScreen = () => {
               </View>
             </View>
           }
-      />
+        />
       </Reanimated.View>
 
       {/* Input Bar Area - Fixed at Bottom */}
@@ -6075,9 +6078,10 @@ const ChatScreen = () => {
                 </View>
               </View>
 
-            <FlatList
+            <FlashList
               data={searchResults}
               keyExtractor={(item) => item.id}
+              estimatedItemSize={100}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 20 }}
               ListEmptyComponent={
                 <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 60 }}>
@@ -6158,9 +6162,10 @@ const ChatScreen = () => {
                   </BlurView>
                 </View>
               </View>
-            <FlatList
+            <FlashList
               data={bookmarkedMessages}
               keyExtractor={(item) => item.id}
+              estimatedItemSize={100}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 20 }}
               ListEmptyComponent={
                 <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 60 }}>

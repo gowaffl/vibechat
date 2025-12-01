@@ -16,6 +16,8 @@ import {
 } from "../../../shared/contracts";
 import { sendChatPushNotifications } from "../services/push-notifications";
 import { tagMessage } from "../services/message-tagger";
+import { extractFirstUrl } from "../utils/url-utils";
+import { fetchLinkPreview } from "../services/link-preview";
 
 const chats = new Hono<AppType>();
 
@@ -1064,6 +1066,43 @@ chats.post("/:id/messages", async (c) => {
       tagMessage(message.id, message.content).catch(error => {
         console.error(`[Chats] Failed to tag message ${message.id}:`, error);
       });
+    }
+
+    // If this is a text message, check for URLs and fetch link preview
+    if (message.messageType === "text" && message.content) {
+      const url = extractFirstUrl(message.content);
+      if (url) {
+        console.log(`🔗 [Chats] URL detected in message (${message.id}), fetching link preview: ${url}`);
+
+        // Fire-and-forget: Fetch link preview in background
+        Promise.resolve().then(async () => {
+          try {
+            console.log(`🔄 [Chats] Starting background link preview fetch for message ${message.id}`);
+            const linkPreview = await fetchLinkPreview(url);
+
+            if (linkPreview) {
+              // Update the message with the link preview
+              await db
+                .from("message")
+                .update({
+                  linkPreviewUrl: linkPreview.url,
+                  linkPreviewTitle: linkPreview.title,
+                  linkPreviewDescription: linkPreview.description,
+                  linkPreviewImage: linkPreview.image,
+                  linkPreviewSiteName: linkPreview.siteName,
+                  linkPreviewFavicon: linkPreview.favicon,
+                })
+                .eq("id", message.id);
+
+              console.log(`✅ [Chats] Link preview saved for message ${message.id}`);
+            } else {
+              console.log(`⚠️ [Chats] No link preview data available for ${url}`);
+            }
+          } catch (error) {
+            console.error(`❌ [Chats] Failed to fetch link preview for message ${message.id}:`, error);
+          }
+        });
+      }
     }
 
     // Get chat info for notifications

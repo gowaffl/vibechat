@@ -6,17 +6,18 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
-  Image,
+  Image as RNImage,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Modal,
   Share,
   PanResponder,
-  FlatList,
   Keyboard,
   useColorScheme,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { Image } from "expo-image";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1056,12 +1057,15 @@ const GroupSettingsScreen = () => {
                         shadowOpacity: 0.5,
                         shadowRadius: 12,
                         elevation: 8,
+                        borderRadius: 64,
+                        overflow: 'hidden', // Ensure cutoff is clean
                       }}
                     >
                       <Image
                         source={{ uri: imageUri }}
-                        className="w-32 h-32 rounded-full"
-                        resizeMode="cover"
+                        style={{ width: 128, height: 128, borderRadius: 64 }}
+                        contentFit="cover" // Changed from resizeMode="cover" for Expo Image
+                        transition={200}
                       />
                     </View>
                   ) : (
@@ -2789,10 +2793,11 @@ const GroupSettingsScreen = () => {
                 </Text>
               </View>
             ) : (
-              <FlatList
+              <FlashList
                 data={photoMessages}
                 numColumns={3}
                 keyExtractor={(item: any) => item.id}
+                estimatedItemSize={120}
                 contentContainerStyle={{
                   padding: 8,
                   paddingBottom: insets.bottom + 20,
@@ -2831,7 +2836,7 @@ const GroupSettingsScreen = () => {
                       <Image
                         source={{ uri: item.imageUrl?.startsWith('http') ? item.imageUrl : `${BACKEND_URL}${item.imageUrl}` }}
                         style={{ width: "100%", height: "100%" }}
-                        resizeMode="cover"
+                        contentFit="cover"
                       />
                       {/* Gradient overlay at bottom for date */}
                       <LinearGradient
@@ -2954,9 +2959,10 @@ const GroupSettingsScreen = () => {
                 </Text>
               </View>
             ) : (
-              <FlatList
+              <FlashList
                 data={linkMessages}
                 keyExtractor={(item: any) => item.id}
+                estimatedItemSize={200}
                 contentContainerStyle={{
                   padding: 16,
                   paddingBottom: insets.bottom + 20,
@@ -2990,7 +2996,7 @@ const GroupSettingsScreen = () => {
                             width: "100%",
                             height: 180,
                           }}
-                          resizeMode="cover"
+                          contentFit="cover"
                         />
                       )}
                       <View style={{ padding: 16 }}>
@@ -3014,7 +3020,7 @@ const GroupSettingsScreen = () => {
                               <Image
                                 source={{ uri: item.linkPreview.linkPreviewFavicon }}
                                 style={{ width: 16, height: 16, marginRight: 8, borderRadius: 4 }}
-                                resizeMode="contain"
+                                contentFit="contain"
                               />
                             )}
                             <Text style={{ color: "#666", fontSize: 12, flex: 1 }} numberOfLines={1}>

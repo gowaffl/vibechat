@@ -30,20 +30,23 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreviewData | n
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; LinkPreviewBot/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error('[LinkPreview] Failed to fetch URL:', response.status);
+      console.error('[LinkPreview] Failed to fetch URL:', response.status, response.statusText);
       return null;
     }
 
     const contentType = response.headers.get('content-type');
     if (!contentType?.includes('text/html')) {
       console.log('[LinkPreview] Not an HTML page, skipping:', contentType);
+      // If it's an image, we could potentially return it as an image preview, but for now skip
       return null;
     }
 

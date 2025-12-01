@@ -6,13 +6,20 @@
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 
 /**
+ * Clean a URL by removing trailing punctuation
+ */
+function cleanUrl(url: string): string {
+  return url.replace(/[.,;!?)]+$/, "");
+}
+
+/**
  * Extract the first URL from a text message
  * @param text - The message text
  * @returns The first URL found, or null if no URL exists
  */
 export function extractFirstUrl(text: string): string | null {
   const matches = text.match(URL_REGEX);
-  return matches ? matches[0] : null;
+  return matches ? cleanUrl(matches[0]) : null;
 }
 
 /**
@@ -22,7 +29,7 @@ export function extractFirstUrl(text: string): string | null {
  */
 export function extractAllUrls(text: string): string[] {
   const matches = text.match(URL_REGEX);
-  return matches || [];
+  return matches ? matches.map(cleanUrl) : [];
 }
 
 /**
