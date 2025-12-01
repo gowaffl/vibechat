@@ -598,56 +598,79 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
 
     console.log(`✅ [Messages] Message ${messageId} edited successfully`);
 
-    return c.json(editMessageResponseSchema.parse({
-      id: updatedMessage.id,
-      content: updatedMessage.content,
-      messageType: updatedMessage.messageType,
-      imageUrl: updatedMessage.imageUrl,
-      imageDescription: updatedMessage.imageDescription,
-      userId: updatedMessage.userId,
-      chatId: updatedMessage.chatId,
-      replyToId: updatedMessage.replyToId,
-      editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
-      isUnsent: updatedMessage.isUnsent,
-      editHistory: typeof updatedMessage.editHistory === 'object' ? JSON.stringify(updatedMessage.editHistory) : updatedMessage.editHistory,
-      createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
-      user: user ? {
-        id: user.id,
-        name: user.name,
-        bio: user.bio,
-        image: user.image,
-        hasCompletedOnboarding: user.hasCompletedOnboarding,
-        createdAt: new Date(user.createdAt).toISOString(),
-        updatedAt: new Date(user.updatedAt).toISOString(),
-      } : null,
-      replyTo: replyTo ? {
-        id: replyTo.id,
-        content: replyTo.content,
-        messageType: replyTo.messageType,
-        imageUrl: replyTo.imageUrl,
-        imageDescription: replyTo.imageDescription,
-        userId: replyTo.userId,
-        chatId: replyTo.chatId,
-        replyToId: replyTo.replyToId,
-        createdAt: new Date(replyTo.createdAt).toISOString(),
-        user: {
-          id: replyTo.user.id,
-          name: replyTo.user.name,
-          bio: replyTo.user.bio,
-          image: replyTo.user.image,
-          hasCompletedOnboarding: replyTo.user.hasCompletedOnboarding,
-          createdAt: new Date(replyTo.user.createdAt).toISOString(),
-          updatedAt: new Date(replyTo.user.updatedAt).toISOString(),
-        },
-      } : null,
-      reactions: reactions.map((reaction: any) => ({
-        id: reaction.id,
-        emoji: reaction.emoji,
-        userId: reaction.userId,
-        messageId: reaction.messageId,
-        createdAt: new Date(reaction.createdAt).toISOString(),
-      })),
-    }));
+    // Parse and validate the response
+    try {
+      const response = editMessageResponseSchema.parse({
+        id: updatedMessage.id,
+        content: updatedMessage.content,
+        messageType: updatedMessage.messageType,
+        imageUrl: updatedMessage.imageUrl,
+        imageDescription: updatedMessage.imageDescription,
+        userId: updatedMessage.userId,
+        chatId: updatedMessage.chatId,
+        replyToId: updatedMessage.replyToId,
+        editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
+        isUnsent: updatedMessage.isUnsent,
+        editHistory: typeof updatedMessage.editHistory === 'object' ? JSON.stringify(updatedMessage.editHistory) : updatedMessage.editHistory,
+        createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
+        user: user ? {
+          id: user.id,
+          name: user.name,
+          bio: user.bio,
+          image: user.image,
+          hasCompletedOnboarding: user.hasCompletedOnboarding,
+          createdAt: new Date(user.createdAt).toISOString(),
+          updatedAt: new Date(user.updatedAt).toISOString(),
+        } : null,
+        replyTo: replyTo ? {
+          id: replyTo.id,
+          content: replyTo.content,
+          messageType: replyTo.messageType,
+          imageUrl: replyTo.imageUrl,
+          imageDescription: replyTo.imageDescription,
+          userId: replyTo.userId,
+          chatId: replyTo.chatId,
+          replyToId: replyTo.replyToId,
+          createdAt: new Date(replyTo.createdAt).toISOString(),
+          user: {
+            id: replyTo.user.id,
+            name: replyTo.user.name,
+            bio: replyTo.user.bio,
+            image: replyTo.user.image,
+            hasCompletedOnboarding: replyTo.user.hasCompletedOnboarding,
+            createdAt: new Date(replyTo.user.createdAt).toISOString(),
+            updatedAt: new Date(replyTo.user.updatedAt).toISOString(),
+          },
+        } : null,
+        reactions: reactions.map((reaction: any) => ({
+          id: reaction.id,
+          emoji: reaction.emoji,
+          userId: reaction.userId,
+          messageId: reaction.messageId,
+          createdAt: new Date(reaction.createdAt).toISOString(),
+        })),
+      });
+
+      return c.json(response);
+    } catch (parseError) {
+      console.error("Error parsing edit message response:", parseError);
+      console.error("Data that failed to parse:", {
+        updatedMessage,
+        user,
+        replyTo,
+        reactions: reactions.length,
+      });
+      // Return success anyway since the message was actually edited
+      return c.json({ 
+        id: updatedMessage.id,
+        content: updatedMessage.content,
+        messageType: updatedMessage.messageType,
+        userId: updatedMessage.userId,
+        chatId: updatedMessage.chatId,
+        createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
+        user: user || null,
+      } as any);
+    }
   } catch (error) {
     console.error("Error editing message:", error);
     return c.json({ error: "Failed to edit message" }, 500);

@@ -4921,7 +4921,8 @@ const ChatScreen = () => {
             chatMembersCount: chatMembers.length,
             mentionSearch,
             keyboardHeight,
-            activeInput: activeInput.current // Check ref value
+            activeInput: activeInput.current, // Check ref value
+            editingMessage: !!editingMessage,
           });
           return showMentionPicker && activeInput.current === "main";
         })() && (
@@ -4931,6 +4932,7 @@ const ChatScreen = () => {
               maxHeight: 250,
               marginBottom: 8,
               pointerEvents: "auto",
+              zIndex: 1000,
             }}
           >
             <MentionPicker
@@ -5633,6 +5635,28 @@ const ChatScreen = () => {
                       <X size={24} color="#FFFFFF" />
                     </Pressable>
                   </View>
+
+                  {/* Mention Picker for Edit Mode */}
+                  {showMentionPicker && activeInput.current === "edit" && (
+                    <View
+                      style={{
+                        marginBottom: 12,
+                        maxHeight: 250,
+                        zIndex: 10000,
+                      }}
+                    >
+                      <MentionPicker
+                        visible={showMentionPicker}
+                        users={chatMembers.filter((member) => member.id !== user?.id)}
+                        threads={threads || []}
+                        aiFriends={aiFriends}
+                        onSelectUser={handleSelectMention}
+                        onSelectThread={handleSelectThread}
+                        onSelectAI={handleSelectAI}
+                        searchQuery={mentionSearch}
+                      />
+                    </View>
+                  )}
 
                 <TextInput
                   value={editText}
