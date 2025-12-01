@@ -1,5 +1,5 @@
 /**
- * Image generation service using NANO-BANANA (Gemini 2.5 Flash Image)
+ * Image generation service using Gemini 3 Pro Image Preview
  */
 
 export interface ImageGenerationResult {
@@ -9,17 +9,17 @@ export interface ImageGenerationResult {
 }
 
 /**
- * Generate an image using NANO-BANANA (Gemini 2.5 Flash Image)
+ * Generate an image using Gemini 3 Pro Image Preview
  */
 export async function generateImageWithNanoBanana(
   prompt: string,
   aspectRatio: string = "1:1"
 ): Promise<ImageGenerationResult> {
   try {
-    console.log(`[Image Generation] Generating image with NANO-BANANA: "${prompt}"`);
+    console.log(`[Image Generation] Generating image with Gemini 3 Pro Image Preview: "${prompt}"`);
 
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       {
         method: 'POST',
         headers: {
@@ -40,7 +40,7 @@ export async function generateImageWithNanoBanana(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Image Generation] NANO-BANANA API error:", errorText);
+      console.error("[Image Generation] Gemini 3 Pro Image Preview API error:", errorText);
 
       return {
         success: false,

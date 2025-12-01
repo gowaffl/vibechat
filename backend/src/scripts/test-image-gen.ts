@@ -9,11 +9,11 @@ async function testImageGen() {
   }
 
   console.log("🧪 Testing Gemini Image Generation API...");
-  console.log("Model: gemini-2.5-flash-image");
+  console.log("Model: gemini-3-pro-image-preview");
   
   try {
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       {
         method: 'POST',
         headers: {

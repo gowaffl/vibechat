@@ -195,12 +195,12 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
       return c.json({ error: "Failed to read original image" }, 500);
     }
 
-    // Use NANO-BANANA (Google Gemini) to EDIT the original image based on the remix prompt
-    console.log("[Reactor] Editing image with NANO-BANANA:", remixPrompt);
+    // Use Gemini 3 Pro Image Preview to EDIT the original image based on the remix prompt
+    console.log("[Reactor] Editing image with Gemini 3 Pro Image Preview:", remixPrompt);
 
     try {
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
         {
           method: 'POST',
           headers: {
@@ -231,7 +231,7 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log("[Reactor] NANO-BANANA API error:", errorText);
+        console.log("[Reactor] Gemini 3 Pro Image Preview API error:", errorText);
 
         // Try to parse error as JSON for better error handling
         let errorData;
@@ -336,14 +336,14 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
             originalMessageId: messageId,
             reactionType: "remix",
             prompt: remixPrompt,
-            model: "gemini-2.5-flash-image",
+            model: "gemini-3-pro-image-preview",
           }),
         });
 
       console.log("[Reactor] Remix complete, message created");
       return c.json(remixedMessage, 201);
     } catch (aiError: any) {
-      console.log("[Reactor] NANO-BANANA API error:", aiError.message);
+      console.log("[Reactor] Gemini 3 Pro Image Preview API error:", aiError.message);
       // Check if it's a service unavailability error
       if (aiError.message?.includes("503") || aiError.message?.includes("unavailable") || aiError.message?.includes("Connection")) {
         return c.json({
@@ -432,16 +432,16 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
       return c.json({ error: "Failed to read original image" }, 500);
     }
 
-    // Generate meme using NANO-BANANA (Google Gemini) - transform the original image into a meme
+    // Generate meme using Gemini 3 Pro Image Preview - transform the original image into a meme
     const fullMemePrompt = memePrompt 
-      ? `Transform this image into an internet meme. ${memePrompt}. Keep the original image mostly intact but add bold meme-style text overlays (impact font style), funny captions, and make it look like a viral internet meme. The image content should remain recognizable.`
-      : `Transform this image into a funny internet meme. Add bold meme-style text overlays (impact font style), funny captions, and make it look like a viral internet meme. Keep the original image mostly intact and recognizable.`;
+      ? `Transform this image by incorporating it into a recent, well-known meme template based on this prompt: "${memePrompt}". The goal is to be incredibly relevant to the prompt and image, and be both funny and poignant. Use the original image as a key element within the meme template.`
+      : `Transform this image by incorporating it into a recent, well-known meme template. The goal is to be incredibly relevant to the image content, and be both funny and poignant. Use the original image as a key element within the meme template to create a viral-style meme.`;
     
-    console.log("[Reactor] Creating meme from image with NANO-BANANA:", fullMemePrompt);
+    console.log("[Reactor] Creating meme from image with Gemini 3 Pro Image Preview:", fullMemePrompt);
 
     try {
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
         {
           method: 'POST',
           headers: {
@@ -472,7 +472,7 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log("[Reactor] NANO-BANANA API error:", errorText);
+        console.log("[Reactor] Gemini 3 Pro Image Preview API error:", errorText);
 
         // Try to parse error as JSON for better error handling
         let errorData;
@@ -577,14 +577,14 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
             originalMessageId: messageId,
             reactionType: "meme",
             prompt: fullMemePrompt,
-            model: "gemini-2.5-flash-image",
+            model: "gemini-3-pro-image-preview",
           }),
         });
 
       console.log("[Reactor] Meme complete, message created");
       return c.json(memeMessage, 201);
     } catch (aiError: any) {
-      console.log("[Reactor] NANO-BANANA API error:", aiError.message);
+      console.log("[Reactor] Gemini 3 Pro Image Preview API error:", aiError.message);
       // Check if it's a service unavailability error
       if (aiError.message?.includes("503") || aiError.message?.includes("unavailable") || aiError.message?.includes("Connection")) {
         return c.json({

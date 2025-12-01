@@ -333,7 +333,7 @@ Respond naturally and concisely based on the conversation.`;
   }
 });
 
-// POST /api/ai/generate-image - Generate image with NANO-BANANA
+// POST /api/ai/generate-image - Generate image with Gemini 3 Pro Image Preview
 ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async (c) => {
   const { prompt, userId, chatId, aspectRatio, referenceImageUrls } = c.req.valid("json");
 
@@ -372,7 +372,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    console.log("[AI Image] Generating image with NANO-BANANA:", prompt);
+    console.log("[AI Image] Generating image with Gemini 3 Pro Image Preview:", prompt);
     console.log("[AI Image] API Key available:", !!process.env.GOOGLE_API_KEY);
     console.log("[AI Image] API Key length:", process.env.GOOGLE_API_KEY?.length);
 
@@ -478,9 +478,9 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     console.log(`[AI Image] Final prompt:`, finalPrompt);
     console.log(`[AI Image] Final parts array has ${parts.length} parts (${referenceImages.length} images + 1 text prompt)`);
 
-    // Call NANO-BANANA API
+    // Call Gemini 3 Pro Image Preview API
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       {
         method: 'POST',
         headers: {
@@ -501,7 +501,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[AI Image] NANO-BANANA API error:", errorText);
+      console.error("[AI Image] Gemini 3 Pro Image Preview API error:", errorText);
 
       // Try to parse error as JSON for better error handling
       let errorData;
@@ -630,7 +630,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
   }
 });
 
-// POST /api/ai/generate-meme - Generate meme with NANO-BANANA
+// POST /api/ai/generate-meme - Generate meme with Gemini 3 Pro Image Preview
 ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (c) => {
   const { prompt, userId, chatId, referenceImageUrl } = c.req.valid("json");
 
@@ -666,7 +666,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    console.log("[AI Meme] Generating meme with NANO-BANANA:", prompt);
+    console.log("[AI Meme] Generating meme with Gemini 3 Pro Image Preview:", prompt);
 
     // Load reference image if provided
     let referenceImageBase64: string | undefined;
@@ -733,8 +733,8 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
 
     // Enhance the prompt for meme generation
     const memePrompt = referenceImageBase64 
-      ? `IMPORTANT: Use the provided image as the EXACT BASE. Keep this image completely intact and recognizable. ${prompt}. Add ONLY meme-style text overlays in bold impact font style on top of this existing image to make it funny and meme-like. DO NOT change or regenerate the base image - only add text to it.`
-      : `Create a funny meme image with bold text overlay. ${prompt}. Make it humorous and internet meme style with impact font text.`;
+      ? `Generate a meme by incorporating this reference image into a recent, well-known meme template. The goal is to be incredibly relevant to the provided prompt: "${prompt}", and be both funny and poignant. Use the reference image as a key element within the meme template, blending it seamlessly into the format.`
+      : `Generate a meme using a recent, well-known template that fits this prompt: "${prompt}". The goal of the meme should be to be incredibly relevant to the prompt and be both funny and poignant. Use your own words on the template.`;
 
     // Build parts array with optional reference image
     const parts: any[] = [];
@@ -759,9 +759,9 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     console.log(`[AI Meme] Final parts array has ${parts.length} parts`);
     console.log(`[AI Meme] Meme prompt: ${memePrompt}`);
 
-    // Call NANO-BANANA API with meme-specific prompt
+    // Call Gemini 3 Pro Image Preview API with meme-specific prompt
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       {
         method: 'POST',
         headers: {
@@ -782,7 +782,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[AI Meme] NANO-BANANA API error:", errorText);
+      console.error("[AI Meme] Gemini 3 Pro Image Preview API error:", errorText);
 
       // Try to parse error as JSON for better error handling
       let errorData;
@@ -996,9 +996,9 @@ ai.post("/generate-group-avatar", async (c) => {
 
     console.log("[AI Avatar] Using prompt:", prompt.substring(0, 100) + "...");
 
-    // Call NANO-BANANA API to generate avatar
+    // Call Gemini 3 Pro Image Preview API to generate avatar
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       {
         method: 'POST',
         headers: {
@@ -1019,7 +1019,7 @@ ai.post("/generate-group-avatar", async (c) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[AI Avatar] NANO-BANANA API error:", errorText);
+      console.error("[AI Avatar] Gemini 3 Pro Image Preview API error:", errorText);
 
       // Try to parse error as JSON for better error handling
       let errorData;
