@@ -5,7 +5,6 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
@@ -26,7 +25,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import Reanimated, { FadeInUp, FadeOut, Layout } from "react-native-reanimated";
+import Reanimated, { FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS } from "react-native-reanimated";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -1480,7 +1480,6 @@ const ChatScreen = () => {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [lastKnownLength, setLastKnownLength] = useState(0);
   const [messageText, setMessageText] = useState("");
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -1549,6 +1548,44 @@ const ChatScreen = () => {
   // Event button animation state
   const [eventButtonScale] = useState(new Animated.Value(1));
   const [eventButtonRotate] = useState(new Animated.Value(0));
+
+  // Keyboard animation hooks - must be called early and consistently
+  const keyboard = useAnimatedKeyboard();
+  
+  // Animated style for the entire input container wrapper - moves with keyboard
+  const inputWrapperAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const bottomPadding = Math.max(insets.bottom, 20);
+    return {
+      transform: [
+        {
+          translateY: keyboard.height.value > 0 ? -keyboard.height.value : 0,
+        },
+      ],
+      marginBottom: keyboard.height.value > 0 ? 0 : bottomPadding,
+    };
+  });
+  
+  // Animated style for the ScrollView content
+  const inputContainerAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      paddingBottom: keyboard.height.value > 0 ? 8 : 16,
+    };
+  });
+  
+  // Animated style for FlatList to push content up when keyboard opens
+  // Note: List is inverted, so paddingTop affects visual BOTTOM (where the list starts)
+  const chatListAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const inputContainerHeight = 110; // Height of input bar + padding
+    const bottomSpacing = insets.bottom; 
+    
+    return {
+      // Always add padding for the input bar, plus keyboard when open
+      paddingTop: keyboard.height.value + inputContainerHeight + (keyboard.height.value > 0 ? 0 : bottomSpacing),
+    };
+  });
 
   // Fetch chat details (includes members)
   const { data: chat } = useQuery<GetChatResponse>({
@@ -2066,9 +2103,14 @@ const ChatScreen = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", "Failed to send message. Please try again.");
     },
-    onSuccess: () => {
-      // Refetch to get the real message from the server (replaces optimistic update)
-      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+    onSuccess: (newMessage) => {
+      // Smoothly replace optimistic message with real one from server
+      const previousMessages = queryClient.getQueryData<Message[]>(["messages", chatId]);
+      if (previousMessages) {
+        // Remove optimistic message and add real one
+        const withoutOptimistic = previousMessages.filter(m => !m.id.startsWith('optimistic-'));
+        queryClient.setQueryData<Message[]>(["messages", chatId], [...withoutOptimistic, newMessage]);
+      }
       
       // Clear state (these may have already been cleared for text messages, but need to be cleared for image/voice)
       setMessageText("");
@@ -3761,35 +3803,21 @@ const ChatScreen = () => {
     }
   }, [catchUpError]);
 
-  useEffect(() => {
-    // Listen for keyboard events with improved timing
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-        // Auto-scroll disabled per user request ("weird auto-scrolling")
-        /*
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            scrollToBottom(true);
-          }, 100);
-        });
-        */
+  // Removed keyboard listeners - now using react-native-keyboard-controller for native-synchronized animations
+  
+  // Scroll to bottom when keyboard opens to show most recent messages
+  const lastKeyboardHeight = useRef(0);
+  useAnimatedReaction(
+    () => keyboard.height.value,
+    (currentHeight, previousHeight) => {
+      // Keyboard just opened (went from 0 to positive)
+      if (previousHeight === 0 && currentHeight > 0) {
+        runOnJS(scrollToBottom)(false);
       }
-    );
-    const keyboardWillHide = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => {
-        // Immediately update keyboard height for instant animation
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
-  }, []);
+      lastKeyboardHeight.current = currentHeight;
+    },
+    []
+  );
 
   const handleInputContentSizeChange = useCallback(
     (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
@@ -4788,19 +4816,21 @@ const ChatScreen = () => {
         onPress={() => Keyboard.dismiss()}
         accessible={false}
       >
-        <FlatList
+        <Reanimated.FlatList
           ref={flatListRef}
           data={displayData}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           inverted={true}
           style={{ flex: 1 }}
-          contentContainerStyle={{
-            // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
-            paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
-            paddingHorizontal: 16,
-            paddingTop: 0
-          }}
+          contentContainerStyle={[
+            {
+              // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
+              paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
+              paddingHorizontal: 16,
+            },
+            chatListAnimatedStyle,
+          ]}
           keyboardShouldPersistTaps="always"
           onScrollBeginDrag={() => Keyboard.dismiss()}
           initialNumToRender={20}
@@ -4974,22 +5004,32 @@ const ChatScreen = () => {
       </Pressable>
 
       {/* Input Bar Area - Fixed at Bottom */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-        enabled={true}
-      >
+      <Reanimated.View style={[{ width: "100%" }, inputWrapperAnimatedStyle]}>
+        {/* Background gradient that extends full height */}
+        <LinearGradient
+          colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0.98)", "rgba(0, 0, 0, 1)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+          pointerEvents="none"
+        />
+        
         {/* Mention Picker - positioned above input */}
         {(() => {
           console.log('[ChatScreen] Rendering MentionPicker check:', {
             showMentionPicker,
             chatMembersCount: chatMembers.length,
             mentionSearch,
-            keyboardHeight,
-            activeInput: activeInput.current, // Check ref value
+            activeInput: activeInput, // Check state value
             editingMessage: !!editingMessage,
           });
-          return showMentionPicker && activeInput.current === "main";
+          return showMentionPicker && activeInput === "main";
         })() && (
           <View
             style={{
@@ -5013,30 +5053,19 @@ const ChatScreen = () => {
           </View>
         )}
 
-        <ScrollView
+        <Reanimated.ScrollView
           style={{ width: "100%" }}
-          contentContainerStyle={{
-            paddingBottom: keyboardHeight > 0 ? 8 : insets.bottom + 16,
-            paddingTop: 16,
-            paddingHorizontal: 16,
-          }}
+          contentContainerStyle={[
+            {
+              paddingTop: 16,
+              paddingHorizontal: 16,
+            },
+            inputContainerAnimatedStyle,
+          ]}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
           scrollEnabled={false}
         >
-            <LinearGradient
-              colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0.98)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-              }}
-              pointerEvents="none"
-            />
             
             {/* Smart Replies */}
             {smartReplies.length > 0 && !messageText && selectedImages.length === 0 && !replyToMessage && (
@@ -5239,7 +5268,7 @@ const ChatScreen = () => {
                 onCancel={() => setIsRecordingVoice(false)}
               />
             ) : (
-              <View className="flex-row items-end gap-3">
+              <View className="flex-row items-end gap-3" style={{ paddingBottom: 12 }}>
               {/* Attachments menu button */}
               <Pressable
                 onPress={() => {
@@ -5590,8 +5619,8 @@ const ChatScreen = () => {
                 </Pressable>
               </View>
             )}
-          </ScrollView>
-      </KeyboardAvoidingView>
+          </Reanimated.ScrollView>
+      </Reanimated.View>
 
       {/* Image Viewer Modal */}
         {viewerImage && (
@@ -5653,7 +5682,7 @@ const ChatScreen = () => {
         {/* Edit Message Modal */}
         <Modal visible={!!editingMessage} transparent animationType="slide" onRequestClose={() => setEditingMessage(null)}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior="padding"
             style={{ flex: 1 }}
           >
             <Pressable
@@ -5702,7 +5731,7 @@ const ChatScreen = () => {
                   </View>
 
                   {/* Mention Picker for Edit Mode */}
-                  {showMentionPicker && activeInput.current === "edit" && (
+                  {showMentionPicker && activeInput === "edit" && (
                     <View
                       style={{
                         marginBottom: 12,
