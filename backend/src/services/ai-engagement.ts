@@ -126,9 +126,9 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
     // Get AI name from AI friend (not chat)
     const aiName = aiFriend.name || "AI Friend";
 
-    // Extract unique participant names (exclude AI name)
+    // Extract unique participant names (exclude AI name and check for null user)
     const uniqueParticipants = Array.from(
-      new Set(messagesInOrder.map((msg) => msg.user.name).filter((name) => name !== aiName && name !== "AI Friend"))
+      new Set(messagesInOrder.map((msg) => msg.user?.name).filter((name) => name && name !== aiName && name !== "AI Friend"))
     );
     const participantList = uniqueParticipants.join(", ");
 
@@ -156,16 +156,17 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
     // Format recent conversation context
     const recentContextText = lastFiveMessages
       .map((msg) => {
+        const userName = msg.user?.name || "Unknown";
         const timestamp = new Date(msg.createdAt).toLocaleString();
         const timeAgo = Math.floor((currentTime.getTime() - new Date(msg.createdAt).getTime()) / 1000);
         const timeDesc = timeAgo < 60 ? "just now" : timeAgo < 300 ? "a few minutes ago" : "earlier";
 
         if (msg.messageType === "image" && msg.imageDescription) {
-          return `${msg.user.name} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}`;
+          return `${userName} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}`;
         } else if (msg.messageType === "image") {
-          return `${msg.user.name} (${timeDesc}): [shared an image]${msg.content ? ` "${msg.content}"` : ""}`;
+          return `${userName} (${timeDesc}): [shared an image]${msg.content ? ` "${msg.content}"` : ""}`;
         }
-        return `${msg.user.name} (${timeDesc}): "${msg.content}"`;
+        return `${userName} (${timeDesc}): "${msg.content}"`;
       })
       .join("\n");
 
@@ -173,7 +174,7 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
     const earlierContext = recentMessages.slice(0, -5);
     const earlierContextText = earlierContext.length > 0
       ? earlierContext
-          .map((msg) => `${msg.user.name}: "${msg.content}"`)
+          .map((msg) => `${msg.user?.name || "Unknown"}: "${msg.content}"`)
           .join("\n")
       : "";
 

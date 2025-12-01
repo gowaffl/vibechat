@@ -2020,8 +2020,57 @@ const ChatScreen = () => {
         replyToId: data.replyToId,
         mentionedUserIds: data.mentionedUserIds,
       }),
+    onMutate: async (newMessage) => {
+      // Cancel any outgoing refetches to prevent them from overwriting our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["messages", chatId] });
+
+      // Snapshot the previous messages
+      const previousMessages = queryClient.getQueryData<Message[]>(["messages", chatId]);
+
+      // Optimistically update to the new value
+      if (previousMessages && user) {
+        const optimisticMessage: Message = {
+          id: `optimistic-${Date.now()}`, // Temporary ID
+          content: newMessage.content || "",
+          messageType: newMessage.messageType,
+          imageUrl: newMessage.imageUrl,
+          voiceUrl: newMessage.voiceUrl,
+          voiceDuration: newMessage.voiceDuration,
+          userId: user.id,
+          chatId: chatId,
+          createdAt: new Date().toISOString(),
+          isUnsent: false,
+          user: user,
+          reactions: [],
+          replyTo: newMessage.replyToId ? previousMessages.find(m => m.id === newMessage.replyToId) : undefined,
+          mentions: newMessage.mentionedUserIds?.map(id => ({ userId: id })) || [],
+          thread: null,
+          bookmarks: [],
+        };
+
+        queryClient.setQueryData<Message[]>(
+          ["messages", chatId],
+          [...previousMessages, optimisticMessage]
+        );
+      }
+
+      // Return context with the previous messages for rollback
+      return { previousMessages };
+    },
+    onError: (err, newMessage, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousMessages) {
+        queryClient.setQueryData(["messages", chatId], context.previousMessages);
+      }
+      console.error("Error sending message:", err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", "Failed to send message. Please try again.");
+    },
     onSuccess: () => {
+      // Refetch to get the real message from the server (replaces optimistic update)
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+      
+      // Clear state (these may have already been cleared for text messages, but need to be cleared for image/voice)
       setMessageText("");
       setSelectedImages([]);
       setReplyToMessage(null);
@@ -2048,6 +2097,10 @@ const ChatScreen = () => {
         }, 400);
       });
       */
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure cache is correct
+      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
     },
   });
 
@@ -2861,22 +2914,25 @@ const ChatScreen = () => {
         // This is a user-initiated command, and the backend lock system will
         // prevent any interference with ongoing AI responses.
 
-        // First send the user's message
-        console.log('[ChatScreen] Sending user message...');
-        await sendMessageMutation.mutateAsync({
-          content: trimmedMessage,
-          messageType: "text",
-          replyToId: replyToMessage?.id,
-          mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : undefined,
-        });
-        console.log('[ChatScreen] User message sent successfully');
-
-        // Clear input and reply state
+        // Clear input immediately for instant feedback
+        const currentReplyTo = replyToMessage;
+        const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
         setMessageText("");
         setReplyToMessage(null);
         setMentionedUserIds([]);
+        setInputHeight(MIN_INPUT_HEIGHT);
 
-        // Call AI with the specific AI friend
+        // Send the user's message (optimistic update will show it immediately)
+        console.log('[ChatScreen] Sending user message...');
+        sendMessageMutation.mutate({
+          content: trimmedMessage,
+          messageType: "text",
+          replyToId: currentReplyTo?.id,
+          mentionedUserIds: currentMentions,
+        });
+        console.log('[ChatScreen] User message mutation called');
+
+        // Call AI with the specific AI friend (don't wait for user message to complete)
         console.log('[ChatScreen] Calling AI chat mutation with aiFriendId:', mentionedAIFriend.id);
         aiChatMutation.mutate({
           userId: user.id,
@@ -2895,11 +2951,20 @@ const ChatScreen = () => {
       // Regular message
       console.log('[ChatScreen] ❌ No AI friend mention detected, sending regular message');
       console.log('[ChatScreen] This was NOT detected as an AI mention');
+      
+      // Clear input immediately for instant feedback
+      const currentReplyTo = replyToMessage;
+      const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
+      setMessageText("");
+      setReplyToMessage(null);
+      setMentionedUserIds([]);
+      setInputHeight(MIN_INPUT_HEIGHT);
+      
       sendMessageMutation.mutate({
         content: trimmedMessage,
         messageType: "text",
-        replyToId: replyToMessage?.id,
-        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : undefined,
+        replyToId: currentReplyTo?.id,
+        mentionedUserIds: currentMentions,
       });
     }
   };
