@@ -476,7 +476,7 @@ messages.patch("/:id/description", zValidator("json", updateMessageDescriptionRe
       imageUrl: updatedMessage.imageUrl,
       imageDescription: updatedMessage.imageDescription,
       userId: updatedMessage.userId,
-      createdAt: new Date(updatedMessage.createdAt).toISOString(),
+      createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
       user: {
         id: user.id,
         name: user.name,
@@ -610,7 +610,7 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
       editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
       isUnsent: updatedMessage.isUnsent,
       editHistory: updatedMessage.editHistory,
-      createdAt: new Date(updatedMessage.createdAt).toISOString(),
+      createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
       user: user ? {
         id: user.id,
         name: user.name,
@@ -772,7 +772,7 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
       editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
       isUnsent: updatedMessage.isUnsent,
       editHistory: updatedMessage.editHistory,
-      createdAt: new Date(updatedMessage.createdAt).toISOString(),
+      createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
       user: user ? {
         id: user.id,
         name: user.name,

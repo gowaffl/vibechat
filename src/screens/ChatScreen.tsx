@@ -26,7 +26,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp } from "lucide-react-native";
+import Reanimated, { FadeInUp, FadeOut, Layout } from "react-native-reanimated";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -37,7 +38,9 @@ import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Markdown from "react-native-markdown-display";
-import { api, BACKEND_URL } from "@/lib/api";
+import { api } from "@/lib/api";
+import { BACKEND_URL } from "@/config";
+import { authClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
@@ -65,6 +68,7 @@ import { useCatchUp } from "@/hooks/useCatchUp";
 import { useEvents } from "@/hooks/useEvents";
 import { useReactor } from "@/hooks/useReactor";
 import { useThreads, useThreadMessages } from "@/hooks/useThreads";
+import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 
@@ -1430,7 +1434,7 @@ const ReactionDetailsModal = ({
 };
 
 const MIN_INPUT_HEIGHT = 44;
-const MAX_INPUT_HEIGHT = 140;
+const MAX_INPUT_HEIGHT = 120;
 
 const ChatScreen = () => {
   const insets = useSafeAreaInsets();
@@ -1448,6 +1452,9 @@ const ChatScreen = () => {
   const textInputRef = useRef<TextInput>(null);
   const isInputFocused = useRef(false);
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
+  const isAtBottomRef = useRef(true); // Tracks if user is at bottom of list
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [lastKnownLength, setLastKnownLength] = useState(0);
   const [messageText, setMessageText] = useState("");
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -1473,6 +1480,8 @@ const ChatScreen = () => {
   } | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editText, setEditText] = useState("");
+  const [activeInput, setActiveInput] = useState<"main" | "edit">("main");
+  const [catchUpCount, setCatchUpCount] = useState(0);
   const editModalDragY = useRef(new Animated.Value(0)).current;
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
@@ -1557,19 +1566,21 @@ const ChatScreen = () => {
     enabled: !!user?.id && !!chatId,
   });
 
-  // Fetch unread counts for this chat
-  const { data: unreadCounts = [] } = useQuery<UnreadCount[]>({
-    queryKey: ["unread-counts", user?.id],
-    queryFn: () => api.get(`/api/chats/unread-counts?userId=${user?.id}`),
-    enabled: !!user?.id,
-    refetchInterval: 3000, // Poll every 3 seconds
-  });
+  // Fetch unread counts for this chat using shared hook
+  const { data: unreadCounts = [] } = useUnreadCounts(user?.id);
 
   // Get unread count for the current chat
   const currentChatUnreadCount = useMemo(() => {
     const chatUnread = unreadCounts.find((uc) => uc.chatId === chatId);
     return chatUnread?.unreadCount || 0;
   }, [unreadCounts, chatId]);
+
+  // Persist catch-up button if unread count was high
+  useEffect(() => {
+    if (currentChatUnreadCount >= 5 && !catchUpDismissed) {
+      setCatchUpCount(prev => Math.max(prev, currentChatUnreadCount));
+    }
+  }, [currentChatUnreadCount, catchUpDismissed]);
 
   // Fetch bookmarks for this chat
   const { data: bookmarks = [] } = useQuery({
@@ -1592,6 +1603,11 @@ const ChatScreen = () => {
   } = useReactor(chatId || "", user?.id || "");
   const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
   const { data: threadMessages, isLoading: isLoadingThreadMessages, error: threadMessagesError } = useThreadMessages(currentThreadId, user?.id || "");
+
+  // Define active messages based on thread view or main chat
+  const activeMessages = useMemo(() => {
+    return currentThreadId && threadMessages !== undefined ? threadMessages : messages;
+  }, [currentThreadId, threadMessages, messages]);
 
   // Sync reactor processing state with AI typing indicator
   const wasRemixingRef = React.useRef(false);
@@ -1716,12 +1732,11 @@ const ChatScreen = () => {
     toggleBookmarkMutation.mutate(messageId);
   }, [toggleBookmarkMutation]);
 
-  // Helper function to scroll to the very bottom with extra padding to show full message
+  // Helper function to scroll to the very bottom (index 0 in inverted list)
   const scrollToBottom = useCallback((animated: boolean = true) => {
     if (flatListRef.current) {
-      // Use scrollToOffset with a very large offset to ensure we scroll past everything
       flatListRef.current.scrollToOffset({
-        offset: 999999,
+        offset: 0,
         animated: animated,
       });
     }
@@ -1729,14 +1744,26 @@ const ChatScreen = () => {
 
   // Scroll to message handler
   const scrollToMessage = useCallback((messageId: string) => {
-    const messageIndex = messages.findIndex(msg => msg.id === messageId);
+    if (!activeMessages) return;
     
-    if (messageIndex === -1) {
-      console.log(`[ScrollToMessage] Message ${messageId} not found in messages array`);
+    const originalIndex = activeMessages.findIndex(msg => msg.id === messageId);
+    
+    if (originalIndex === -1) {
+      console.log(`[ScrollToMessage] Message ${messageId} not found in active messages`);
       return;
     }
 
-    console.log(`[ScrollToMessage] Found message ${messageId} at index ${messageIndex} of ${messages.length}`);
+    // Calculate inverted index for displayData
+    // activeMessages is Old -> New
+    // displayData is Typing -> New -> Old
+    // So index is typingOffset + (activeMessages.length - 1 - originalIndex)
+    let typingOffset = 0;
+    if (isAITyping && !currentThreadId) typingOffset++;
+    if (typingUsers.length > 0 && !currentThreadId) typingOffset++;
+
+    const invertedIndex = typingOffset + (activeMessages.length - 1 - originalIndex);
+
+    console.log(`[ScrollToMessage] Found message ${messageId} at original index ${originalIndex}, inverted index ${invertedIndex}`);
     
     if (!flatListRef.current) {
       console.log(`[ScrollToMessage] FlatList ref not available`);
@@ -1744,7 +1771,6 @@ const ChatScreen = () => {
     }
     
     // Set flag to prevent auto-scroll from interfering
-    // This will stay disabled until user sends a new message
     isManualScrolling.current = true;
     console.log(`[ScrollToMessage] Disabled auto-scroll (will re-enable when new message sent)`);
     
@@ -1759,19 +1785,19 @@ const ChatScreen = () => {
     
     // Delay to allow modal to close
     setTimeout(() => {
-      console.log(`[ScrollToMessage] Attempting scrollToIndex to ${messageIndex}`);
+      console.log(`[ScrollToMessage] Attempting scrollToIndex to ${invertedIndex}`);
       
       try {
         // Try to scroll to the index
         flatListRef.current?.scrollToIndex({
-          index: messageIndex,
+          index: invertedIndex,
           animated: true,
           viewPosition: 0.5, // Center the message
         });
       } catch (error) {
         console.log(`[ScrollToMessage] scrollToIndex failed:`, error);
         // Fallback: scroll to approximate position
-        const estimatedOffset = messageIndex * 100; // Rough estimate
+        const estimatedOffset = invertedIndex * 100; 
         flatListRef.current?.scrollToOffset({
           offset: estimatedOffset,
           animated: true,
@@ -1783,7 +1809,7 @@ const ChatScreen = () => {
         setHighlightedMessageId(null);
       }, 2000);
     }, 300);
-  }, [messages]);
+  }, [activeMessages, isAITyping, typingUsers, currentThreadId]);
 
   // Create a Set of bookmarked message IDs for quick lookup
   const bookmarkedMessageIds = useMemo(
@@ -2415,30 +2441,42 @@ const ChatScreen = () => {
     try {
       // Use the first selected image for regular image messages
       const imageUri = selectedImages[0];
-      const uriParts = imageUri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
+      const filename = imageUri.split('/').pop() || "image.jpg";
 
-      // Upload image
-      const formData = new FormData();
-      formData.append("image", {
-        uri: imageUri,
-        type: `image/${fileType}`,
-        name: `chat-image.${fileType}`,
-      } as any);
+      console.log("[ChatScreen] Uploading image:", imageUri);
 
-      const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`, {
-        method: "POST",
-        body: formData,
-        // Don't set Content-Type header - let fetch set it automatically with boundary
-      });
+      // Get auth token
+      const token = await authClient.getToken();
 
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error("Image upload failed:", uploadResponse.status, errorText);
-        throw new Error(`Upload failed: ${uploadResponse.status}`);
+      // Use FileSystem.uploadAsync for proper file upload in React Native
+      const uploadResult = await FileSystem.uploadAsync(
+        `${BACKEND_URL}/api/upload/image`,
+        imageUri,
+        {
+          httpMethod: "POST",
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: "image",
+          headers: token ? {
+            Authorization: `Bearer ${token}`,
+          } : undefined,
+        }
+      );
+
+      console.log("[ChatScreen] Image upload result status:", uploadResult.status);
+
+      if (uploadResult.status !== 200) {
+        console.error("Image upload failed:", uploadResult.status, uploadResult.body);
+        throw new Error(`Upload failed: ${uploadResult.status}`);
       }
 
-      const uploadData = await uploadResponse.json();
+      const uploadData: UploadImageResponse = JSON.parse(uploadResult.body);
+      
+      if (!uploadData.success || !uploadData.url) {
+        console.error("Invalid upload response:", uploadData);
+        throw new Error("Invalid upload response");
+      }
+
+      console.log("[ChatScreen] Image uploaded successfully:", uploadData.url);
 
       // Send message with image URL
       await sendMessageMutation.mutateAsync({
@@ -2465,15 +2503,21 @@ const ChatScreen = () => {
     try {
       console.log("[ChatScreen] Uploading voice message from:", voiceUri);
 
+      // Get auth token
+      const token = await authClient.getToken();
+
       // Upload voice file using FileSystem.uploadAsync for better React Native compatibility
       // Don't specify mimeType - let FileSystem detect it from the file
       const uploadResult = await FileSystem.uploadAsync(
-        `${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`,
+        `${BACKEND_URL}/api/upload/image`,
         voiceUri,
         {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: "image",
+          headers: token ? {
+            Authorization: `Bearer ${token}`,
+          } : undefined,
         }
       );
 
@@ -2547,28 +2591,24 @@ const ChatScreen = () => {
             // Upload all selected images
             for (const imageUri of selectedImages) {
               console.log("[ChatScreen /image] Uploading image:", imageUri);
-              const uriParts = imageUri.split('.');
-              const fileType = uriParts[uriParts.length - 1];
+              
+              const uploadResult = await FileSystem.uploadAsync(
+                `${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`,
+                imageUri,
+                {
+                  httpMethod: "POST",
+                  uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                  fieldName: "image",
+                }
+              );
 
-              const formData = new FormData();
-              formData.append("image", {
-                uri: imageUri,
-                type: `image/${fileType}`,
-                name: `reference-image.${fileType}`,
-              } as any);
+              console.log("[ChatScreen /image] Upload response status:", uploadResult.status);
 
-              const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`, {
-                method: "POST",
-                body: formData,
-              });
-
-              console.log("[ChatScreen /image] Upload response status:", uploadResponse.status);
-
-              if (!uploadResponse.ok) {
-                throw new Error(`Upload failed: ${uploadResponse.status}`);
+              if (uploadResult.status !== 200) {
+                throw new Error(`Upload failed: ${uploadResult.status}`);
               }
 
-              const uploadData = await uploadResponse.json();
+              const uploadData: UploadImageResponse = JSON.parse(uploadResult.body);
               console.log("[ChatScreen /image] Upload successful! URL:", uploadData.url);
               uploadedUrls.push(uploadData.url);
             }
@@ -3397,6 +3437,7 @@ const ChatScreen = () => {
 
   // Handler for typing indicator
   const handleTyping = (text: string) => {
+    setActiveInput("main");
     console.log('[Mentions] handleTyping called with text:', text);
     setMessageText(text);
     
@@ -3469,70 +3510,111 @@ const ChatScreen = () => {
       }).catch((err) => console.error("Error clearing typing indicator:", err));
     }
   };
+
+  // Handler for editing text typing
+  const handleEditTyping = (text: string) => {
+    setActiveInput("edit");
+    setEditText(text);
+    
+    // Detect @ mention
+    const cursorPosition = text.length; 
+    const textBeforeCursor = text.substring(0, cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+    
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      
+      if (textAfterAt.includes(" ")) {
+        setShowMentionPicker(false);
+        setMentionSearch("");
+        setMentionStartIndex(-1);
+      } else {
+        setShowMentionPicker(true);
+        setMentionSearch(textAfterAt);
+        setMentionStartIndex(lastAtIndex);
+      }
+    } else {
+      setShowMentionPicker(false);
+      setMentionSearch("");
+      setMentionStartIndex(-1);
+    }
+  };
   
   // Handle mention selection
   const handleSelectMention = (selectedUser: User) => {
     if (mentionStartIndex === -1) return;
     
-    const before = messageText.substring(0, mentionStartIndex);
-    const after = messageText.substring(mentionStartIndex + 1 + mentionSearch.length);
+    const currentText = activeInput === "main" ? messageText : editText;
+    const before = currentText.substring(0, mentionStartIndex);
+    const after = currentText.substring(mentionStartIndex + 1 + mentionSearch.length);
     const newText = `${before}@${selectedUser.name} ${after}`;
     
-    setMessageText(newText);
+    if (activeInput === "main") {
+      setMessageText(newText);
+      // Track mentioned user
+      if (!mentionedUserIds.includes(selectedUser.id)) {
+        setMentionedUserIds([...mentionedUserIds, selectedUser.id]);
+      }
+      // Focus back on input
+      textInputRef.current?.focus();
+    } else {
+      setEditText(newText);
+      // No focus management needed for edit modal usually as it stays open
+    }
+    
     setShowMentionPicker(false);
     setMentionSearch("");
     setMentionStartIndex(-1);
-    
-    // Track mentioned user
-    if (!mentionedUserIds.includes(selectedUser.id)) {
-      setMentionedUserIds([...mentionedUserIds, selectedUser.id]);
-    }
-    
-    // Focus back on input
-    textInputRef.current?.focus();
   };
 
   // Handle thread tag selection
   const handleSelectThread = (selectedThread: Thread) => {
     if (mentionStartIndex === -1) return;
     
-    const before = messageText.substring(0, mentionStartIndex);
-    const after = messageText.substring(mentionStartIndex + 1 + mentionSearch.length);
+    const currentText = activeInput === "main" ? messageText : editText;
+    const before = currentText.substring(0, mentionStartIndex);
+    const after = currentText.substring(mentionStartIndex + 1 + mentionSearch.length);
     const newText = `${before}@${selectedThread.name.toLowerCase()} ${after}`;
     
-    setMessageText(newText);
+    if (activeInput === "main") {
+      setMessageText(newText);
+      textInputRef.current?.focus();
+    } else {
+      setEditText(newText);
+    }
+    
     setShowMentionPicker(false);
     setMentionSearch("");
     setMentionStartIndex(-1);
     
     console.log('[ChatScreen] Thread tag inserted:', `@${selectedThread.name.toLowerCase()}`);
-    
-    // Focus back on input
-    textInputRef.current?.focus();
   };
 
   // Handle AI friend mention
   const handleSelectAI = (aiFriend: AIFriend) => {
     if (mentionStartIndex === -1) return;
     
-    const before = messageText.substring(0, mentionStartIndex);
-    const after = messageText.substring(mentionStartIndex + 1 + mentionSearch.length);
+    const currentText = activeInput === "main" ? messageText : editText;
+    const before = currentText.substring(0, mentionStartIndex);
+    const after = currentText.substring(mentionStartIndex + 1 + mentionSearch.length);
     const newText = `${before}@${aiFriend.name} ${after}`;
     
-    setMessageText(newText);
+    if (activeInput === "main") {
+      setMessageText(newText);
+      // Track the AI friend ID as a mentioned user (for UI purposes)
+      if (!mentionedUserIds.includes(aiFriend.id)) {
+        setMentionedUserIds([...mentionedUserIds, aiFriend.id]);
+      }
+      textInputRef.current?.focus();
+    } else {
+      setEditText(newText);
+    }
+    
     setShowMentionPicker(false);
     setMentionSearch("");
     setMentionStartIndex(-1);
     
-    // Track the AI friend ID as a mentioned user (for UI purposes)
-    if (!mentionedUserIds.includes(aiFriend.id)) {
-      setMentionedUserIds([...mentionedUserIds, aiFriend.id]);
-    }
-    
     console.log('[ChatScreen] AI friend mention inserted:', `@${aiFriend.name}`, '(ID:', aiFriend.id, ')');
-    
-    // Focus back on input
-    textInputRef.current?.focus();
   };
 
   // Clear typing indicator on unmount
@@ -3547,31 +3629,38 @@ const ChatScreen = () => {
     };
   }, [user?.id, chatId]);
 
-  // Auto-scroll to bottom when messages load or change
+  // Auto-scroll logic and New Message detection
   useEffect(() => {
-    if (messages && messages.length > 0 && !isManualScrolling.current) {
-      // Use requestAnimationFrame + delay to ensure FlatList has fully rendered
-      requestAnimationFrame(() => {
-        const timeoutId = setTimeout(() => {
-          if (!isManualScrolling.current) {
-            scrollToBottom(!isLoading);
-          }
-        }, 250);
-        return () => clearTimeout(timeoutId);
-      });
+    if (activeMessages && activeMessages.length > 0) {
+      const isNewMessage = activeMessages.length > lastKnownLength;
+      
+      if (isNewMessage) {
+        if (isAtBottomRef.current) {
+          // If at bottom, ensure we stay at bottom
+           requestAnimationFrame(() => {
+              scrollToBottom(true);
+           });
+        } else {
+          // If not at bottom, show "New Messages" button
+          setShowScrollToBottom(true);
+        }
+      } else if (lastKnownLength === 0) {
+         // Initial load
+         // Inverted list starts at bottom, but just in case
+         requestAnimationFrame(() => {
+            scrollToBottom(false);
+         });
+      }
+      
+      setLastKnownLength(activeMessages.length);
     }
-  }, [messages?.length, isLoading, scrollToBottom]);
+  }, [activeMessages, lastKnownLength, scrollToBottom]);
 
   // Auto-scroll when AI starts typing
   useEffect(() => {
-    if (isAITyping && !isManualScrolling.current) {
+    if (isAITyping && isAtBottomRef.current) {
       requestAnimationFrame(() => {
-        const timeoutId = setTimeout(() => {
-          if (!isManualScrolling.current) {
-            scrollToBottom(true);
-          }
-        }, 150);
-        return () => clearTimeout(timeoutId);
+        scrollToBottom(true);
       });
     }
   }, [isAITyping, scrollToBottom]);
@@ -4319,7 +4408,8 @@ const ChatScreen = () => {
     };
 
     return (
-      <View
+      <Reanimated.View
+        entering={FadeInUp.duration(300)}
         className={`mb-3 flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
         style={{
           paddingHorizontal: 4,
@@ -4479,7 +4569,7 @@ const ChatScreen = () => {
             )}
           </View>
         </View>
-      </View>
+      </Reanimated.View>
     );
   };
 
@@ -4491,10 +4581,6 @@ const ChatScreen = () => {
     );
   }
 
-  // Use filtered thread messages if a thread is selected, otherwise use all messages
-  // IMPORTANT: Even if threadMessages is empty array, show it (means no matching messages)
-  const activeMessages = currentThreadId && threadMessages !== undefined ? threadMessages : messages;
-  
   // Debug logging
   console.log('[ChatScreen] Thread filtering:', {
     currentThreadId,
@@ -4509,16 +4595,17 @@ const ChatScreen = () => {
   });
   
   // Combine messages with typing indicators
-  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
+  // Reverse messages for inverted list (Newest at index 0/Bottom)
+  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages].reverse();
 
   // Add AI typing indicator if AI is typing (only in main chat, not in threads)
   if (isAITyping && !currentThreadId) {
-    displayData = [...displayData, { id: 'typing-indicator-ai', isTyping: true as const }];
+    displayData.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
   }
 
   // Add user typing indicator if users are typing (only in main chat, not in threads)
   if (typingUsers.length > 0 && !currentThreadId) {
-    displayData = [...displayData, { id: 'typing-indicator-users', isUserTyping: true as const, typingUsers }];
+    displayData.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
   }
   
   // Get current thread info for display
@@ -4628,15 +4715,17 @@ const ChatScreen = () => {
           data={displayData}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
+          inverted={true}
           style={{ flex: 1 }}
           contentContainerStyle={{
-            paddingTop: insets.top + 95 + (threads ? 56 : 0) + 20,
+            // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
+            paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
             paddingHorizontal: 16,
-            paddingBottom: 60
+            paddingTop: 60
           }}
           keyboardShouldPersistTaps="always"
           onScrollBeginDrag={() => Keyboard.dismiss()}
-          initialNumToRender={50}
+          initialNumToRender={20}
           maxToRenderPerBatch={20}
           windowSize={21}
           removeClippedSubviews={false}
@@ -4660,40 +4749,6 @@ const ChatScreen = () => {
                 });
               }
             }, 100);
-          }}
-          onContentSizeChange={() => {
-            // Auto-scroll to bottom when content changes (new messages)
-            // Use requestAnimationFrame to ensure content is fully rendered
-            if (!isManualScrolling.current) {
-              requestAnimationFrame(() => {
-                setTimeout(() => {
-                  if (!isManualScrolling.current) {
-                    scrollToBottom(true);
-                  }
-                }, 100);
-              });
-              
-              // Second scroll attempt to ensure it works with keyboard
-              requestAnimationFrame(() => {
-                setTimeout(() => {
-                  if (!isManualScrolling.current) {
-                    scrollToBottom(true);
-                  }
-                }, 350);
-              });
-            }
-          }}
-          onLayout={() => {
-            // Auto-scroll to bottom on initial load
-            if (!isManualScrolling.current) {
-              requestAnimationFrame(() => {
-                setTimeout(() => {
-                  if (!isManualScrolling.current) {
-                    flatListRef.current?.scrollToEnd({ animated: false });
-                  }
-                }, 100);
-              });
-            }
           }}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center px-8" style={{ paddingVertical: 60 }}>
@@ -4842,8 +4897,8 @@ const ChatScreen = () => {
 
       {/* Input Bar Area - Fixed at Bottom */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         enabled={true}
       >
         {/* Mention Picker - positioned above input */}
@@ -5264,7 +5319,7 @@ const ChatScreen = () => {
                         />
                       </Animated.View>
                       
-                  <TextInput
+                    <TextInput
                     ref={textInputRef}
                     value={messageText}
                     onChangeText={handleTyping}
@@ -5279,9 +5334,10 @@ const ChatScreen = () => {
                       color: inputTextColor,
                       fontWeight: inputFontWeight,
                       textAlignVertical: "top",
+                      maxHeight: MAX_INPUT_HEIGHT,
                     }}
                     multiline={true}
-                    scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
+                    scrollEnabled={true}
                     maxLength={500}
                     onSubmitEditing={handleSend}
                     blurOnSubmit={false}
@@ -5565,7 +5621,7 @@ const ChatScreen = () => {
 
                 <TextInput
                   value={editText}
-                  onChangeText={setEditText}
+                  onChangeText={handleEditTyping}
                   multiline
                   autoFocus
                   style={{
@@ -5934,10 +5990,62 @@ const ChatScreen = () => {
           }}
         />
 
+        {/* New Messages Button */}
+        {showScrollToBottom && (
+          <View
+            style={{
+              position: "absolute",
+              bottom: 100 + insets.bottom, // Positioned above input
+              alignSelf: "center",
+              zIndex: 100,
+            }}
+          >
+            <Pressable
+              onPress={() => {
+                scrollToBottom(true);
+                setShowScrollToBottom(false);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.8 : 1,
+                transform: [{ scale: pressed ? 0.95 : 1 }],
+              })}
+            >
+              <BlurView
+                intensity={80}
+                tint="dark"
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: "rgba(52, 199, 89, 0.5)", // Green tint
+                  backgroundColor: "rgba(0, 0, 0, 0.3)",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  overflow: "hidden",
+                }}
+              >
+                 <LinearGradient
+                    colors={["rgba(52, 199, 89, 0.2)", "rgba(52, 199, 89, 0.05)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                  />
+                <Text style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>
+                  New Messages
+                </Text>
+                <ChevronDown size={16} color="#FFFFFF" />
+              </BlurView>
+            </Pressable>
+          </View>
+        )}
+
         {/* Smart Catch-Up Floating Button */}
         <CatchUpButton
-          unreadCount={currentChatUnreadCount}
-          isVisible={currentChatUnreadCount >= 5 && !showCatchUpModal && !catchUpDismissed}
+          unreadCount={catchUpCount > 0 ? catchUpCount : currentChatUnreadCount}
+          isVisible={(currentChatUnreadCount >= 5 || catchUpCount >= 5) && !showCatchUpModal && !catchUpDismissed}
           onPress={() => {
             // Just open the modal - user will select summary type inside
             setShowCatchUpModal(true);

@@ -11,6 +11,7 @@ import {
   Keyboard,
   Platform,
   PanResponder,
+  Modal,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -189,9 +190,11 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   ];
 
   return (
-    <View 
-      style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} 
-      pointerEvents={visible ? "auto" : "none"}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
     >
       {/* Backdrop */}
       <Animated.View
@@ -640,7 +643,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
           </LinearGradient>
         </BlurView>
       </Animated.View>
-    </View>
+    </Modal>
   );
 };
 

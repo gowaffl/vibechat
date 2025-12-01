@@ -9,23 +9,9 @@
 // This ensures fetch works correctly across different platforms (iOS, Android, Web)
 import { fetch } from "expo/fetch";
 
-// Import the authentication client to access user session cookies
+// Import backend URL from config
+import { BACKEND_URL } from "@/config";
 import { authClient } from "./authClient";
-
-/**
- * Backend URL Configuration
- *
- * The backend URL should be set in your .env file as EXPO_PUBLIC_API_URL.
- * If not set, it falls back to localhost for development.
- * 
- * Note: For physical devices, you must use your computer's local IP address
- * (e.g., http://192.168.1.x:3000) instead of localhost.
- */
-const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL || "http://localhost:3000";
-
-if (!process.env.EXPO_PUBLIC_API_URL && !process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL) {
-  console.warn("⚠️ Backend URL not set in env. using default:", BACKEND_URL);
-}
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 

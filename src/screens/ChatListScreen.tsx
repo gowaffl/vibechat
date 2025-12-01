@@ -25,6 +25,7 @@ import { useUser } from "@/contexts/UserContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { ChatWithMetadata, GetUserChatsResponse, UnreadCount } from "@/shared/contracts";
+import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
@@ -46,13 +47,8 @@ const ChatListScreen = () => {
     enabled: !!user?.id,
   });
 
-  // Fetch unread counts for all chats
-  const { data: unreadCounts = [] } = useQuery<UnreadCount[]>({
-    queryKey: ["unread-counts", user?.id],
-    queryFn: () => api.get(`/api/chats/unread-counts?userId=${user?.id}`),
-    enabled: !!user?.id,
-    refetchInterval: 3000, // Poll every 3 seconds
-  });
+  // Fetch unread counts for all chats using shared hook
+  const { data: unreadCounts = [], refetch: refetchUnread } = useUnreadCounts(user?.id);
 
   // Create a map of chatId -> unread count for quick lookup
   const unreadCountMap = React.useMemo(() => {

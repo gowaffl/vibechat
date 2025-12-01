@@ -369,6 +369,31 @@ async function processNewMessages(chatId: string): Promise<void> {
     // Get the last processed message ID for this chat
     const lastProcessed = lastProcessedMessageId.get(chatId);
 
+    // INITIALIZATION: If no last processed message (e.g. first run after server start),
+    // find the latest message and set it as the cursor. We only want to engage with NEW messages.
+    if (!lastProcessed) {
+      const { data: latestMsg } = await db
+        .from("message")
+        .select("id")
+        .eq("chatId", chatId)
+        .order("createdAt", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (latestMsg) {
+        console.log(`[AI Engagement] Initializing cursor for chat ${chatId} to message ${latestMsg.id}`);
+        lastProcessedMessageId.set(chatId, latestMsg.id);
+        // Don't process anything this tick, wait for NEXT message
+        return;
+      } else {
+        // Chat is empty, nothing to do until first message
+        // We can't set a cursor yet, but we also shouldn't query for "all messages"
+        // So we just return and wait
+        console.log(`[AI Engagement] Chat ${chatId} is empty, waiting for first message`);
+        return;
+      }
+    }
+
     // Fetch new messages since last processing
     let query = db
       .from("message")

@@ -11,11 +11,11 @@ export const triggerNavigationHaptic = () => {
 };
 
 export const triggerBackNavigationHaptic = () => {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 };
 
 export const triggerModalOpenHaptic = () => {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 };
 
 export const triggerModalCloseHaptic = () => {
@@ -27,8 +27,7 @@ export const triggerModalCloseHaptic = () => {
  */
 export const setupNavigationHaptics = (navigationRef: React.RefObject<NavigationContainerRef<any>>) => {
   return navigationRef.current?.addListener('state' as any, () => {
-    // Trigger light haptic on every navigation state change
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Trigger selection haptic (very soft) on every navigation state change
+    Haptics.selectionAsync();
   });
 };
-

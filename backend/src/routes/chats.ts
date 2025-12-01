@@ -1274,12 +1274,15 @@ chats.post("/:id/read-receipts", async (c) => {
     const body = await c.req.json();
     const { userId, messageIds } = body;
 
-    if (!userId || !messageIds) {
-      return c.json({ error: "userId and messageIds are required" }, 400);
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
     }
 
+    const token = c.req.header("Authorization")?.replace("Bearer ", "");
+    const client = token ? createUserClient(token) : db;
+
     // Verify user is a member of the chat
-    const { data: membership, error: membershipError } = await db
+    const { data: membership, error: membershipError } = await client
       .from("chat_member")
       .select("*")
       .eq("chatId", chatId)
@@ -1290,41 +1293,73 @@ chats.post("/:id/read-receipts", async (c) => {
       return c.json({ error: "User is not a member of this chat" }, 403);
     }
 
-    // Create read receipts for all messages that don't already have one
-    const readReceipts = await Promise.all(
-      messageIds.map(async (messageId: string) => {
-        // Check if read receipt already exists
-        const { data: existing } = await db
-          .from("read_receipt")
-          .select("id")
-          .eq("userId", userId)
-          .eq("messageId", messageId)
-          .single();
+    let idsToMark = messageIds;
 
-        if (existing) {
-          // Update existing
-          return db
-            .from("read_receipt")
-            .update({ readAt: new Date().toISOString() })
-            .eq("userId", userId)
-            .eq("messageId", messageId);
-        } else {
-          // Create new
-          return db
-            .from("read_receipt")
-            .insert({
-              userId,
-              chatId,
-              messageId,
-            });
-        }
-      })
-    );
+    // If no messageIds provided, mark ALL unread messages as read
+    if (!idsToMark || !Array.isArray(idsToMark)) {
+      // Get all messages in this chat (excluding current user and system messages)
+      const { data: messagesData } = await client
+        .from("message")
+        .select("id")
+        .eq("chatId", chatId)
+        .neq("userId", userId)
+        .neq("messageType", "system");
+
+      const messages = messagesData || [];
+      const allMessageIds = messages.map((m: any) => m.id);
+
+      if (allMessageIds.length === 0) {
+        return c.json({
+          success: true,
+          message: "No messages to mark as read",
+          markedCount: 0,
+        });
+      }
+
+      // Get existing read receipts
+      const { data: readReceiptsData } = await client
+        .from("read_receipt")
+        .select("messageId")
+        .eq("userId", userId)
+        .eq("chatId", chatId)
+        .in("messageId", allMessageIds);
+
+      const readReceipts = readReceiptsData || [];
+      const readMessageIdSet = new Set(readReceipts.map((r: any) => r.messageId));
+      
+      // Filter out already read messages
+      idsToMark = allMessageIds.filter((id: string) => !readMessageIdSet.has(id));
+    }
+
+    if (idsToMark.length === 0) {
+      return c.json({
+        success: true,
+        message: "All messages already read",
+        markedCount: 0,
+      });
+    }
+
+    // Create read receipts for the identified messages
+    const { error: insertError } = await client
+      .from("read_receipt")
+      .insert(
+        idsToMark.map((messageId: string) => ({
+          userId,
+          chatId,
+          messageId,
+          readAt: new Date().toISOString()
+        }))
+      );
+
+    if (insertError) {
+      console.error("[Chats] Error inserting read receipts:", insertError);
+      return c.json({ error: "Failed to mark messages as read" }, 500);
+    }
 
     return c.json({
       success: true,
       message: "Messages marked as read",
-      markedCount: readReceipts.length,
+      markedCount: idsToMark.length,
     });
   } catch (error) {
     console.error("[Chats] Error marking messages as read:", error);
