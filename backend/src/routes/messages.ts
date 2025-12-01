@@ -609,7 +609,7 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
       replyToId: updatedMessage.replyToId,
       editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
       isUnsent: updatedMessage.isUnsent,
-      editHistory: updatedMessage.editHistory,
+      editHistory: typeof updatedMessage.editHistory === 'object' ? JSON.stringify(updatedMessage.editHistory) : updatedMessage.editHistory,
       createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
       user: user ? {
         id: user.id,
@@ -771,7 +771,7 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
       replyToId: updatedMessage.replyToId,
       editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
       isUnsent: updatedMessage.isUnsent,
-      editHistory: updatedMessage.editHistory,
+      editHistory: typeof updatedMessage.editHistory === 'object' ? JSON.stringify(updatedMessage.editHistory) : updatedMessage.editHistory,
       createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
       user: user ? {
         id: user.id,

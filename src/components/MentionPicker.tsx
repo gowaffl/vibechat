@@ -155,7 +155,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                       style={{
                         fontSize: 11,
                         fontWeight: "600",
-                        color: "rgba(52, 199, 89, 0.8)",
+                        color: "rgba(20, 184, 166, 0.8)",
                         textTransform: "uppercase",
                         letterSpacing: 0.5,
                       }}
@@ -170,7 +170,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                         <View
                           style={{
                             height: 0.33,
-                            backgroundColor: "rgba(52, 199, 89, 0.15)",
+                            backgroundColor: "rgba(20, 184, 166, 0.15)",
                             marginLeft: 44,
                           }}
                         />
@@ -193,7 +193,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                           {/* AI Avatar with color indicator */}
                           <View style={{ marginRight: 12 }}>
                             <Image
-                              source={require("../../assets/image-1762790557.jpeg")}
+                              source={require("../../assets/vibechat logo main.png")}
                               style={{
                                 width: 32,
                                 height: 32,
@@ -210,7 +210,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                                 width: 14,
                                 height: 14,
                                 borderRadius: 7,
-                                backgroundColor: friend.color,
+                                backgroundColor: "#14B8A6",
                                 borderWidth: 2,
                                 borderColor: "rgba(28, 28, 30, 0.95)",
                               }}
@@ -222,7 +222,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                             style={{
                               fontSize: 15,
                               fontWeight: "600",
-                              color: friend.color,
+                              color: "#14B8A6",
                             }}
                             numberOfLines={1}
                           >

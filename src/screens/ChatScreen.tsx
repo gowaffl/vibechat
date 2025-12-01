@@ -27,7 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import Reanimated, { FadeInUp, FadeOut, Layout } from "react-native-reanimated";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -36,6 +36,7 @@ import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Markdown from "react-native-markdown-display";
 import { api } from "@/lib/api";
@@ -577,7 +578,7 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
 
 // AI Typing Indicator Component
 // Animated AI Typing Indicator with Sequential Dot Animation and Haptics
-const AITypingIndicator = ({ aiName = "AI Friend", aiColor = "#34C759" }: { aiName?: string; aiColor?: string }) => {
+const AITypingIndicator = ({ aiName = "AI Friend", aiColor = "#14B8A6" }: { aiName?: string; aiColor?: string }) => {
   const dot1Anim = useRef(new Animated.Value(0)).current;
   const dot2Anim = useRef(new Animated.Value(0)).current;
   const dot3Anim = useRef(new Animated.Value(0)).current;
@@ -658,7 +659,7 @@ const AITypingIndicator = ({ aiName = "AI Friend", aiColor = "#34C759" }: { aiNa
       {/* AI Profile Photo - VibeChat Icon */}
       <View className="mr-2" style={{ width: 32, height: 32 }}>
         <Image
-          source={require("../../assets/vibechat icon main.png")}
+          source={require("../../assets/vibechat logo main.png")}
           style={{ width: 32, height: 32, borderRadius: 16 }}
           resizeMode="cover"
         />
@@ -742,6 +743,7 @@ const MessageContextMenu = ({
   canUnsend,
   canDelete,
   onReactor,
+  onCopy,
 }: {
   visible: boolean;
   message: Message | null;
@@ -758,6 +760,7 @@ const MessageContextMenu = ({
   canUnsend: boolean;
   canDelete: boolean;
   onReactor?: (message: Message) => void;
+  onCopy: (message: Message) => void;
 }) => {
   if (!message) return null;
 
@@ -841,6 +844,27 @@ const MessageContextMenu = ({
               Reply
             </Text>
           </Pressable>
+
+          {message.messageType === "text" && message.content && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onCopy(message);
+                onClose();
+              }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                padding: 16,
+                borderRadius: 12,
+              }}
+            >
+              <Copy size={20} color="#FFFFFF" />
+              <Text style={{ color: "#FFFFFF", fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
+                Copy
+              </Text>
+            </Pressable>
+          )}
 
           <Pressable
             onPress={() => {
@@ -2891,6 +2915,15 @@ const ChatScreen = () => {
     setReplyToMessage(message);
   };
 
+  // Handler for copying message
+  const handleCopy = async (message: Message) => {
+    if (message.content) {
+      await Clipboard.setStringAsync(message.content);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Copied", "Message copied to clipboard");
+    }
+  };
+
   // Handler for reacting to message
   const handleReact = (message: Message) => {
     setReactionPickerMessage(message);
@@ -3874,7 +3907,7 @@ const ChatScreen = () => {
   });
 
   const inputTextColor = useMemo(() => 
-    isAIMessage ? "#34C759" : "#FFFFFF",
+    isAIMessage ? "#14B8A6" : "#FFFFFF",
     [isAIMessage]
   );
 
@@ -3884,7 +3917,7 @@ const ChatScreen = () => {
   );
 
   const inputContainerShadowColor = useMemo(() => 
-    isAIMessage ? "#34C759" : "#007AFF",
+    isAIMessage ? "#14B8A6" : "#007AFF",
     [isAIMessage]
   );
 
@@ -3928,7 +3961,7 @@ const ChatScreen = () => {
     if ('isTyping' in item && item.isTyping) {
       return <AITypingIndicator 
         aiName={typingAIFriend?.name || "AI Assistant"} 
-        aiColor={typingAIFriend?.color || "#34C759"} 
+        aiColor="#14B8A6"
       />;
     }
     
@@ -3948,7 +3981,8 @@ const ChatScreen = () => {
     const aiFriend = message.aiFriendId 
       ? (message.aiFriend || aiFriends.find(f => f.id === message.aiFriendId))
       : null;
-    const aiColor = aiFriend?.color || "#34C759";
+    // Force brand teal color for AI messages regardless of friend color setting
+    const aiColor = "#14B8A6"; 
     const aiName = aiFriend?.name || "AI Friend";
     const isImage = message.messageType === "image";
     const isVoice = message.messageType === "voice";
@@ -4067,7 +4101,7 @@ const ChatScreen = () => {
         : isAI
         ? {
             backgroundColor: `${aiColor}26`, // 15% opacity in hex
-            borderColor: aiColor,
+            borderColor: aiColor, // Use exact AI color (teal) for border
             shadowColor: aiColor,
           }
         : {
@@ -4116,9 +4150,9 @@ const ChatScreen = () => {
                     ]
                   : isAI
                   ? [
-                      "rgba(52, 199, 89, 0.25)",
-                      "rgba(52, 199, 89, 0.15)",
-                      "rgba(52, 199, 89, 0.08)",
+                      "rgba(20, 184, 166, 0.25)",
+                      "rgba(20, 184, 166, 0.15)",
+                      "rgba(20, 184, 166, 0.08)",
                     ]
                   : [
                       "rgba(255, 255, 255, 0.15)",
@@ -4283,7 +4317,7 @@ const ChatScreen = () => {
                     <>
                       <TruncatedText
                         maxLines={25}
-                        expandButtonColor="#34C759"
+                        expandButtonColor="#14B8A6"
                       >
                         <Markdown
                           style={{
@@ -4296,18 +4330,18 @@ const ChatScreen = () => {
                             heading6: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
                             strong: { fontWeight: "bold", color: "#FFFFFF" },
                             em: { fontStyle: "italic", color: "#FFFFFF" },
-                            link: { color: "#34C759", textDecorationLine: "underline" },
+                            link: { color: "#14B8A6", textDecorationLine: "underline" },
                             blockquote: {
                               backgroundColor: "rgba(255, 255, 255, 0.1)",
                               borderLeftWidth: 3,
-                              borderLeftColor: "#34C759",
+                              borderLeftColor: "#14B8A6",
                               paddingLeft: 10,
                               paddingVertical: 8,
                               marginVertical: 8
                             },
                             code_inline: {
                               backgroundColor: "rgba(255, 255, 255, 0.2)",
-                              color: "#34C759",
+                              color: "#14B8A6",
                               paddingHorizontal: 6,
                               paddingVertical: 2,
                               borderRadius: 4,
@@ -4887,8 +4921,9 @@ const ChatScreen = () => {
             chatMembersCount: chatMembers.length,
             mentionSearch,
             keyboardHeight,
+            activeInput: activeInput.current // Check ref value
           });
-          return showMentionPicker;
+          return showMentionPicker && activeInput.current === "main";
         })() && (
           <View
             style={{
@@ -5288,9 +5323,9 @@ const ChatScreen = () => {
                       >
                         <LinearGradient
                           colors={[
-                            "rgba(52, 199, 89, 0.25)",
-                            "rgba(52, 199, 89, 0.15)",
-                            "rgba(52, 199, 89, 0.08)",
+                            "rgba(20, 184, 166, 0.25)",
+                            "rgba(20, 184, 166, 0.15)",
+                            "rgba(20, 184, 166, 0.08)",
                           ]}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 1, y: 1 }}
@@ -5356,7 +5391,7 @@ const ChatScreen = () => {
                       borderRadius: 22,
                       overflow: "hidden",
                       shadowColor: messageText.toLowerCase().includes("@ai")
-                        ? "#34C759"
+                        ? "#14B8A6"
                         : messageText.trim() || selectedImages.length > 0
                         ? "#007AFF"
                         : "#007AFF",
@@ -5448,9 +5483,9 @@ const ChatScreen = () => {
                         >
                           <LinearGradient
                             colors={[
-                              "rgba(52, 199, 89, 0.30)",
-                              "rgba(52, 199, 89, 0.20)",
-                              "rgba(52, 199, 89, 0.10)",
+                              "rgba(20, 184, 166, 0.30)",
+                              "rgba(20, 184, 166, 0.20)",
+                              "rgba(20, 184, 166, 0.10)",
                             ]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
@@ -5513,6 +5548,7 @@ const ChatScreen = () => {
           message={contextMenuMessage}
           onClose={() => setContextMenuMessage(null)}
           onReply={handleReply}
+          onCopy={handleCopy}
           onEdit={handleEdit}
           onUnsend={handleUnsend}
           onDelete={handleDelete}
