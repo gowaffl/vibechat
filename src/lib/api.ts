@@ -52,44 +52,37 @@ const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  // Step 3: Make the HTTP request
+  // Step 3: Make the HTTP request with timeout
   try {
-    // Construct the full URL by combining the base backend URL with the endpoint path
-    const response = await fetch(`${BACKEND_URL}${path}`, {
-      method,
-      headers,
-      // Stringify the body if present (for POST, PUT, PATCH requests)
-      body: body ? JSON.stringify(body) : undefined,
-      // Use "omit" to prevent browser from automatically sending credentials
-      credentials: "omit",
-    });
+    // Create an AbortController to handle request timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-    // Step 3: Error handling - Check if the response was successful
-    if (!response.ok) {
-      // Check content type to determine if response is JSON
-      const contentType = response.headers.get("content-type");
-      let errorData: any;
+    try {
+      // Construct the full URL by combining the base backend URL with the endpoint path
+      const response = await fetch(`${BACKEND_URL}${path}`, {
+        method,
+        headers,
+        // Stringify the body if present (for POST, PUT, PATCH requests)
+        body: body ? JSON.stringify(body) : undefined,
+        // Use "omit" to prevent browser from automatically sending credentials
+        credentials: "omit",
+        signal: controller.signal,
+      });
 
-      if (contentType && contentType.includes("application/json")) {
-        // Parse JSON error response
-        errorData = await response.json();
-      } else {
-        // Non-JSON response (likely HTML error page)
-        const textResponse = await response.text();
-        errorData = { error: "Non-JSON response received", details: textResponse.substring(0, 200) };
+      // Clear the timeout if the request completes successfully
+      clearTimeout(timeoutId);
+
+      return await handleResponse(response, method, path);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      
+      // Handle timeout error specifically
+      if (fetchError.name === 'AbortError') {
+        throw new Error(`[api.ts]: Request timeout after 30 seconds for ${method} ${path}`);
       }
-
-      // Throw a descriptive error with status code, status text, and server error data
-      throw new Error(
-        `[api.ts]: ${response.status} ${response.statusText} ${JSON.stringify(errorData)}`,
-      );
+      throw fetchError;
     }
-
-    // Step 4: Parse and return the successful response as JSON
-    // The response is cast to the expected type T for type safety
-    const jsonResponse = await response.json();
-    console.log(`[API Success] ${method} ${path}:`, jsonResponse);
-    return jsonResponse as T;
   } catch (error: any) {
     // Log the error for debugging purposes
     console.log(`[API Error] ${method} ${path}:`, error);
@@ -97,6 +90,39 @@ const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
     // Re-throw the error so the calling code can handle it appropriately
     throw error;
   }
+};
+
+/**
+ * Handle fetch response - extracted for reusability
+ */
+const handleResponse = async <T>(response: Response, method: string, path: string): Promise<T> => {
+
+  // Error handling - Check if the response was successful
+  if (!response.ok) {
+    // Check content type to determine if response is JSON
+    const contentType = response.headers.get("content-type");
+    let errorData: any;
+
+    if (contentType && contentType.includes("application/json")) {
+      // Parse JSON error response
+      errorData = await response.json();
+    } else {
+      // Non-JSON response (likely HTML error page)
+      const textResponse = await response.text();
+      errorData = { error: "Non-JSON response received", details: textResponse.substring(0, 200) };
+    }
+
+    // Throw a descriptive error with status code, status text, and server error data
+    throw new Error(
+      `[api.ts]: ${response.status} ${response.statusText} ${JSON.stringify(errorData)}`,
+    );
+  }
+
+  // Parse and return the successful response as JSON
+  // The response is cast to the expected type T for type safety
+  const jsonResponse = await response.json();
+  console.log(`[API Success] ${method} ${path}:`, jsonResponse);
+  return jsonResponse as T;
 };
 
 /**
@@ -191,34 +217,51 @@ const api = {
         headers.Cookie = cookies;
       }
 
-      // Don't set Content-Type header - let fetch set it automatically with boundary
-      const response = await fetch(`${BACKEND_URL}${path}`, {
-        method: "POST",
-        headers,
-        body: formData,
-        credentials: "omit",
-      });
+      // Create an AbortController to handle request timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for file uploads
 
-      if (!response.ok) {
-        // Check content type to determine if response is JSON
-        const contentType = response.headers.get("content-type");
-        let errorData: any;
+      try {
+        // Don't set Content-Type header - let fetch set it automatically with boundary
+        const response = await fetch(`${BACKEND_URL}${path}`, {
+          method: "POST",
+          headers,
+          body: formData,
+          credentials: "omit",
+          signal: controller.signal,
+        });
 
-        if (contentType && contentType.includes("application/json")) {
-          // Parse JSON error response
-          errorData = await response.json();
-        } else {
-          // Non-JSON response (likely HTML error page)
-          const textResponse = await response.text();
-          errorData = { error: "Non-JSON response received", details: textResponse.substring(0, 200) };
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          // Check content type to determine if response is JSON
+          const contentType = response.headers.get("content-type");
+          let errorData: any;
+
+          if (contentType && contentType.includes("application/json")) {
+            // Parse JSON error response
+            errorData = await response.json();
+          } else {
+            // Non-JSON response (likely HTML error page)
+            const textResponse = await response.text();
+            errorData = { error: "Non-JSON response received", details: textResponse.substring(0, 200) };
+          }
+
+          throw new Error(
+            `[api.ts]: ${response.status} ${response.statusText} ${JSON.stringify(errorData)}`,
+          );
         }
 
-        throw new Error(
-          `[api.ts]: ${response.status} ${response.statusText} ${JSON.stringify(errorData)}`,
-        );
+        return response.json() as Promise<T>;
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        // Handle timeout error specifically
+        if (fetchError.name === 'AbortError') {
+          throw new Error(`[api.ts]: Request timeout after 60 seconds for POST ${path}`);
+        }
+        throw fetchError;
       }
-
-      return response.json() as Promise<T>;
     } catch (error: any) {
       console.log(`[API Error]: ${error}`);
       throw error;

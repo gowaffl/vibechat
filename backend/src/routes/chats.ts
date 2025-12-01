@@ -261,7 +261,7 @@ chats.get("/:id", async (c) => {
       .select("*")
       .eq("chatId", chatId)
       .eq("userId", userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle() to avoid error when no rows found
 
     // If not a member, auto-add them and create a join message
     if (!membership) {
@@ -270,7 +270,7 @@ chats.get("/:id", async (c) => {
         .from("chat")
         .select("id")
         .eq("id", chatId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() to avoid error when no rows found
 
       if (chatCheckError || !chatExists) {
         return c.json({ error: "Chat not found" }, 404);
@@ -674,29 +674,45 @@ chats.get("/:id/messages", async (c) => {
   const chatId = c.req.param("id");
   const userId = c.req.query("userId");
 
+  console.log(`[Chats] Fetching messages for chat ${chatId}, user ${userId}`);
+
   if (!userId) {
     return c.json({ error: "userId is required" }, 400);
   }
 
   try {
     // Check if user is a member
-    const { data: membership } = await db
+    const { data: membership, error: membershipError } = await db
       .from("chat_member")
       .select("*")
       .eq("chatId", chatId)
       .eq("userId", userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows found
+
+    console.log(`[Chats] Membership check result:`, { 
+      membership: !!membership, 
+      error: membershipError?.message,
+      chatId,
+      userId
+    });
 
     // If not a member, auto-add them and create a join message
     if (!membership) {
       // First check if the chat exists
+      console.log(`[Chats] User not a member, checking if chat exists: ${chatId}`);
       const { data: chatExists, error: chatCheckError } = await db
         .from("chat")
         .select("id")
         .eq("id", chatId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() to avoid error when no rows found
+
+      console.log(`[Chats] Chat exists check:`, { 
+        chatExists: !!chatExists, 
+        error: chatCheckError?.message 
+      });
 
       if (chatCheckError || !chatExists) {
+        console.error(`[Chats] Chat ${chatId} not found - returning 404`);
         return c.json({ error: "Chat not found" }, 404);
       }
 
@@ -826,6 +842,8 @@ chats.get("/:id/messages", async (c) => {
       }
       mentionsByMessage.get(m.messageId).push(m);
     });
+
+    console.log(`[Chats] Successfully fetched ${messages.length} messages for chat ${chatId}`);
 
     const formattedMessages = messages.reverse().map((msg: any) => {
       const user = userMap.get(msg.userId);

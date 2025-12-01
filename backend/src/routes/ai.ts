@@ -1136,8 +1136,13 @@ ai.post("/smart-replies", zValidator("json", smartRepliesRequestSchema), async (
     console.log("[Smart Replies] Conversation context:", conversationContext);
     console.log("[Smart Replies] Calling OpenAI with model: gpt-5-mini");
 
+    // Create a timeout promise that rejects after 25 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("OpenAI API call timeout after 25 seconds")), 25000);
+    });
+
     // Call GPT-5 mini to generate smart replies with optimized parameters
-    const completion = await openai.chat.completions.create({
+    const completionPromise = openai.chat.completions.create({
       model: "gpt-5-mini",
       messages: [
         {
@@ -1182,6 +1187,9 @@ Coffee time? ☕`,
       // GPT-5-mini only supports default temperature (1) and no top_p
       max_completion_tokens: 2048, // Increased token limit to prevent truncation errors
     });
+
+    // Race between the OpenAI call and the timeout
+    const completion = await Promise.race([completionPromise, timeoutPromise]) as any;
 
     console.log("[Smart Replies] OpenAI response received");
     console.log("[Smart Replies] Full completion object:", JSON.stringify(completion, null, 2));
@@ -1263,19 +1271,24 @@ Coffee time? ☕`,
     }
     console.error("=== [Smart Replies] ERROR END ===");
 
+    // For timeout errors, gracefully return empty replies
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    if (errorMessage.includes("timeout")) {
+      console.log("[Smart Replies] ⏱️ Request timed out - returning empty replies gracefully");
+      return c.json({ replies: [] }); // Graceful degradation for timeouts
+    }
+    
     // For connection errors to OpenAI proxy, gracefully return empty replies
     // This prevents frontend errors for a non-critical feature
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     if (errorMessage.includes("Connection error") || errorMessage.includes("ConnectionRefused") || errorMessage.includes("FailedToOpenSocket")) {
       console.log("[Smart Replies] Connection error detected - returning empty replies gracefully");
       return c.json({ replies: [] }); // Graceful degradation for connection issues
     }
 
-    // For other errors, return error response
-    return c.json({
-      error: "Failed to generate smart replies",
-      details: errorMessage
-    }, 500);
+    // For other errors, also return empty replies to avoid breaking the UI
+    // Smart replies are a nice-to-have feature, not critical
+    console.log("[Smart Replies] Returning empty replies due to error");
+    return c.json({ replies: [] });
   }
 });
 
