@@ -1557,33 +1557,57 @@ const ChatScreen = () => {
     'worklet';
     const bottomPadding = Math.max(insets.bottom, 20);
     return {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
       transform: [
         {
           translateY: keyboard.height.value > 0 ? -keyboard.height.value : 0,
         },
       ],
-      marginBottom: keyboard.height.value > 0 ? 0 : bottomPadding,
+      // When keyboard is open, sit flush (no gap). When closed, back at bottom
+      marginBottom: 0, 
     };
   });
   
   // Animated style for the ScrollView content
   const inputContainerAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
+    // When keyboard is closed, add extra padding to lift the input field higher
+    // When keyboard is open, use minimal padding
     return {
-      paddingBottom: keyboard.height.value > 0 ? 8 : 16,
+      paddingBottom: keyboard.height.value > 0 ? 0 : Math.max(insets.bottom, 20),
     };
   });
   
-  // Animated style for FlatList to push content up when keyboard opens
-  // Note: List is inverted, so paddingTop affects visual BOTTOM (where the list starts)
-  const chatListAnimatedStyle = useAnimatedStyle(() => {
+  // Animated style for FlatList container to shrink viewport when keyboard opens
+  // Note: This animates the bottom margin of the list container
+  const chatListContainerAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
-    const inputContainerHeight = 110; // Height of input bar + padding
-    const bottomSpacing = insets.bottom; 
-    
+    // Only push up by keyboard height. Input bar spacing is handled by padding.
     return {
-      // Always add padding for the input bar, plus keyboard when open
-      paddingTop: keyboard.height.value + inputContainerHeight + (keyboard.height.value > 0 ? 0 : bottomSpacing),
+      marginBottom: keyboard.height.value,
+    };
+  });
+
+  // Animated style for drag handle - only visible when keyboard is open
+  const dragHandleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      opacity: keyboard.height.value > 0 ? 1 : 0,
+      paddingTop: 8,
+      paddingBottom: 4,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    };
+  });
+
+  // Animated style for input row - adjust bottom padding based on keyboard state
+  const inputRowAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      paddingBottom: keyboard.height.value > 0 ? 12 : 30,
     };
   });
 
@@ -2353,10 +2377,28 @@ const ChatScreen = () => {
       });
       */
     },
-    onError: (error) => {
+    onError: (error: any) => {
       setIsAITyping(false);
       console.error("[ChatScreen] Image generation error:", error);
-      Alert.alert("Error", "Failed to generate image. Please try again.");
+      
+      // Check if this is a timeout error where the image might still be generating
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('timeout') || errorMessage.includes('canceled')) {
+        Alert.alert(
+          "Image Generating",
+          "Your image is taking longer than expected but may still complete. The image will appear when ready.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Error", "Failed to generate image. Please try again.");
+      }
     },
   });
 
@@ -2403,10 +2445,28 @@ const ChatScreen = () => {
       });
       */
     },
-    onError: (error) => {
+    onError: (error: any) => {
       setIsAITyping(false);
       console.error("[ChatScreen] Meme generation error:", error);
-      Alert.alert("Error", "Failed to generate meme. Please try again.");
+      
+      // Check if this is a timeout error where the meme might still be generating
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('timeout') || errorMessage.includes('canceled')) {
+        Alert.alert(
+          "Meme Generating",
+          "Your meme is taking longer than expected but may still complete. The meme will appear when ready.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                queryClient.invalidateQueries({ queryKey: ["messages"] });
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Error", "Failed to generate meme. Please try again.");
+      }
     },
   });
 
@@ -2439,10 +2499,31 @@ const ChatScreen = () => {
       });
       */
     },
-    onError: (error) => {
+    onError: (error: any) => {
       setIsAITyping(false);
       console.error("[ChatScreen] Custom command execution error:", error);
-      Alert.alert("Error", "Failed to execute custom command. Please try again.");
+      
+      // Check if this is a timeout error where the command might still be processing
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('timeout') || errorMessage.includes('canceled')) {
+        // For timeout errors, show a more informative message and invalidate queries
+        // in case the command completes on the backend
+        Alert.alert(
+          "Command Processing",
+          "Your command is taking longer than expected but may still complete. The response will appear when ready.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // Invalidate queries to check if the command completed
+                queryClient.invalidateQueries({ queryKey: ["messages"] });
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Error", "Failed to execute custom command. Please try again.");
+      }
     },
   });
 
@@ -4810,12 +4891,8 @@ const ChatScreen = () => {
         </View>
       )}
 
-      {/* Messages FlatList - Wrapped in Pressable for keyboard dismissal */}
-      <Pressable 
-        style={{ flex: 1 }} 
-        onPress={() => Keyboard.dismiss()}
-        accessible={false}
-      >
+      {/* Messages FlatList - Wrapped in Reanimated View for keyboard animation */}
+      <Reanimated.View style={[{ flex: 1 }, chatListContainerAnimatedStyle]}>
         <Reanimated.FlatList
           ref={flatListRef}
           data={displayData}
@@ -4823,16 +4900,18 @@ const ChatScreen = () => {
           keyExtractor={(item) => item.id}
           inverted={true}
           style={{ flex: 1 }}
-          contentContainerStyle={[
-            {
-              // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
-              paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
-              paddingHorizontal: 16,
-            },
-            chatListAnimatedStyle,
-          ]}
+          contentContainerStyle={{
+            // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
+            // Padding bottom creates space for header/threads
+            paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
+            paddingHorizontal: 16,
+            // Visual bottom handled by ListHeaderComponent spacer
+            paddingTop: 0, 
+          }}
+          // Spacer for Input Bar (Glassmorphism effect)
+          ListHeaderComponent={<View style={{ height: 120 }} />}
           keyboardShouldPersistTaps="always"
-          onScrollBeginDrag={() => Keyboard.dismiss()}
+          keyboardDismissMode="interactive"
           initialNumToRender={20}
           maxToRenderPerBatch={20}
           windowSize={21}
@@ -5001,24 +5080,36 @@ const ChatScreen = () => {
             </View>
           }
       />
-      </Pressable>
+      </Reanimated.View>
 
       {/* Input Bar Area - Fixed at Bottom */}
-      <Reanimated.View style={[{ width: "100%" }, inputWrapperAnimatedStyle]}>
-        {/* Background gradient that extends full height */}
-        <LinearGradient
-          colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0.98)", "rgba(0, 0, 0, 1)"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
+      <Reanimated.View style={[{ width: "100%", backgroundColor: 'transparent' }, inputWrapperAnimatedStyle]}>
+        {/* Glassmorphism Background */}
+        <BlurView
+          intensity={Platform.OS === "ios" ? 70 : 100}
+          tint="dark"
           style={{
             position: "absolute",
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
+            borderTopWidth: 1,
+            borderColor: "rgba(255, 255, 255, 0.1)",
           }}
-          pointerEvents="none"
         />
+        
+        {/* Drag Handle - only visible when keyboard is open */}
+        <Reanimated.View style={dragHandleAnimatedStyle}>
+          <View
+            style={{
+              width: 36,
+              height: 5,
+              borderRadius: 2.5,
+              backgroundColor: 'rgba(255, 255, 255, 0.3)',
+            }}
+          />
+        </Reanimated.View>
         
         {/* Mention Picker - positioned above input */}
         {(() => {
@@ -5054,10 +5145,10 @@ const ChatScreen = () => {
         )}
 
         <Reanimated.ScrollView
-          style={{ width: "100%" }}
+          style={{ width: "100%", backgroundColor: 'transparent' }}
           contentContainerStyle={[
             {
-              paddingTop: 16,
+              paddingTop: 0,
               paddingHorizontal: 16,
             },
             inputContainerAnimatedStyle,
@@ -5072,7 +5163,7 @@ const ChatScreen = () => {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={{ marginBottom: 12 }}
+                style={{ marginBottom: 8 }}
                 contentContainerStyle={{ paddingHorizontal: 4, gap: 8 }}
                 keyboardShouldPersistTaps="always"
               >
@@ -5268,7 +5359,7 @@ const ChatScreen = () => {
                 onCancel={() => setIsRecordingVoice(false)}
               />
             ) : (
-              <View className="flex-row items-end gap-3" style={{ paddingBottom: 12 }}>
+              <Reanimated.View className="flex-row items-end gap-3" style={inputRowAnimatedStyle}>
               {/* Attachments menu button */}
               <Pressable
                 onPress={() => {
@@ -5338,13 +5429,12 @@ const ChatScreen = () => {
                       elevation: 4,
                     }}
                   >
-                    <BlurView
-                    intensity={Platform.OS === "ios" ? 50 : 80}
-                    tint="dark"
+                    <View
                     style={{
                       flex: 1,
                       borderRadius: 24,
                       overflow: "hidden",
+                      backgroundColor: "#1C1C1E", // Solid dark background
                     }}
                   >
                     <Animated.View
@@ -5466,7 +5556,7 @@ const ChatScreen = () => {
                     caretHidden={false}
                   />
                     </Animated.View>
-                  </BlurView>
+                  </View>
                   </Animated.View>
                 {/* Animated Mic/Send button */}
                 <Pressable
@@ -5617,7 +5707,7 @@ const ChatScreen = () => {
                     </BlurView>
                   </Animated.View>
                 </Pressable>
-              </View>
+              </Reanimated.View>
             )}
           </Reanimated.ScrollView>
       </Reanimated.View>

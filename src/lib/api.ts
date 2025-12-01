@@ -18,6 +18,7 @@ type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 type FetchOptions = {
   method: HttpMethod;
   body?: object; // Request body, will be JSON stringified before sending
+  timeout?: number; // Custom timeout in milliseconds (defaults to 30000ms)
 };
 
 /**
@@ -39,7 +40,7 @@ type FetchOptions = {
  * @throws Error if the response is not ok (status code outside 200-299 range)
  */
 const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
-  const { method, body } = options;
+  const { method, body, timeout = 30000 } = options; // Default 30 second timeout
   // Step 1: Authentication - Get JWT token from Supabase auth
   const token = await authClient.getToken();
   
@@ -56,7 +57,7 @@ const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
   try {
     // Create an AbortController to handle request timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
       // Construct the full URL by combining the base backend URL with the endpoint path
@@ -79,7 +80,7 @@ const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
       
       // Handle timeout error specifically
       if (fetchError.name === 'AbortError') {
-        throw new Error(`[api.ts]: Request timeout after 30 seconds for ${method} ${path}`);
+        throw new Error(`[api.ts]: Request timeout after ${timeout / 1000} seconds for ${method} ${path}`);
       }
       throw fetchError;
     }
@@ -174,8 +175,19 @@ const api = {
    * @template T - Expected response type
    * @param path - API endpoint path
    * @param body - Optional request body containing data to create
+   * @param timeout - Optional custom timeout in milliseconds (defaults to 30000ms)
    */
-  post: <T>(path: string, body?: object) => fetchFn<T>(path, { method: "POST", body }),
+  post: <T>(path: string, body?: object, timeout?: number) => {
+    // Use extended timeout for long-running AI operations
+    const customTimeout = timeout || (
+      path.includes('/custom-commands/execute') || 
+      path.includes('/ai/chat') || 
+      path.includes('/ai/generate-image') || 
+      path.includes('/ai/generate-meme')
+    ) ? 120000 : 30000; // 2 minutes for AI operations, 30 seconds for others
+    
+    return fetchFn<T>(path, { method: "POST", body, timeout: customTimeout });
+  },
 
   /**
    * PUT - Replace existing data on the server
