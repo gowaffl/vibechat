@@ -2158,23 +2158,31 @@ const ChatScreen = () => {
       // Set which AI friend is typing
       const typingFriend = aiFriends.find(f => f.id === data.aiFriendId) || aiFriends[0];
       setTypingAIFriend(typingFriend || null);
+      
+      // Auto-scroll removed per user request
+      /*
       // Immediately scroll to show AI typing indicator
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 200);
       });
+      */
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       setIsAITyping(false);
       setTypingAIFriend(null);
+      
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show AI's response
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 300);
       });
+      */
     },
     onError: () => {
       setIsAITyping(false);
@@ -2203,22 +2211,28 @@ const ChatScreen = () => {
     },
     onMutate: () => {
       setIsAITyping(true);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show AI typing indicator for image generation
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 200);
       });
+      */
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       setIsAITyping(false);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show generated image
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 300);
       });
+      */
     },
     onError: (error) => {
       setIsAITyping(false);
@@ -2247,22 +2261,28 @@ const ChatScreen = () => {
     },
     onMutate: () => {
       setIsAITyping(true);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show AI typing indicator for meme generation
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 200);
       });
+      */
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages"] });
       setIsAITyping(false);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show generated meme
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 300);
       });
+      */
     },
     onError: (error) => {
       setIsAITyping(false);
@@ -2277,22 +2297,28 @@ const ChatScreen = () => {
       api.post<Message>("/api/custom-commands/execute", data),
     onMutate: () => {
       setIsAITyping(true);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show AI typing indicator for custom command
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 200);
       });
+      */
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages"] });
       setIsAITyping(false);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show custom command response
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 300);
       });
+      */
     },
     onError: (error) => {
       setIsAITyping(false);

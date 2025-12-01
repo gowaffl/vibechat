@@ -50,10 +50,11 @@ chats.get("/", async (c) => {
 
     // Fetch chat details for each membership
     const chatIds = chatMemberships?.map((m: any) => m.chatId) || [];
-    const { data: chats = [] } = await client
+    const { data: chatsData } = await client
       .from("chat")
       .select("*")
       .in("id", chatIds);
+    const chats = chatsData || [];
 
     // Fetch last messages for each chat
     const lastMessages = await Promise.all(
@@ -148,20 +149,21 @@ chats.post("/", async (c) => {
     }
 
     // Note: Member addition is handled inside the create_chat RPC function now
+    const chat = newChat as any;
     
     return c.json({
-      id: newChat.id,
-      name: newChat.name,
-      bio: newChat.bio,
-      image: newChat.image,
-      aiPersonality: newChat.aiPersonality,
-      aiTone: newChat.aiTone,
-      aiName: newChat.aiName,
-      lastAvatarGenDate: newChat.lastAvatarGenDate ? new Date(newChat.lastAvatarGenDate).toISOString() : null,
-      avatarPromptUsed: newChat.avatarPromptUsed,
-      creatorId: newChat.creatorId,
-      createdAt: new Date(newChat.createdAt).toISOString(),
-      updatedAt: new Date(newChat.updatedAt).toISOString(),
+      id: chat.id,
+      name: chat.name,
+      bio: chat.bio,
+      image: chat.image,
+      aiPersonality: chat.aiPersonality,
+      aiTone: chat.aiTone,
+      aiName: chat.aiName,
+      lastAvatarGenDate: chat.lastAvatarGenDate ? new Date(chat.lastAvatarGenDate).toISOString() : null,
+      avatarPromptUsed: chat.avatarPromptUsed,
+      creatorId: chat.creatorId,
+      createdAt: new Date(chat.createdAt).toISOString(),
+      updatedAt: new Date(chat.updatedAt).toISOString(),
     });
   } catch (error) {
     console.error("[Chats] Error creating chat:", error);
@@ -199,13 +201,14 @@ chats.get("/unread-counts", async (c) => {
     const unreadCounts = await Promise.all(
       chatIds.map(async (chatId: string) => {
         // Get all messages in this chat (excluding current user and system messages)
-        const { data: messages = [] } = await client
+        const { data: messagesData } = await client
           .from("message")
           .select("id")
           .eq("chatId", chatId)
           .neq("userId", userId)
           .neq("messageType", "system");
 
+        const messages = messagesData || [];
         const messageIds = messages.map((m: any) => m.id);
 
         if (messageIds.length === 0) {
@@ -213,12 +216,14 @@ chats.get("/unread-counts", async (c) => {
         }
 
         // Count messages that don't have a read receipt from this user
-        const { data: readReceipts = [] } = await client
+        const { data: readReceiptsData } = await client
           .from("read_receipt")
           .select("messageId")
           .eq("userId", userId)
           .eq("chatId", chatId)
           .in("messageId", messageIds);
+
+        const readReceipts = readReceiptsData || [];
 
         const readMessageIdSet = new Set(readReceipts.map((r: any) => r.messageId));
         const unreadCount = messageIds.filter((id) => !readMessageIdSet.has(id)).length;
@@ -313,17 +318,19 @@ chats.get("/:id", async (c) => {
     }
 
     // Get chat members
-    const { data: members = [] } = await db
+    const { data: membersData } = await db
       .from("chat_member")
       .select("*")
       .eq("chatId", chatId);
+    const members = membersData || [];
 
     // Fetch user data for each member
     const memberUserIds = members.map((m: any) => m.userId);
-    const { data: memberUsers = [] } = await db
+    const { data: memberUsersData } = await db
       .from("user")
       .select("*")
       .in("id", memberUserIds);
+    const memberUsers = memberUsersData || [];
 
     const userMap = new Map(memberUsers.map((u: any) => [u.id, u]));
 
@@ -724,12 +731,14 @@ chats.get("/:id/messages", async (c) => {
     }
 
     // Fetch last 100 messages
-    const { data: messages = [], error: messagesError } = await db
+    const { data: messagesData, error: messagesError } = await db
       .from("message")
       .select("*")
       .eq("chatId", chatId)
       .order("createdAt", { ascending: false })
       .limit(100);
+    
+    const messages = messagesData || [];
 
     if (messagesError) {
       console.error("[Chats] Error fetching messages:", messagesError);
@@ -743,55 +752,62 @@ chats.get("/:id/messages", async (c) => {
     const aiFriendIds = [...new Set(messages.filter((m: any) => m.aiFriendId).map((m: any) => m.aiFriendId))];
 
     // Fetch users
-    const { data: users = [] } = await db
+    const { data: usersData } = await db
       .from("user")
       .select("*")
       .in("id", userIds);
+    const users = usersData || [];
     const userMap = new Map(users.map((u: any) => [u.id, u]));
 
     // Fetch AI friends
-    const { data: aiFriends = [] } = aiFriendIds.length > 0 ? await db
+    const { data: aiFriendsData } = aiFriendIds.length > 0 ? await db
       .from("ai_friend")
       .select("*")
       .in("id", aiFriendIds) : { data: [] };
+    const aiFriends = aiFriendsData || [];
     const aiFriendMap = new Map(aiFriends.map((af: any) => [af.id, af]));
 
     // Fetch replyTo messages
-    const { data: replyToMessages = [] } = replyToIds.length > 0 ? await db
+    const { data: replyToMessagesData } = replyToIds.length > 0 ? await db
       .from("message")
       .select("*")
       .in("id", replyToIds) : { data: [] };
+    const replyToMessages = replyToMessagesData || [];
     const replyToMap = new Map(replyToMessages.map((m: any) => [m.id, m]));
 
     // Fetch reactions
-    const { data: reactions = [] } = messageIds.length > 0 ? await db
+    const { data: reactionsData } = messageIds.length > 0 ? await db
       .from("reaction")
       .select("*")
       .in("messageId", messageIds) : { data: [] };
+    const reactions = reactionsData || [];
 
     // Fetch reaction users
     const reactionUserIds = [...new Set(reactions.map((r: any) => r.userId))];
-    const { data: reactionUsers = [] } = reactionUserIds.length > 0 ? await db
+    const { data: reactionUsersData } = reactionUserIds.length > 0 ? await db
       .from("user")
       .select("*")
       .in("id", reactionUserIds) : { data: [] };
+    const reactionUsers = reactionUsersData || [];
     const reactionUserMap = new Map(reactionUsers.map((u: any) => [u.id, u]));
 
     // Fetch mentions
-    const { data: mentions = [] } = messageIds.length > 0 ? await db
+    const { data: mentionsData } = messageIds.length > 0 ? await db
       .from("mention")
       .select("*")
       .in("messageId", messageIds) : { data: [] };
+    const mentions = mentionsData || [];
 
     // Fetch mention users
     const mentionUserIds = [...new Set([
       ...mentions.map((m: any) => m.mentionedUserId),
       ...mentions.map((m: any) => m.mentionedByUserId)
     ])];
-    const { data: mentionUsers = [] } = mentionUserIds.length > 0 ? await db
+    const { data: mentionUsersData } = mentionUserIds.length > 0 ? await db
       .from("user")
       .select("*")
       .in("id", mentionUserIds) : { data: [] };
+    const mentionUsers = mentionUsersData || [];
     const mentionUserMap = new Map(mentionUsers.map((u: any) => [u.id, u]));
 
     // Group reactions and mentions by message
@@ -1432,10 +1448,11 @@ chats.get("/:id/typing", async (c) => {
 
     // Fetch user names for active typers
     if (activeTypers.length > 0) {
-      const { data: users = [] } = await db
+      const { data: usersData } = await db
         .from("user")
         .select("id, name")
         .in("id", activeTypers);
+      const users = usersData || [];
 
       const typingUsers = users.map((u: any) => ({
         id: u.id,

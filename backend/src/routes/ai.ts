@@ -383,38 +383,65 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       console.log(`[AI Image] Processing ${referenceImageUrls.length} reference image URL(s)...`);
       for (const referenceImageUrl of referenceImageUrls) {
         console.log(`[AI Image] Processing URL: ${referenceImageUrl}`);
+        // Keep full URL if it starts with http, otherwise treat as relative upload
         const imagePath = referenceImageUrl.startsWith('http') 
-          ? null 
+          ? referenceImageUrl 
           : `./uploads/${referenceImageUrl.split('/uploads/')[1]}`;
         
-        console.log(`[AI Image] Resolved image path: ${imagePath}`);
+        console.log(`[AI Image] Resolved image path/url: ${imagePath}`);
         
         if (imagePath) {
           try {
-            console.log(`[AI Image] Reading image from: ${imagePath}`);
-            const imageBuffer = await fs.readFile(imagePath);
-            const base64 = imageBuffer.toString('base64');
-            
-            // Determine mime type from file extension
-            let mimeType: string;
-            if (imagePath.endsWith('.png')) {
-              mimeType = 'image/png';
-            } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
-              mimeType = 'image/jpeg';
-            } else if (imagePath.endsWith('.webp')) {
-              mimeType = 'image/webp';
+            // If it's an absolute URL, fetch it
+            if (referenceImageUrl.startsWith('http')) {
+              console.log(`[AI Image] Fetching remote image from: ${referenceImageUrl}`);
+              const imageResponse = await fetch(referenceImageUrl);
+              if (!imageResponse.ok) {
+                throw new Error(`Failed to fetch remote image: ${imageResponse.status}`);
+              }
+              const arrayBuffer = await imageResponse.arrayBuffer();
+              const imageBuffer = Buffer.from(arrayBuffer);
+              
+              // Detect mime type from Content-Type header or extension
+              const contentType = imageResponse.headers.get('content-type');
+              let mimeType = contentType || 'image/png'; // Default to png if not found
+              
+              // Fallback to extension if content-type is generic or missing
+              if (!contentType || contentType === 'application/octet-stream') {
+                if (referenceImageUrl.toLowerCase().endsWith('.jpg') || referenceImageUrl.toLowerCase().endsWith('.jpeg')) mimeType = 'image/jpeg';
+                else if (referenceImageUrl.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+                else if (referenceImageUrl.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
+              }
+              
+              referenceImages.push({ base64: imageBuffer.toString('base64'), mimeType });
+              console.log(`[AI Image] ✅ Remote reference image loaded! Size: ${imageBuffer.length} bytes, Type: ${mimeType}`);
             } else {
-              mimeType = 'image/png'; // default
+              // It's a local path
+              console.log(`[AI Image] Reading local image from: ${imagePath}`);
+              const imageBuffer = await fs.readFile(imagePath);
+              const base64 = imageBuffer.toString('base64');
+              
+              // Determine mime type from file extension
+              let mimeType: string;
+              if (imagePath.endsWith('.png')) {
+                mimeType = 'image/png';
+              } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
+                mimeType = 'image/jpeg';
+              } else if (imagePath.endsWith('.webp')) {
+                mimeType = 'image/webp';
+              } else {
+                mimeType = 'image/png'; // default
+              }
+              
+              referenceImages.push({ base64, mimeType });
+              console.log("[AI Image] ✅ Local reference image loaded successfully! Size:", imageBuffer.length, "bytes, type:", mimeType);
             }
-            
-            referenceImages.push({ base64, mimeType });
-            console.log("[AI Image] ✅ Reference image loaded successfully! Size:", imageBuffer.length, "bytes, type:", mimeType);
           } catch (readError) {
             console.error("[AI Image] ❌ Failed to read reference image:", readError);
             // Continue with other images
           }
         } else {
-          console.log("[AI Image] ⚠️ Skipping external/http image URL");
+          console.log("[AI Image] ⚠️ Skipping invalid image path");
         }
       }
     } else {
@@ -647,34 +674,58 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
 
     if (referenceImageUrl) {
       console.log(`[AI Meme] Processing reference image URL: ${referenceImageUrl}`);
+      // Keep full URL if it starts with http, otherwise treat as relative upload
       const imagePath = referenceImageUrl.startsWith('http') 
-        ? null 
+        ? referenceImageUrl
         : `./uploads/${referenceImageUrl.split('/uploads/')[1]}`;
       
-      console.log(`[AI Meme] Resolved image path: ${imagePath}`);
+      console.log(`[AI Meme] Resolved image path/url: ${imagePath}`);
       
       if (imagePath) {
         try {
-          console.log(`[AI Meme] Reading image from: ${imagePath}`);
-          const imageBuffer = await fs.readFile(imagePath);
-          referenceImageBase64 = imageBuffer.toString('base64');
-          
-          if (imagePath.endsWith('.png')) {
-            referenceMimeType = 'image/png';
-          } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
-            referenceMimeType = 'image/jpeg';
-          } else if (imagePath.endsWith('.webp')) {
-            referenceMimeType = 'image/webp';
+          if (referenceImageUrl.startsWith('http')) {
+             console.log(`[AI Meme] Fetching remote image from: ${referenceImageUrl}`);
+             const imageResponse = await fetch(referenceImageUrl);
+             if (!imageResponse.ok) {
+               throw new Error(`Failed to fetch remote image: ${imageResponse.status}`);
+             }
+             const arrayBuffer = await imageResponse.arrayBuffer();
+             const imageBuffer = Buffer.from(arrayBuffer);
+             
+             referenceImageBase64 = imageBuffer.toString('base64');
+             const contentType = imageResponse.headers.get('content-type');
+             referenceMimeType = contentType || 'image/png';
+             
+             // Fallback detection
+             if (!contentType || contentType === 'application/octet-stream') {
+                if (referenceImageUrl.toLowerCase().endsWith('.jpg') || referenceImageUrl.toLowerCase().endsWith('.jpeg')) referenceMimeType = 'image/jpeg';
+                else if (referenceImageUrl.toLowerCase().endsWith('.png')) referenceMimeType = 'image/png';
+                else if (referenceImageUrl.toLowerCase().endsWith('.webp')) referenceMimeType = 'image/webp';
+             }
+             
+             console.log(`[AI Meme] ✅ Remote reference image loaded! Size: ${imageBuffer.length} bytes, Type: ${referenceMimeType}`);
           } else {
-            referenceMimeType = 'image/png'; // default
+             console.log(`[AI Meme] Reading local image from: ${imagePath}`);
+             const imageBuffer = await fs.readFile(imagePath);
+             referenceImageBase64 = imageBuffer.toString('base64');
+             
+             if (imagePath.endsWith('.png')) {
+               referenceMimeType = 'image/png';
+             } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
+               referenceMimeType = 'image/jpeg';
+             } else if (imagePath.endsWith('.webp')) {
+               referenceMimeType = 'image/webp';
+             } else {
+               referenceMimeType = 'image/png'; // default
+             }
+             console.log("[AI Meme] ✅ Local reference image loaded successfully! Size:", imageBuffer.length, "bytes, type:", referenceMimeType);
           }
-          console.log("[AI Meme] ✅ Reference image loaded successfully! Size:", imageBuffer.length, "bytes, type:", referenceMimeType);
         } catch (readError) {
           console.error("[AI Meme] ❌ Failed to read reference image:", readError);
           referenceImageBase64 = undefined;
         }
       } else {
-        console.log("[AI Meme] ⚠️ Skipping external/http image URL");
+        console.log("[AI Meme] ⚠️ Skipping invalid image path");
       }
     } else {
       console.log("[AI Meme] No reference image provided");

@@ -85,6 +85,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
 
   React.useEffect(() => {
     if (visible) {
+      setShowModal(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {
