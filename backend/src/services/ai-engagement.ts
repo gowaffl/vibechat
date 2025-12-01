@@ -369,32 +369,6 @@ async function processNewMessages(chatId: string): Promise<void> {
     // Get the last processed message ID for this chat
     const lastProcessed = lastProcessedMessageId.get(chatId);
 
-    // INITIALIZATION: If no last processed message (e.g. first run after server start),
-    // find the latest message and set it as the cursor. We only want to engage with NEW messages.
-    if (!lastProcessed) {
-      const { data: latestMsg } = await db
-        .from("message")
-        .select("id")
-        .eq("chatId", chatId)
-        .order("createdAt", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (latestMsg) {
-        console.log(`[AI Engagement] Initializing cursor for chat ${chatId} to message ${latestMsg.id}`);
-        lastProcessedMessageId.set(chatId, latestMsg.id);
-        // Don't process anything this tick, wait for NEXT message
-        return;
-      } else {
-        // Chat is empty, nothing to do until first message
-        // We can't set a cursor yet, but we also shouldn't query for "all messages"
-        // So we just return and wait
-        console.log(`[AI Engagement] Chat ${chatId} is empty, waiting for first message`);
-        return;
-      }
-    }
-
-    // Fetch new messages since last processing
     let query = db
       .from("message")
       .select("*")
@@ -415,19 +389,47 @@ async function processNewMessages(chatId: string): Promise<void> {
       if (lastProcessedMsg?.createdAt) {
         query = query.gt("createdAt", lastProcessedMsg.createdAt);
       }
+    } else {
+      // INITIALIZATION CASE:
+      // If we haven't processed this chat yet (e.g. server restart),
+      // we only want to pick up messages from the last 2 minutes.
+      // This prevents replying to old messages while ensuring we catch
+      // "just sent" messages if the server just restarted.
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      query = query.gt("createdAt", twoMinutesAgo);
     }
 
     const { data: newMessages } = await query;
 
-    if (!newMessages || newMessages.length === 0) return;
-
-    // Update last processed message
-    lastProcessedMessageId.set(chatId, newMessages[newMessages.length - 1].id);
+    if (!newMessages || newMessages.length === 0) {
+      // If no new/recent messages found on init, we still need a cursor
+      // to avoid querying "last 2 mins" forever.
+      if (!lastProcessed) {
+        const { data: latestMsg } = await db
+          .from("message")
+          .select("id")
+          .eq("chatId", chatId)
+          .order("createdAt", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (latestMsg) {
+          console.log(`[AI Engagement] Initializing cursor for chat ${chatId} to latest message ${latestMsg.id}`);
+          lastProcessedMessageId.set(chatId, latestMsg.id);
+        }
+      }
+      return;
+    }
 
     // Check each message for automatic engagement
     // NOTE: We deliberately SKIP @mentions here because they are handled
     // by the frontend's direct API call to /api/ai/chat. This prevents double responses.
     for (const message of newMessages) {
+      // Update cursor as we process each message
+      // This ensures that if we exit early (e.g. after responding), 
+      // we resume from the correct spot next time
+      lastProcessedMessageId.set(chatId, message.id);
+
       // Check if message contains any AI friend mentions
       let hasMention = false;
       for (const friend of aiFriends) {

@@ -62,7 +62,8 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
                     key={tab.name}
                     onPress={() => {
                         if (isFocused) return;
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        // Very light haptic feedback for tab switching
+                        Haptics.selectionAsync();
                         
                         // Determine direction
                         const direction = tab.index > currentIndex ? 'forward' : 'back';

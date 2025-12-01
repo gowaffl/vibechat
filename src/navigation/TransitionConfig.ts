@@ -12,9 +12,9 @@ export const transitionSpec: {
   open: {
     animation: 'spring',
     config: {
-      stiffness: 100, // Reduced to 100 for a very relaxed, premium glide
-      damping: 18,    // Kept balanced to prevent wobbling at low stiffness
-      mass: 1.0,      // Standard mass
+      stiffness: 1000, // Much stiffer for immediate response (was 100)
+      damping: 60,     // Higher damping to control the high stiffness (was 18)
+      mass: 1.0,       // Standard mass
       overshootClamping: false,
       restDisplacementThreshold: 0.01,
       restSpeedThreshold: 0.01,
@@ -23,8 +23,8 @@ export const transitionSpec: {
   close: {
     animation: 'spring',
     config: {
-      stiffness: 100,
-      damping: 18,
+      stiffness: 1000,
+      damping: 60,
       mass: 1.0,
       overshootClamping: false,
       restDisplacementThreshold: 0.01,

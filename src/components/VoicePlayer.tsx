@@ -38,7 +38,7 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
           await sound.playAsync();
           setIsPlaying(true);
         }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Haptics.selectionAsync();
         return;
       }
 
@@ -50,7 +50,7 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
       
       setSound(newSound);
       setIsPlaying(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.selectionAsync();
     } catch (error) {
       console.error("Error playing sound:", error);
     }

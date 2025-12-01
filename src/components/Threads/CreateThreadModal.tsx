@@ -46,6 +46,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
   const colorScheme = useColorScheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [showModal, setShowModal] = useState(visible);
 
   const [name, setName] = useState("");
   const [isShared, setIsShared] = useState(true);
@@ -84,17 +85,17 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
 
   React.useEffect(() => {
     if (visible) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 50,
-          friction: 10,
+          stiffness: 800,
+          damping: 50,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 150,
           useNativeDriver: true,
         }),
       ]).start();
@@ -107,20 +108,20 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 250,
+          duration: 150,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => setShowModal(false));
     }
   }, [visible, slideAnim, fadeAnim]);
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Removed haptic on close
     onClose();
   };
 
@@ -143,7 +144,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
     // Note: Thread name is automatically added as a keyword on the backend
 
     console.log("[CreateThreadModal] Calling onCreate with:", { name: name.trim(), icon: null, isShared, filterRules });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onCreate(name.trim(), null, isShared, filterRules);
     console.log("[CreateThreadModal] onCreate called successfully");
   };
@@ -152,7 +153,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
 
   return (
     <Modal
-      visible={visible}
+      visible={showModal}
       transparent
       animationType="none"
       statusBarTranslucent
@@ -353,7 +354,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                       {/* Shared Toggle */}
                       <Pressable
                         onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          Haptics.selectionAsync();
                           setIsShared(!isShared);
                         }}
                       >

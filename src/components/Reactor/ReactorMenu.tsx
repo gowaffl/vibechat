@@ -53,6 +53,7 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
   const [showMemeInput, setShowMemeInput] = useState(false);
   const [memePrompt, setMemePrompt] = useState("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [showModal, setShowModal] = useState(visible);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
@@ -72,17 +73,19 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
 
   useEffect(() => {
     if (visible) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setShowModal(true);
+      // Reduced to very light feedback
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 50,
-          friction: 10,
+          stiffness: 800,
+          damping: 50,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 150,
           useNativeDriver: true,
         }),
       ]).start();
@@ -94,25 +97,27 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 250,
+          duration: 150,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => {
+        setShowModal(false);
+      });
     }
   }, [visible, slideAnim, fadeAnim]);
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Removed haptic on close for cleaner exit
     onClose();
   };
 
   const handleOptionPress = (action: () => void, shouldClose: boolean = true) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.selectionAsync();
     action();
     if (shouldClose && !showRemixInput && !showMemeInput) {
       handleClose();
@@ -121,14 +126,14 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
 
   const handleRemixSubmit = () => {
     if (remixPrompt.trim()) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onRemix(remixPrompt.trim());
       handleClose();
     }
   };
 
   const handleMemeSubmit = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // Allow empty prompt - AI will decide on its own
     onMeme(memePrompt.trim());
     handleClose();
@@ -173,7 +178,7 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
 
   return (
     <Modal
-      visible={visible}
+      visible={showModal}
       transparent
       animationType="none"
       statusBarTranslucent

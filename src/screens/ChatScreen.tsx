@@ -2007,6 +2007,8 @@ const ChatScreen = () => {
       // Re-enable auto-scroll to ensure the new message is visible
       isManualScrolling.current = false;
       
+      // Scroll to bottom disabled per user request ("remove auto-scroll from happening anywhere")
+      /*
       // Scroll to bottom to show the newly sent message with full visibility
       // Multiple scroll attempts to ensure it works even with keyboard open
       requestAnimationFrame(() => {
@@ -2021,6 +2023,7 @@ const ChatScreen = () => {
           scrollToBottom(true);
         }, 400);
       });
+      */
     },
   });
 
@@ -3582,17 +3585,16 @@ const ChatScreen = () => {
       
       if (isNewMessage) {
         if (isAtBottomRef.current) {
-          // If at bottom, ensure we stay at bottom
-           requestAnimationFrame(() => {
-              scrollToBottom(true);
-           });
+          // User is at bottom.
+          // Inverted list automatically shows new items at the bottom (index 0).
+          // We DO NOT force a scroll here to avoid "jumpy" behavior.
         } else {
           // If not at bottom, show "New Messages" button
           setShowScrollToBottom(true);
         }
       } else if (lastKnownLength === 0) {
          // Initial load
-         // Inverted list starts at bottom, but just in case
+         // Ensure we start at the bottom
          requestAnimationFrame(() => {
             scrollToBottom(false);
          });
@@ -3602,7 +3604,9 @@ const ChatScreen = () => {
     }
   }, [activeMessages, lastKnownLength, scrollToBottom]);
 
-  // Auto-scroll when AI starts typing
+  // Auto-scroll when AI starts typing - DISABLED per user request
+  // The inverted list should handle the layout naturally.
+  /*
   useEffect(() => {
     if (isAITyping && isAtBottomRef.current) {
       requestAnimationFrame(() => {
@@ -3610,6 +3614,7 @@ const ChatScreen = () => {
       });
     }
   }, [isAITyping, scrollToBottom]);
+  */
 
   // Handle catch-up generation errors
   useEffect(() => {
@@ -3638,12 +3643,14 @@ const ChatScreen = () => {
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
       (e) => {
         setKeyboardHeight(e.endCoordinates.height);
-        // Scroll to bottom when keyboard opens - reduced delay for smoother UX
+        // Auto-scroll disabled per user request ("weird auto-scrolling")
+        /*
         requestAnimationFrame(() => {
           setTimeout(() => {
             scrollToBottom(true);
           }, 100);
         });
+        */
       }
     );
     const keyboardWillHide = Keyboard.addListener(

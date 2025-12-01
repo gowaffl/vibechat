@@ -43,20 +43,23 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   const [pulseAnim] = useState(new Animated.Value(1));
   const [rotateAnim] = useState(new Animated.Value(0));
   const dragY = useRef(new Animated.Value(0)).current;
+  const [showModal, setShowModal] = useState(visible);
 
   useEffect(() => {
     if (visible) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setShowModal(true);
+      // Reduced to very light feedback
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 50,
-          friction: 10,
+          stiffness: 800,
+          damping: 50,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 150,
           useNativeDriver: true,
         }),
       ]).start();
@@ -64,15 +67,15 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 250,
+          duration: 150,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => setShowModal(false));
     }
   }, [visible, slideAnim, fadeAnim]);
 
@@ -110,7 +113,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   }, [isLoading, pulseAnim, rotateAnim]);
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Removed haptic on close
     onClose();
   };
 
@@ -128,17 +131,20 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 100 || gestureState.vy > 0.5) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          // Light feedback on dismiss
+          Haptics.selectionAsync();
           onClose();
           Animated.spring(dragY, {
             toValue: 0,
+            stiffness: 800,
+            damping: 50,
             useNativeDriver: true,
           }).start();
         } else {
           Animated.spring(dragY, {
             toValue: 0,
-            tension: 100,
-            friction: 10,
+            stiffness: 800,
+            damping: 50,
             useNativeDriver: true,
           }).start();
         }
@@ -146,6 +152,8 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
       onPanResponderTerminate: () => {
         Animated.spring(dragY, {
           toValue: 0,
+          stiffness: 800,
+          damping: 50,
           useNativeDriver: true,
         }).start();
       },
@@ -199,7 +207,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
 
   return (
     <Modal
-      visible={visible}
+      visible={showModal}
       transparent
       animationType="none"
       statusBarTranslucent
@@ -413,7 +421,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           {/* Quick Summary Option */}
                           <Pressable
                             onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              Haptics.selectionAsync();
                               onGenerateSummary("quick");
                             }}
                             style={({ pressed }) => ({
@@ -450,7 +458,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           {/* Personalized Summary Option */}
                           <Pressable
                             onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              Haptics.selectionAsync();
                               onGenerateSummary("personalized");
                             }}
                             style={({ pressed }) => ({
@@ -508,7 +516,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           {/* Detailed Summary Option */}
                           <Pressable
                             onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              Haptics.selectionAsync();
                               onGenerateSummary("detailed");
                             }}
                             style={({ pressed }) => ({
@@ -613,9 +621,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                                 <Pressable
                                   key={index}
                                   onPress={() => {
-                                    Haptics.impactAsync(
-                                      Haptics.ImpactFeedbackStyle.Light
-                                    );
+                                    Haptics.selectionAsync();
                                     onViewMessage?.(highlight.messageId);
                                     handleClose();
                                   }}

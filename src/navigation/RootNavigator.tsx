@@ -63,12 +63,10 @@ const RootNavigator = () => {
       }}
       screenListeners={{
         transitionStart: () => {
-          // "Page they were on is dropping...": Tactile thud for the drop
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          // Removed haptic feedback for smoother, less intrusive navigation
         },
         transitionEnd: () => {
-          // "Slides in with a nice little bounce": Tactile feedback for the landing
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          // Removed haptic feedback for smoother, less intrusive navigation
         },
       }}
     >

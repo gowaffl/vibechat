@@ -60,36 +60,56 @@ const DraggableSlider: React.FC<{
 }> = ({ value, onValueChange }) => {
   const [isDragging, setIsDragging] = React.useState(false);
   const sliderRef = React.useRef<View>(null);
-
-  const updateValue = (pageX: number) => {
-    if (sliderRef.current) {
-      sliderRef.current.measure((x, y, width, height, pageXOffset, pageYOffset) => {
-        const relativeX = pageX - pageXOffset;
-        const percentage = Math.max(0, Math.min(100, Math.round((relativeX / width) * 100)));
-        console.log('[Slider] Touch pageX:', pageX, 'pageXOffset:', pageXOffset, 'width:', width, 'relativeX:', relativeX, 'percentage:', percentage);
-        onValueChange(percentage);
-      });
-    }
-  };
+  // Cache layout measurements during drag
+  const layoutRef = React.useRef<{ width: number; pageX: number } | null>(null);
+  // Keep latest props accessible to PanResponder which is created once
+  const propsRef = React.useRef({ value, onValueChange });
+  
+  // Update ref on render
+  propsRef.current = { value, onValueChange };
 
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (event) => {
-        console.log('[Slider] Touch started');
         setIsDragging(true);
-        Haptics.selectionAsync(); // Lighter haptic for start
-        updateValue(event.nativeEvent.pageX);
+        Haptics.selectionAsync(); // Super light haptic for start
+        
+        const touchX = event.nativeEvent.pageX;
+
+        // Measure ONCE at the start of the interaction
+        if (sliderRef.current) {
+          sliderRef.current.measure((x, y, width, height, pageX, pageY) => {
+            layoutRef.current = { width, pageX };
+            
+            // Calculate initial value immediately after measurement
+            const relativeX = touchX - pageX;
+            const percentage = Math.max(0, Math.min(100, Math.round((relativeX / width) * 100)));
+            
+            if (percentage !== propsRef.current.value) {
+              Haptics.selectionAsync();
+              propsRef.current.onValueChange(percentage);
+            }
+          });
+        }
       },
       onPanResponderMove: (event) => {
-        console.log('[Slider] Moving:', event.nativeEvent.pageX);
-        updateValue(event.nativeEvent.pageX);
+        // Use cached layout for smooth 60fps+ updates without async measure calls
+        if (layoutRef.current) {
+          const { width, pageX } = layoutRef.current;
+          const relativeX = event.nativeEvent.pageX - pageX;
+          const percentage = Math.max(0, Math.min(100, Math.round((relativeX / width) * 100)));
+          
+          if (percentage !== propsRef.current.value) {
+            Haptics.selectionAsync(); // Super light haptic only on value change
+            propsRef.current.onValueChange(percentage);
+          }
+        }
       },
       onPanResponderRelease: () => {
-        console.log('[Slider] Touch released');
         setIsDragging(false);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); // Lighter haptic for release
+        // No haptic on release for smoother feel, or selectionAsync if desired
       },
     })
   ).current;

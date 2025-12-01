@@ -39,6 +39,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
   const colorScheme = useColorScheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [showModal, setShowModal] = useState(visible);
 
   const [name, setName] = useState("");
   const [personality, setPersonality] = useState("");
@@ -71,17 +72,17 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
 
   useEffect(() => {
     if (visible) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 50,
-          friction: 10,
+          stiffness: 800,
+          damping: 50,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 150,
           useNativeDriver: true,
         }),
       ]).start();
@@ -96,20 +97,20 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 250,
+          duration: 150,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => setShowModal(false));
     }
   }, [visible, slideAnim, fadeAnim]);
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Removed haptic on close
     onClose();
   };
 
@@ -118,7 +119,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onCreate(
       name.trim(),
       personality.trim() || "",
@@ -132,7 +133,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
 
   return (
     <Modal
-      visible={visible}
+      visible={showModal}
       transparent
       animationType="none"
       statusBarTranslucent
@@ -352,7 +353,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                                 <Pressable
                                   key={toneOption}
                                   onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    Haptics.selectionAsync();
                                     setTone(isSelected ? "" : toneOption);
                                   }}
                                 >
@@ -418,7 +419,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                                 <Pressable
                                   key={option.mode}
                                   onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    Haptics.selectionAsync();
                                     setEngagementMode(option.mode);
                                   }}
                                 >

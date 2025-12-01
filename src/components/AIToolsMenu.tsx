@@ -35,19 +35,21 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
 }) => {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const [showModal, setShowModal] = useState(visible);
 
   useEffect(() => {
     if (visible) {
+      setShowModal(true);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 100,
-          friction: 10,
+          stiffness: 800,
+          damping: 50,
         }),
         Animated.timing(opacityAnim, {
           toValue: 1,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
           easing: Easing.out(Easing.ease),
         }),
@@ -56,16 +58,16 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
           easing: Easing.in(Easing.ease),
         }),
         Animated.timing(opacityAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => setShowModal(false));
     }
   }, [visible]);
 
@@ -85,15 +87,15 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
   ];
 
   const handleSelectCommand = (command: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.selectionAsync();
     onSelectCommand(command);
     onClose();
   };
 
-  if (!visible) return null;
+  if (!showModal) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={showModal} transparent animationType="none" onRequestClose={onClose}>
       {/* Backdrop */}
       <Animated.View
         style={{
@@ -186,7 +188,7 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
               </View>
               <Pressable
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  // Close without haptic
                   onClose();
                 }}
                 style={({ pressed }) => ({
@@ -354,7 +356,7 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
                 {/* Create Command Button */}
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    Haptics.selectionAsync();
                     onCreateCommand();
                     onClose();
                   }}
@@ -386,7 +388,7 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
                 {/* AI Settings Button */}
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    Haptics.selectionAsync();
                     onOpenSettings();
                     onClose();
                   }}

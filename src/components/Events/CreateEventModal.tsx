@@ -59,6 +59,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
   const dragY = useRef(new Animated.Value(0)).current;
+  const [showModal, setShowModal] = useState(visible);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -88,7 +89,8 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
   useEffect(() => {
     if (visible) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      // Light feedback on open
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       if (initialEvent) {
         setTitle(initialEvent.title);
@@ -122,12 +124,12 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 50,
-          friction: 10,
+          stiffness: 800,
+          damping: 50,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 150,
           useNativeDriver: true,
         }),
       ]).start();
@@ -135,20 +137,20 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 250,
+          duration: 150,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => setShowModal(false));
     }
   }, [visible, slideAnim, fadeAnim, initialEvent]);
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Removed haptic on close
     onClose();
   };
 
@@ -166,17 +168,19 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 100 || gestureState.vy > 0.5) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          Haptics.selectionAsync();
           onClose();
           Animated.spring(dragY, {
             toValue: 0,
+            stiffness: 800,
+            damping: 50,
             useNativeDriver: true,
           }).start();
         } else {
           Animated.spring(dragY, {
             toValue: 0,
-            tension: 100,
-            friction: 10,
+            stiffness: 800,
+            damping: 50,
             useNativeDriver: true,
           }).start();
         }
@@ -184,6 +188,8 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       onPanResponderTerminate: () => {
         Animated.spring(dragY, {
           toValue: 0,
+          stiffness: 800,
+          damping: 50,
           useNativeDriver: true,
         }).start();
       },
@@ -232,7 +238,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       : [];
 
     console.log("[CreateEventModal] Calling onCreate with:", { title: title.trim(), description: description.trim(), type, eventDate, options: formattedOptions });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onCreate(title.trim(), description.trim(), type, eventDate, formattedOptions);
     console.log("[CreateEventModal] onCreate called successfully");
   };
@@ -262,7 +268,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
         setTimeout(() => setShowTimePicker(true), 300);
       }
       
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.selectionAsync();
     }
   };
 
@@ -282,7 +288,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       newDate.setMilliseconds(0);
       
       setEventDate(newDate);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.selectionAsync();
     }
   };
 
@@ -302,14 +308,14 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const addOption = () => {
     if (options.length < 10) {
       setOptions([...options, ""]);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.selectionAsync();
     }
   };
 
   const removeOption = (index: number) => {
     if (options.length > 2) {
       setOptions(options.filter((_, i) => i !== index));
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.selectionAsync();
     }
   };
 
@@ -324,7 +330,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
   return (
     <Modal
-      visible={visible}
+      visible={showModal}
       transparent
       animationType="none"
       statusBarTranslucent
@@ -529,7 +535,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       >
                         <Pressable
                           onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            Haptics.selectionAsync();
                             setShowDatePicker(true);
                           }}
                           style={{
@@ -564,7 +570,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                         {eventDate && (
                           <Pressable
                             onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              Haptics.selectionAsync();
                               setEventDate(null);
                             }}
                             style={{
@@ -678,7 +684,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                             <Pressable
                               key={eventType.id}
                               onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                Haptics.selectionAsync();
                                 setType(eventType.id);
                               }}
                               style={{
@@ -727,7 +733,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       {!showOptions ? (
                         <Pressable
                           onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            Haptics.selectionAsync();
                             setShowOptions(true);
                           }}
                           style={{
@@ -873,7 +879,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                             {/* Remove Options Button */}
                             <Pressable
                               onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                Haptics.selectionAsync();
                                 setShowOptions(false);
                                 setOptions(["", ""]);
                               }}

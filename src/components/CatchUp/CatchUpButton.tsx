@@ -65,7 +65,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
         return Math.abs(gestureState.dx) > 5;
       },
       onPanResponderGrant: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Haptics.selectionAsync();
       },
       onPanResponderMove: (_, gestureState) => {
         // Only allow swiping to the right
@@ -101,7 +101,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
   ).current;
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.selectionAsync();
     onPress();
   };
 
