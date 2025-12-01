@@ -688,6 +688,18 @@ export const updateNotificationPreferencesResponseSchema = z.object({
 });
 export type UpdateNotificationPreferencesResponse = z.infer<typeof updateNotificationPreferencesResponseSchema>;
 
+// DELETE /api/users/:id - Delete user account and all associated data
+export const deleteUserAccountRequestSchema = z.object({
+  confirmText: z.string(), // User must type "DELETE" to confirm
+  feedback: z.string().optional(), // Optional feedback about why user is leaving
+});
+export type DeleteUserAccountRequest = z.infer<typeof deleteUserAccountRequestSchema>;
+export const deleteUserAccountResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+export type DeleteUserAccountResponse = z.infer<typeof deleteUserAccountResponseSchema>;
+
 // POST /api/chats/:chatId/read-receipts - Mark messages as read
 export const markMessagesAsReadRequestSchema = z.object({
   userId: z.string(),

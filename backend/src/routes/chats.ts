@@ -1526,4 +1526,76 @@ chats.get("/:id/typing", async (c) => {
   }
 });
 
+// POST /api/chats/debug-link-preview - Force refresh link preview for a message
+chats.post("/debug-link-preview", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { messageId } = body;
+
+    if (!messageId) {
+      return c.json({ error: "messageId is required" }, 400);
+    }
+
+    console.log(`[Debug] Force refreshing link preview for message: ${messageId}`);
+
+    // 1. Fetch message content
+    const { data: message, error: msgError } = await db
+      .from("message")
+      .select("*")
+      .eq("id", messageId)
+      .single();
+
+    if (msgError || !message) {
+      return c.json({ error: "Message not found", details: msgError }, 404);
+    }
+
+    console.log(`[Debug] Message content: "${message.content}"`);
+
+    // 2. Extract URL
+    const url = extractFirstUrl(message.content);
+    console.log(`[Debug] Extracted URL: "${url}"`);
+
+    if (!url) {
+      return c.json({ error: "No URL found in message" }, 400);
+    }
+
+    // 3. Fetch Link Preview
+    console.log(`[Debug] Fetching link preview...`);
+    const linkPreview = await fetchLinkPreview(url);
+    console.log(`[Debug] Link preview result:`, linkPreview);
+
+    if (!linkPreview) {
+      return c.json({ error: "Failed to fetch link preview data" }, 500);
+    }
+
+    // 4. Update Database
+    const { error: updateError } = await db
+      .from("message")
+      .update({
+        linkPreviewUrl: linkPreview.url,
+        linkPreviewTitle: linkPreview.title,
+        linkPreviewDescription: linkPreview.description,
+        linkPreviewImage: linkPreview.image,
+        linkPreviewSiteName: linkPreview.siteName,
+        linkPreviewFavicon: linkPreview.favicon,
+      })
+      .eq("id", messageId);
+
+    if (updateError) {
+      console.error(`[Debug] Database update failed:`, updateError);
+      return c.json({ error: "Database update failed", details: updateError }, 500);
+    }
+
+    return c.json({ 
+      success: true, 
+      message: "Link preview updated", 
+      data: linkPreview 
+    });
+
+  } catch (error) {
+    console.error("[Debug] Error in debug-link-preview:", error);
+    return c.json({ error: "Internal server error", details: String(error) }, 500);
+  }
+});
+
 export default chats;

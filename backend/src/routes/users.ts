@@ -11,6 +11,8 @@ import {
   registerPushTokenResponseSchema,
   updateNotificationPreferencesRequestSchema,
   updateNotificationPreferencesResponseSchema,
+  deleteUserAccountRequestSchema,
+  deleteUserAccountResponseSchema,
 } from "../../../shared/contracts";
 import { db, createUserClient } from "../db";
 
@@ -190,6 +192,191 @@ users.patch("/:id/notifications", zValidator("json", updateNotificationPreferenc
   } catch (error) {
     console.error("[Users] Error updating notification preferences:", error);
     return c.json({ error: "Failed to update notification preferences" }, 500);
+  }
+});
+
+// DELETE /api/users/:id - Delete user account and all associated data
+// This endpoint complies with Apple App Store guidelines (5.1.1(v))
+// Deletes all personal data except what is legally required to retain
+users.delete("/:id", zValidator("json", deleteUserAccountRequestSchema), async (c) => {
+  try {
+    const id = c.req.param("id");
+    const { confirmText, feedback } = c.req.valid("json");
+    const authHeader = c.req.header("Authorization");
+    const token = authHeader?.replace("Bearer ", "");
+
+    // Verify user wants to delete by checking confirmation text
+    if (confirmText !== "DELETE") {
+      return c.json({ error: "Invalid confirmation text. Please type DELETE to confirm." }, 400);
+    }
+
+    // Use user-scoped client if token exists, otherwise fall back to db (admin)
+    const client = token ? createUserClient(token) : db;
+
+    console.log(`[Users] DELETE /${id} - Starting account deletion process`);
+    
+    // Log feedback if provided (for improvement purposes)
+    if (feedback && feedback.trim()) {
+      console.log(`[Users] DELETE /${id} - User feedback: ${feedback}`);
+      // TODO: Consider storing feedback in a separate analytics table for future analysis
+      // This could help improve the product by understanding why users leave
+    }
+
+    // Step 1: Delete all user-related data
+    // Note: We rely on database CASCADE constraints for related data
+    // But we'll explicitly delete some tables to be thorough
+
+    // Delete reactions by user
+    const { error: reactionsError } = await db
+      .from("reaction")
+      .delete()
+      .eq("userId", id);
+    if (reactionsError) {
+      console.error("[Users] Error deleting reactions:", reactionsError);
+    }
+
+    // Delete read receipts by user
+    const { error: readReceiptsError } = await db
+      .from("read_receipt")
+      .delete()
+      .eq("userId", id);
+    if (readReceiptsError) {
+      console.error("[Users] Error deleting read receipts:", readReceiptsError);
+    }
+
+    // Delete bookmarks by user
+    const { error: bookmarksError } = await db
+      .from("bookmark")
+      .delete()
+      .eq("userId", id);
+    if (bookmarksError) {
+      console.error("[Users] Error deleting bookmarks:", bookmarksError);
+    }
+
+    // Delete mentions (both by and of user)
+    const { error: mentionsError } = await db
+      .from("mention")
+      .delete()
+      .or(`mentionedUserId.eq.${id},mentionedByUserId.eq.${id}`);
+    if (mentionsError) {
+      console.error("[Users] Error deleting mentions:", mentionsError);
+    }
+
+    // Delete event responses by user
+    const { error: eventResponsesError } = await db
+      .from("event_response")
+      .delete()
+      .eq("userId", id);
+    if (eventResponsesError) {
+      console.error("[Users] Error deleting event responses:", eventResponsesError);
+    }
+
+    // Delete media reactions by user
+    const { error: mediaReactionsError } = await db
+      .from("media_reaction")
+      .delete()
+      .eq("userId", id);
+    if (mediaReactionsError) {
+      console.error("[Users] Error deleting media reactions:", mediaReactionsError);
+    }
+
+    // Delete conversation summaries for user
+    const { error: summariesError } = await db
+      .from("conversation_summary")
+      .delete()
+      .eq("userId", id);
+    if (summariesError) {
+      console.error("[Users] Error deleting conversation summaries:", summariesError);
+    }
+
+    // Delete thread memberships
+    const { error: threadMembersError } = await db
+      .from("thread_member")
+      .delete()
+      .eq("userId", id);
+    if (threadMembersError) {
+      console.error("[Users] Error deleting thread memberships:", threadMembersError);
+    }
+
+    // Delete threads created by user
+    const { error: threadsError } = await db
+      .from("thread")
+      .delete()
+      .eq("creatorId", id);
+    if (threadsError) {
+      console.error("[Users] Error deleting threads:", threadsError);
+    }
+
+    // Delete messages by user (this will cascade to reactions, mentions, etc.)
+    const { error: messagesError } = await db
+      .from("message")
+      .delete()
+      .eq("userId", id);
+    if (messagesError) {
+      console.error("[Users] Error deleting messages:", messagesError);
+    }
+
+    // Delete chat memberships
+    const { error: chatMembersError } = await db
+      .from("chat_member")
+      .delete()
+      .eq("userId", id);
+    if (chatMembersError) {
+      console.error("[Users] Error deleting chat memberships:", chatMembersError);
+    }
+
+    // Get chats created by user to potentially delete them
+    const { data: createdChats } = await db
+      .from("chat")
+      .select("id")
+      .eq("creatorId", id);
+
+    // For each chat created by user, delete associated data
+    if (createdChats && createdChats.length > 0) {
+      for (const chat of createdChats) {
+        // Delete AI friends in the chat
+        await db.from("ai_friend").delete().eq("chatId", chat.id);
+        
+        // Delete custom commands in the chat
+        await db.from("custom_slash_command").delete().eq("chatId", chat.id);
+        
+        // Delete events in the chat
+        await db.from("event").delete().eq("chatId", chat.id);
+        
+        // Delete threads in the chat
+        await db.from("thread").delete().eq("chatId", chat.id);
+      }
+
+      // Delete chats created by user
+      const { error: chatsError } = await db
+        .from("chat")
+        .delete()
+        .eq("creatorId", id);
+      if (chatsError) {
+        console.error("[Users] Error deleting chats:", chatsError);
+      }
+    }
+
+    // Step 2: Finally, delete the user account
+    const { error: userError } = await client
+      .from("user")
+      .delete()
+      .eq("id", id);
+
+    if (userError) {
+      console.error("[Users] Error deleting user account:", userError);
+      return c.json({ error: "Failed to delete user account" }, 500);
+    }
+
+    console.log(`[Users] DELETE /${id} - Account deletion completed successfully`);
+
+    return c.json(deleteUserAccountResponseSchema.parse({
+      success: true,
+      message: "Account and all associated data have been permanently deleted",
+    }));
+  } catch (error) {
+    console.error("[Users] Error deleting user account:", error);
+    return c.json({ error: "Failed to delete user account" }, 500);
   }
 });
 

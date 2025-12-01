@@ -13,11 +13,12 @@ import {
   Switch,
   Keyboard,
   useColorScheme,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Camera, User as UserIcon, Bell, BellOff } from "lucide-react-native";
+import { Camera, User as UserIcon, Bell, BellOff, Trash2, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react-native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -29,7 +30,7 @@ import { getFullImageUrl } from "@/utils/imageHelpers";
 
 const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
-  const { user, loading, updateUser } = useUser();
+  const { user, loading, updateUser, signOut } = useUser();
   const colorScheme = useColorScheme();
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");
@@ -38,6 +39,10 @@ const ProfileScreen = () => {
   const [pushNotificationsEnabled, setPushNotificationsEnabled] = useState(true);
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isDeleteSectionExpanded, setIsDeleteSectionExpanded] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [deletionFeedback, setDeletionFeedback] = useState("");
 
   // Keyboard listener
   React.useEffect(() => {
@@ -147,6 +152,128 @@ const ProfileScreen = () => {
       Alert.alert("Error", "Failed to update notification preferences");
     } finally {
       setIsUpdatingNotifications(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This action is permanent and cannot be undone. All your data including messages, chats, and settings will be permanently deleted.\n\nAre you absolutely sure you want to delete your account?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => {
+            // Show feedback modal before final confirmation
+            setShowFeedbackModal(true);
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleFeedbackSubmit = () => {
+    // Close feedback modal and proceed to final confirmation
+    setShowFeedbackModal(false);
+    
+    // Final confirmation with text input
+    Alert.prompt(
+      "Confirm Deletion",
+      'To confirm, please type "DELETE" in all caps:',
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: (confirmText) => {
+            if (confirmText === "DELETE") {
+              performAccountDeletion();
+            } else {
+              Alert.alert("Error", "Confirmation text did not match. Account was not deleted.");
+            }
+          },
+        },
+      ],
+      "plain-text"
+    );
+  };
+
+  const handleSkipFeedback = () => {
+    setShowFeedbackModal(false);
+    setDeletionFeedback(""); // Clear feedback
+    
+    // Proceed directly to final confirmation
+    Alert.prompt(
+      "Confirm Deletion",
+      'To confirm, please type "DELETE" in all caps:',
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: (confirmText) => {
+            if (confirmText === "DELETE") {
+              performAccountDeletion();
+            } else {
+              Alert.alert("Error", "Confirmation text did not match. Account was not deleted.");
+            }
+          },
+        },
+      ],
+      "plain-text"
+    );
+  };
+
+  const performAccountDeletion = async () => {
+    if (!user?.id) return;
+
+    setIsDeletingAccount(true);
+    try {
+      // Include feedback in deletion request if provided
+      const response = await api.delete(`/api/users/${user.id}`, {
+        confirmText: "DELETE",
+        feedback: deletionFeedback.trim() || undefined,
+      });
+
+      if (response.success) {
+        // Clear feedback after successful deletion
+        setDeletionFeedback("");
+        
+        Alert.alert(
+          "Account Deleted",
+          "Your account and all associated data have been permanently deleted." + 
+          (deletionFeedback.trim() ? "\n\nThank you for your feedback." : ""),
+          [
+            {
+              text: "OK",
+              onPress: async () => {
+                // Sign out user - this will clear the session and navigate to auth
+                await signOut();
+              },
+            },
+          ],
+          { cancelable: false }
+        );
+      }
+    } catch (error: any) {
+      console.error("Failed to delete account:", error);
+      Alert.alert(
+        "Error",
+        error?.message || "Failed to delete account. Please try again or contact support."
+      );
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -345,7 +472,7 @@ const ProfileScreen = () => {
             </View>
 
             {/* Notification Settings */}
-            <View className="mb-8">
+            <View className="mb-6">
               <Text className="text-sm font-semibold mb-3 ml-1" style={{ color: "#8E8E93" }}>
                 NOTIFICATIONS
               </Text>
@@ -391,11 +518,11 @@ const ProfileScreen = () => {
             <Pressable
               onPress={handleSave}
               disabled={isSaving || (name === user?.name && bio === (user?.bio || "")) || !name.trim()}
+              className="rounded-2xl overflow-hidden"
               style={({ pressed }) => ({
                 opacity: pressed || isSaving || (name === user?.name && bio === (user?.bio || "")) || !name.trim() ? 0.7 : 1,
-                borderRadius: 16,
-                overflow: "hidden",
-                marginTop: 20,
+                marginTop: 4,
+                marginBottom: 32,
                 shadowColor: (name !== user?.name || bio !== (user?.bio || "")) && name.trim() ? "#0061FF" : "transparent",
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.3,
@@ -429,8 +556,294 @@ const ProfileScreen = () => {
               )}
               </LinearGradient>
             </Pressable>
+
+            {/* Delete Account Section - Collapsible */}
+            <View className="mb-8">
+              <Text className="text-sm font-semibold mb-3 ml-1" style={{ color: "#8E8E93" }}>
+                DANGER ZONE
+              </Text>
+              <View
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  backgroundColor: "rgba(255, 59, 48, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 59, 48, 0.3)",
+                }}
+              >
+                {/* Collapsible Header */}
+                <Pressable
+                  onPress={() => setIsDeleteSectionExpanded(!isDeleteSectionExpanded)}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <View style={{ 
+                    flexDirection: "row", 
+                    alignItems: "center", 
+                    justifyContent: "space-between",
+                    paddingVertical: 20,
+                    paddingHorizontal: 20,
+                  }}>
+                    {/* Left side: Icon and Text */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <AlertTriangle size={20} color="#FF3B30" />
+                      <Text style={{ color: "#FF3B30", fontSize: 16, fontWeight: "600" }}>
+                        Delete Account
+                      </Text>
+                    </View>
+                    
+                    {/* Right side: Chevron */}
+                    {isDeleteSectionExpanded ? (
+                      <ChevronDown size={20} color="#FF3B30" />
+                    ) : (
+                      <ChevronRight size={20} color="#FF3B30" />
+                    )}
+                  </View>
+                </Pressable>
+
+                {/* Expanded Content */}
+                {isDeleteSectionExpanded && (
+                  <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+                    <View style={{ height: 1, backgroundColor: "rgba(255, 59, 48, 0.2)", marginBottom: 18 }} />
+                    <Text style={{ color: "#CCCCCC", fontSize: 14, marginBottom: 20, lineHeight: 21 }}>
+                      Permanently delete your account and all of your data. This action cannot be undone. All messages, chats, and settings will be lost.
+                    </Text>
+                    <Pressable
+                      onPress={handleDeleteAccount}
+                      disabled={isDeletingAccount}
+                      className="rounded-2xl overflow-hidden"
+                      style={({ pressed }) => ({
+                        opacity: pressed || isDeletingAccount ? 0.7 : 1,
+                      })}
+                    >
+                      <LinearGradient
+                        colors={["#FF3B30", "#FF453A"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{
+                          paddingVertical: 16,
+                          paddingHorizontal: 24,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {isDeletingAccount ? (
+                          <LuxeLogoLoader size="small" />
+                        ) : (
+                          <>
+                            <Trash2 size={18} color="#FFFFFF" />
+                            <Text
+                              style={{
+                                color: "#FFFFFF",
+                                fontSize: 16,
+                                fontWeight: "600",
+                                marginLeft: 10,
+                              }}
+                            >
+                              Delete My Account
+                            </Text>
+                          </>
+                        )}
+                      </LinearGradient>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Feedback Modal */}
+        <Modal
+          visible={showFeedbackModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFeedbackModal(false)}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0, 0, 0, 0.85)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 20,
+            }}
+          >
+            <BlurView
+              intensity={100}
+              tint="dark"
+              style={{
+                width: "100%",
+                maxWidth: 400,
+                borderRadius: 24,
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: "rgba(28, 28, 30, 0.95)",
+                  padding: 24,
+                  borderRadius: 24,
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                {/* Header */}
+                <View style={{ alignItems: "center", marginBottom: 20 }}>
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 28,
+                      backgroundColor: "rgba(255, 149, 0, 0.15)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <AlertTriangle size={28} color="#FF9500" />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 22,
+                      fontWeight: "700",
+                      color: "#FFFFFF",
+                      marginBottom: 8,
+                    }}
+                  >
+                    We're Sorry to See You Go
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      color: "#8E8E93",
+                      textAlign: "center",
+                      lineHeight: 20,
+                    }}
+                  >
+                    Before you leave, would you mind sharing why you're deleting your account? This helps us improve.
+                  </Text>
+                </View>
+
+                {/* Feedback Input */}
+                <View style={{ marginBottom: 20 }}>
+                  <TextInput
+                    value={deletionFeedback}
+                    onChangeText={setDeletionFeedback}
+                    placeholder="Your feedback (optional)..."
+                    placeholderTextColor="#666666"
+                    keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                    multiline
+                    numberOfLines={4}
+                    maxLength={500}
+                    style={{
+                      backgroundColor: "rgba(255, 255, 255, 0.08)",
+                      borderWidth: 1,
+                      borderColor: "rgba(255, 255, 255, 0.15)",
+                      borderRadius: 16,
+                      padding: 16,
+                      color: "#FFFFFF",
+                      fontSize: 15,
+                      minHeight: 120,
+                      textAlignVertical: "top",
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: "#666666",
+                      marginTop: 8,
+                      textAlign: "right",
+                    }}
+                  >
+                    {deletionFeedback.length}/500
+                  </Text>
+                </View>
+
+                {/* Buttons */}
+                <View style={{ gap: 12 }}>
+                  {/* Submit Feedback Button */}
+                  <Pressable
+                    onPress={handleFeedbackSubmit}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                      borderRadius: 14,
+                      overflow: "hidden",
+                    })}
+                  >
+                    <LinearGradient
+                      colors={["#0061FF", "#00C6FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{
+                        paddingVertical: 16,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#FFFFFF",
+                          fontSize: 17,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {deletionFeedback.trim() ? "Submit & Continue" : "Continue Without Feedback"}
+                      </Text>
+                    </LinearGradient>
+                  </Pressable>
+
+                  {/* Skip Button */}
+                  <Pressable
+                    onPress={handleSkipFeedback}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                      paddingVertical: 16,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 14,
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      borderWidth: 1,
+                      borderColor: "rgba(255, 255, 255, 0.1)",
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: "#8E8E93",
+                        fontSize: 17,
+                        fontWeight: "500",
+                      }}
+                    >
+                      Skip
+                    </Text>
+                  </Pressable>
+
+                  {/* Cancel Button */}
+                  <Pressable
+                    onPress={() => setShowFeedbackModal(false)}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                      paddingVertical: 12,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: "#666666",
+                        fontSize: 15,
+                        fontWeight: "500",
+                      }}
+                    >
+                      Cancel Deletion
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </BlurView>
+          </View>
+        </Modal>
     </View>
   );
 };

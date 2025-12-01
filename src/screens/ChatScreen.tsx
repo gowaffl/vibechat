@@ -4912,8 +4912,8 @@ const ChatScreen = () => {
             // Padding bottom creates space for header/threads
             paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
             paddingHorizontal: 16,
-            // Visual bottom handled by ListHeaderComponent spacer
-            paddingTop: 0, 
+            // Visual bottom - small padding to push recent messages up slightly
+            paddingTop: 16, 
           }}
           // Spacer for Input Bar (Glassmorphism effect)
           ListHeaderComponent={<View style={{ height: 120 }} />}
@@ -4941,7 +4941,13 @@ const ChatScreen = () => {
             }, 100);
           }}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center px-8" style={{ paddingVertical: 60 }}>
+            <View 
+              className="flex-1 items-center justify-center px-8" 
+              style={{ 
+                paddingVertical: 60,
+                transform: [{ scaleY: -1 }] // Flip to counteract inverted list
+              }}
+            >
               {/* Premium Empty State Card */}
               <View style={{ 
                 width: '100%', 
