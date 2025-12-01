@@ -1306,30 +1306,30 @@ chats.post("/:id/read-receipts", async (c) => {
         .neq("messageType", "system");
 
       const messages = messagesData || [];
-      const allMessageIds = messages.map((m: any) => m.id);
-
-      if (allMessageIds.length === 0) {
-        return c.json({
-          success: true,
-          message: "No messages to mark as read",
-          markedCount: 0,
-        });
-      }
-
-      // Get existing read receipts
-      const { data: readReceiptsData } = await client
-        .from("read_receipt")
-        .select("messageId")
-        .eq("userId", userId)
-        .eq("chatId", chatId)
-        .in("messageId", allMessageIds);
-
-      const readReceipts = readReceiptsData || [];
-      const readMessageIdSet = new Set(readReceipts.map((r: any) => r.messageId));
-      
-      // Filter out already read messages
-      idsToMark = allMessageIds.filter((id: string) => !readMessageIdSet.has(id));
+      idsToMark = messages.map((m: any) => m.id);
     }
+
+    if (idsToMark.length === 0) {
+      return c.json({
+        success: true,
+        message: "No messages to mark as read",
+        markedCount: 0,
+      });
+    }
+
+    // Always filter out messages that are already read to prevent unique constraint violations
+    const { data: readReceiptsData } = await client
+      .from("read_receipt")
+      .select("messageId")
+      .eq("userId", userId)
+      .eq("chatId", chatId)
+      .in("messageId", idsToMark);
+
+    const readReceipts = readReceiptsData || [];
+    const readMessageIdSet = new Set(readReceipts.map((r: any) => r.messageId));
+    
+    // Filter out already read messages
+    idsToMark = idsToMark.filter((id: string) => !readMessageIdSet.has(id));
 
     if (idsToMark.length === 0) {
       return c.json({

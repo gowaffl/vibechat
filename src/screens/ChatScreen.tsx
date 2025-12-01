@@ -2587,18 +2587,24 @@ const ChatScreen = () => {
           setIsUploadingImage(true);
           try {
             const uploadedUrls: string[] = [];
+            
+            // Get auth token
+            const token = await authClient.getToken();
 
             // Upload all selected images
             for (const imageUri of selectedImages) {
               console.log("[ChatScreen /image] Uploading image:", imageUri);
               
               const uploadResult = await FileSystem.uploadAsync(
-                `${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`,
+                `${BACKEND_URL}/api/upload/image`,
                 imageUri,
                 {
                   httpMethod: "POST",
                   uploadType: FileSystem.FileSystemUploadType.MULTIPART,
                   fieldName: "image",
+                  headers: token ? {
+                    Authorization: `Bearer ${token}`,
+                  } : undefined,
                 }
               );
 
@@ -2661,27 +2667,29 @@ const ChatScreen = () => {
           try {
             // Use only the first image for memes
             const imageUri = selectedImages[0];
-            const uriParts = imageUri.split('.');
-            const fileType = uriParts[uriParts.length - 1];
+            
+            // Get auth token
+            const token = await authClient.getToken();
 
-            // Upload image
-            const formData = new FormData();
-            formData.append("image", {
-              uri: imageUri,
-              type: `image/${fileType}`,
-              name: `reference-image.${fileType}`,
-            } as any);
+            // Upload image using FileSystem.uploadAsync
+            const uploadResult = await FileSystem.uploadAsync(
+              `${BACKEND_URL}/api/upload/image`,
+              imageUri,
+              {
+                httpMethod: "POST",
+                uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                fieldName: "image",
+                headers: token ? {
+                  Authorization: `Bearer ${token}`,
+                } : undefined,
+              }
+            );
 
-            const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`, {
-              method: "POST",
-              body: formData,
-            });
-
-            if (!uploadResponse.ok) {
-              throw new Error(`Upload failed: ${uploadResponse.status}`);
+            if (uploadResult.status !== 200) {
+              throw new Error(`Upload failed: ${uploadResult.status}`);
             }
 
-            const uploadData = await uploadResponse.json();
+            const uploadData = JSON.parse(uploadResult.body);
 
             // Generate meme with reference
             generateMemeMutation.mutate({
@@ -2711,68 +2719,6 @@ const ChatScreen = () => {
       return;
     }
 
-
-    if (trimmedMessage.startsWith("/meme ")) {
-      const prompt = trimmedMessage.substring(6).trim();
-      if (prompt) {
-        setMessageText(""); // Clear input immediately
-        setReplyToMessage(null);
-
-        // If user has images selected, upload the first one and use as reference
-        if (selectedImages.length > 0) {
-          setIsUploadingImage(true);
-          try {
-            // Use only the first image for memes
-            const imageUri = selectedImages[0];
-            const uriParts = imageUri.split('.');
-            const fileType = uriParts[uriParts.length - 1];
-
-            // Upload image
-            const formData = new FormData();
-            formData.append("image", {
-              uri: imageUri,
-              type: `image/${fileType}`,
-              name: `reference-image.${fileType}`,
-            } as any);
-
-            const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL}/api/upload/image`, {
-              method: "POST",
-              body: formData,
-            });
-
-            if (!uploadResponse.ok) {
-              throw new Error(`Upload failed: ${uploadResponse.status}`);
-            }
-
-            const uploadData = await uploadResponse.json();
-
-            // Generate meme with reference
-            generateMemeMutation.mutate({
-              prompt,
-              userId: user.id,
-              chatId: chatId,
-              referenceImageUrl: uploadData.url,
-            });
-
-            // Clear selected images
-            setSelectedImages([]);
-          } catch (error) {
-            console.error("Error uploading reference image:", error);
-            Alert.alert("Error", "Failed to upload reference image");
-          } finally {
-            setIsUploadingImage(false);
-          }
-        } else {
-          // No reference image, just generate from prompt
-          generateMemeMutation.mutate({
-            prompt,
-            userId: user.id,
-            chatId: chatId,
-          });
-        }
-      }
-      return;
-    }
 
     // If images are selected (but not /image or /meme command), upload and send image message
     if (selectedImages.length > 0) {
@@ -4161,7 +4107,7 @@ const ChatScreen = () => {
               />
             </View>
           ) : /* Image Message */ isImage && message.imageUrl ? (
-            <View style={{ width: 225 }}>
+            <View style={{ width: 270 }}>
               <Pressable
                 onPress={() => {
                   if (imageSelectionMode) {
@@ -4183,7 +4129,7 @@ const ChatScreen = () => {
                   }
                 }}
               >
-                <View style={{ width: 225, height: 240, position: "relative", overflow: "hidden" }}>
+                <View style={{ width: 270, height: 288, position: "relative", overflow: "hidden" }}>
                   {/* Placeholder - only show while loading */}
                   {loadingImageIds.has(message.id) && (
                     <View
@@ -4721,7 +4667,7 @@ const ChatScreen = () => {
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
             paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
             paddingHorizontal: 16,
-            paddingTop: 60
+            paddingTop: 0
           }}
           keyboardShouldPersistTaps="always"
           onScrollBeginDrag={() => Keyboard.dismiss()}
