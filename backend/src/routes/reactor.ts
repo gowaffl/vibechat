@@ -239,7 +239,7 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
           errorData = JSON.parse(errorText);
         } catch {
           // Not JSON, use raw text
-          return c.json({ error: "Failed to generate remix", details: errorText }, response.status);
+          return c.json({ error: "Failed to generate remix", details: errorText }, response.status as any);
         }
 
         // Check for rate limiting (429)
@@ -266,25 +266,25 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
         return c.json({
           error: "Failed to generate remix",
           details: errorData.error?.message || errorText
-        }, response.status);
+        }, response.status as any);
       }
 
       const data = await response.json();
-      const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+      const imagePart = (data as any).candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
 
       if (!imagePart) {
         console.log("[Reactor] No image generated in response");
 
         // Check if content was blocked
-        if (data.promptFeedback?.blockReason) {
+        if ((data as any).promptFeedback?.blockReason) {
           return c.json({
             error: "Image generation blocked by safety filters. Try a different prompt.",
-            details: data.promptFeedback.blockReason
+            details: (data as any).promptFeedback?.blockReason
           }, 400);
         }
 
         // Check if NO_IMAGE finish reason
-        const finishReason = data.candidates?.[0]?.finishReason;
+        const finishReason = (data as any).candidates?.[0]?.finishReason;
         if (finishReason === "NO_IMAGE") {
           return c.json({
             error: "Unable to generate remix for this prompt. Try simplifying or changing your request.",
@@ -480,7 +480,7 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
           errorData = JSON.parse(errorText);
         } catch {
           // Not JSON, use raw text
-          return c.json({ error: "Failed to generate meme", details: errorText }, response.status);
+          return c.json({ error: "Failed to generate meme", details: errorText }, response.status as any);
         }
 
         // Check for rate limiting (429)
@@ -507,25 +507,25 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
         return c.json({
           error: "Failed to generate meme",
           details: errorData.error?.message || errorText
-        }, response.status);
+        }, response.status as any);
       }
 
       const data = await response.json();
-      const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+      const imagePart = (data as any).candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
 
       if (!imagePart) {
         console.log("[Reactor] No meme generated in response");
 
         // Check if content was blocked
-        if (data.promptFeedback?.blockReason) {
+        if ((data as any).promptFeedback?.blockReason) {
           return c.json({
             error: "Meme generation blocked by safety filters. Try a different style.",
-            details: data.promptFeedback.blockReason
+            details: (data as any).promptFeedback?.blockReason
           }, 400);
         }
 
         // Check if NO_IMAGE finish reason
-        const finishReason = data.candidates?.[0]?.finishReason;
+        const finishReason = (data as any).candidates?.[0]?.finishReason;
         if (finishReason === "NO_IMAGE") {
           return c.json({
             error: "Unable to generate meme. Try a different style or concept.",

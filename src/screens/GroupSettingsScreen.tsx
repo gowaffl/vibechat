@@ -15,6 +15,7 @@ import {
   PanResponder,
   Keyboard,
   useColorScheme,
+  Dimensions,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -2797,9 +2798,9 @@ const GroupSettingsScreen = () => {
                 data={photoMessages}
                 numColumns={3}
                 keyExtractor={(item: any) => item.id}
-                estimatedItemSize={120}
+                estimatedItemSize={Dimensions.get("window").width / 3}
                 contentContainerStyle={{
-                  padding: 8,
+                  padding: 0,
                   paddingBottom: insets.bottom + 20,
                 }}
                 renderItem={({ item }: { item: any }) => (
@@ -2827,12 +2828,12 @@ const GroupSettingsScreen = () => {
                       }, 100);
                     }}
                     style={{
-                      width: "33.33%",
-                      aspectRatio: 1,
-                      padding: 4,
+                      width: Dimensions.get("window").width / 3,
+                      height: Dimensions.get("window").width / 3,
+                      padding: 0.5,
                     }}
                   >
-                    <View style={{ flex: 1, borderRadius: 12, overflow: "hidden" }}>
+                    <View style={{ flex: 1, backgroundColor: "#2A2A2A" }}>
                       <Image
                         source={{ uri: item.imageUrl?.startsWith('http') ? item.imageUrl : `${BACKEND_URL}${item.imageUrl}` }}
                         style={{ width: "100%", height: "100%" }}
