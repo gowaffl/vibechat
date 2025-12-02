@@ -179,8 +179,8 @@ const ChatHeader = ({
             
             // Check if we can just pop back to MainTabs (ensures the "Rise Up" animation plays perfectly)
             const state = navigation.getState();
-            const routes = state.routes;
-            const previousRoute = routes[routes.length - 2];
+            const routes = state?.routes;
+            const previousRoute = routes?.[routes.length - 2];
             
             if (previousRoute?.name === "MainTabs") {
               navigation.goBack();
@@ -2150,9 +2150,7 @@ const ChatScreen = () => {
           user: user,
           reactions: [],
           replyTo: newMessage.replyToId ? previousMessages.find(m => m.id === newMessage.replyToId) : undefined,
-          mentions: newMessage.mentionedUserIds?.map(id => ({ userId: id })) || [],
-          thread: null,
-          bookmarks: [],
+          mentions: [], // Mentions will be populated by the server response
         };
 
         queryClient.setQueryData<Message[]>(
@@ -4398,13 +4396,13 @@ const ChatScreen = () => {
     const message = item as Message;
     const isCurrentUser = message.userId === user?.id;
     // AI messages have userId: null and aiFriendId set
-    const isAI = message.aiFriendId && message.userId === null;
+    const isAI = !!(message.aiFriendId && message.userId === null);
     const isSystem = message.messageType === "system" || message.userId === "system";
     
     // Get AI friend information if this is an AI message
-    // Use the aiFriend data from the message itself, or from the aiFriends list
+    // Use the aiFriendId to look up from the aiFriends list
     const aiFriend = message.aiFriendId 
-      ? (message.aiFriend || aiFriends.find(f => f.id === message.aiFriendId))
+      ? aiFriends.find(f => f.id === message.aiFriendId)
       : null;
     // Force brand teal color for AI messages regardless of friend color setting
     const aiColor = "#14B8A6"; 
@@ -5277,8 +5275,10 @@ const ChatScreen = () => {
         <AnimatedFlashList
           ref={flatListRef}
           data={displayData}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          renderItem={renderMessage as any}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          keyExtractor={((item: { id: string }) => item.id) as any}
           estimatedItemSize={120}
           inverted={true}
           contentContainerStyle={{
@@ -5293,27 +5293,30 @@ const ChatScreen = () => {
           ListHeaderComponent={<View style={{ height: 100 }} />}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="interactive"
-          onScrollToIndexFailed={(info) => {
-            console.log('[ScrollToIndex] Failed at index', info.index, 'average item length:', info.averageItemLength);
-            // Wait for list to settle and render more items, then retry
-            setTimeout(() => {
-              try {
-                flatListRef.current?.scrollToIndex({
-                  index: info.index,
-                  animated: true,
-                  viewPosition: 0.5,
-                });
-              } catch (error) {
-                console.log('[ScrollToIndex] Retry failed, using offset fallback');
-                // Use the average item length from the failure info for better estimate
-                const offset = info.index * (info.averageItemLength || 100);
-                flatListRef.current?.scrollToOffset({
-                  offset: offset,
-                  animated: true,
-                });
-              }
-            }, 100);
-          }}
+          {...{
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            onScrollToIndexFailed: (info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
+              console.log('[ScrollToIndex] Failed at index', info.index, 'average item length:', info.averageItemLength);
+              // Wait for list to settle and render more items, then retry
+              setTimeout(() => {
+                try {
+                  flatListRef.current?.scrollToIndex({
+                    index: info.index,
+                    animated: true,
+                    viewPosition: 0.5,
+                  });
+                } catch (error) {
+                  console.log('[ScrollToIndex] Retry failed, using offset fallback');
+                  // Use the average item length from the failure info for better estimate
+                  const offset = info.index * (info.averageItemLength || 100);
+                  flatListRef.current?.scrollToOffset({
+                    offset: offset,
+                    animated: true,
+                  });
+                }
+              }, 100);
+            }
+          } as any}
           ListEmptyComponent={
             <View 
               className="flex-1 items-center justify-center px-8" 
@@ -6510,7 +6513,7 @@ const ChatScreen = () => {
             onAIReactor={() => {
               if (selectedImageMessageIds.size === 1) {
                 const messageId = selectedImageMessageIds.values().next().value;
-                setReactorMessageId(messageId);
+                setReactorMessageId(messageId ?? null);
                 setShowReactorMenu(true);
                 cancelImageSelectionMode();
               }

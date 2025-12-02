@@ -43,7 +43,7 @@ const PollCard: React.FC<PollCardProps> = ({
     sortedOptions.filter((o) => o.voteCount === winningOption?.voteCount).length > 1;
 
   // Variant based on status
-  const variant = isPollClosed ? "success" : "primary";
+  const variant = isPollClosed ? "success" : "info";
   const variantColors = variantColorMap[variant];
 
   const handleOptionPress = (optionId: string) => {
