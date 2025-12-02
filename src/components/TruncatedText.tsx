@@ -7,6 +7,8 @@ interface TruncatedTextProps {
   maxLines?: number;
   style?: any;
   expandButtonColor?: string;
+  /** LOW-21: Skip truncation for critical messages like safety/crisis responses */
+  bypassTruncation?: boolean;
 }
 
 /**
@@ -18,6 +20,7 @@ export const TruncatedText: React.FC<TruncatedTextProps> = ({
   maxLines = 25,
   style,
   expandButtonColor = "#007AFF",
+  bypassTruncation = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowButton, setShouldShowButton] = useState(false);
@@ -54,6 +57,11 @@ export const TruncatedText: React.FC<TruncatedTextProps> = ({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsExpanded(!isExpanded);
   };
+
+  // LOW-21: If bypass is enabled, render children without any truncation logic
+  if (bypassTruncation) {
+    return <View>{children}</View>;
+  }
 
   return (
     <View>

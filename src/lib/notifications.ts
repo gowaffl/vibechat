@@ -4,15 +4,51 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { api } from "./api";
 
+// HIGH-7: Track the currently active chatId to suppress notifications for it
+let activeChatId: string | null = null;
+
+/**
+ * Set the currently active chat to suppress its notifications
+ */
+export function setActiveChatId(chatId: string | null) {
+  activeChatId = chatId;
+}
+
+/**
+ * Get the currently active chat ID
+ */
+export function getActiveChatId(): string | null {
+  return activeChatId;
+}
+
 // Configure how notifications should be displayed when app is foregrounded
+// HIGH-7: Suppress notifications for the currently active chat
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    // Get the chatId from the notification data
+    const notificationChatId = notification.request.content.data?.chatId as string | undefined;
+    
+    // If this notification is for the currently active chat, suppress it
+    if (notificationChatId && notificationChatId === activeChatId) {
+      console.log("[Notifications] Suppressing notification for active chat:", notificationChatId);
+      return {
+        shouldShowAlert: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+    
+    // Show notification for other chats
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 /**

@@ -138,12 +138,16 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
     
     const slideOffset = interpolate(isVisible.value, [0, 1], [SCREEN_HEIGHT, 0]);
     
+    // HIGH-17: Limit menu height to 70% of screen for one-hand friendly access
+    const maxMenuHeight = SCREEN_HEIGHT * 0.70;
+    const availableHeight = SCREEN_HEIGHT - keyboard.height.value - insets.top - 20;
+    
     return {
       transform: [
         { translateY: slideOffset - keyboard.height.value + dragY.value }
       ],
-      // We can also adjust maxHeight dynamically to prevent going offscreen
-      maxHeight: SCREEN_HEIGHT - keyboard.height.value - insets.top - 20,
+      // Use smaller of max menu height or available space
+      maxHeight: Math.min(maxMenuHeight, availableHeight),
     };
   });
 

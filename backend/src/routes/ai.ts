@@ -16,6 +16,13 @@ import { saveResponseImages } from "../services/image-storage";
 import { smartRepliesRequestSchema } from "../../../shared/contracts";
 import { tagMessage } from "../services/message-tagger";
 import { uploadFileToStorage } from "../services/storage";
+import {
+  checkContentSafety,
+  getSafetySystemPrompt,
+  getUserAgeContext,
+  filterAIOutput,
+  logSafetyEvent,
+} from "../services/content-safety";
 
 const ai = new Hono<AppType>();
 
@@ -79,6 +86,54 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // CRIT-1/2/3: Content Safety Check
+    const userAgeContext = await getUserAgeContext(userId);
+    const safetyResult = await checkContentSafety({
+      userMessage,
+      userId,
+      chatId,
+      isMinor: userAgeContext.isMinor,
+    });
+
+    // Handle crisis situation (CRIT-2)
+    if (safetyResult.crisisDetected && safetyResult.crisisResponse) {
+      logSafetyEvent("crisis", { chatId, userId, flags: safetyResult.flags });
+      
+      // Create a supportive response message instead of the user's request
+      const { data: crisisMessage } = await db
+        .from("message")
+        .insert({
+          content: safetyResult.crisisResponse,
+          messageType: "text",
+          userId: null, // AI message
+          chatId: chatId,
+          aiFriendId: aiFriendId,
+        })
+        .select()
+        .single();
+
+      releaseAIResponseLock(chatId);
+      return c.json({
+        id: crisisMessage?.id,
+        content: safetyResult.crisisResponse,
+        userId: null,
+        aiFriendId: aiFriendId,
+        chatId: chatId,
+        createdAt: new Date().toISOString(),
+        isCrisisResponse: true,
+      });
+    }
+
+    // Handle blocked content (CRIT-1)
+    if (safetyResult.isBlocked) {
+      logSafetyEvent("blocked", { chatId, userId, flags: safetyResult.flags });
+      releaseAIResponseLock(chatId);
+      return c.json({
+        error: safetyResult.blockReason || "I can't help with that request.",
+        blocked: true,
+      }, 400);
     }
 
     // Get the specific AI friend (or default to first one if not specified)
@@ -203,8 +258,13 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       toneInstruction = `\nYour conversational tone: ${aiFriend.tone}`;
     }
 
-    // Create an enhanced, natural system prompt
-    const systemPrompt = `You are ${aiName}, a friend in this group chat. Someone just mentioned you (@${aiName}), so they're asking for your input directly.
+    // Get safety system prompt based on user age (CRIT-1/3)
+    const safetyInstructions = getSafetySystemPrompt(userAgeContext.isMinor);
+
+    // Create an enhanced, natural system prompt with safety instructions
+    const systemPrompt = `${safetyInstructions}
+
+You are ${aiName}, a friend in this group chat. Someone just mentioned you (@${aiName}), so they're asking for your input directly.
 
 # Chat Context
 Group: "${chat.name}"${chat.bio ? `\nAbout: ${chat.bio}` : ""}
@@ -258,18 +318,41 @@ Respond naturally and concisely based on the conversation.`;
       { type: "code_interpreter", container: { type: "auto" } },
     ];
 
-    console.log("[AI] Calling GPT-5.1 Responses API with hosted tools...");
-    const response = await executeGPT51Response({
-      systemPrompt,
-      userPrompt: userInput,
-      tools,
-      reasoningEffort: "none",
-      temperature: 1,
-      maxTokens: 2048,
-    });
+    // MED-19: Enhanced logging and error handling for AI response
+    const startTime = Date.now();
+    console.log(`[AI] Calling GPT-5.1 Responses API for chat ${chatId}, user ${userId}`);
+    
+    let response;
+    try {
+      response = await executeGPT51Response({
+        systemPrompt,
+        userPrompt: userInput,
+        tools,
+        reasoningEffort: "none",
+        temperature: 1,
+        maxTokens: 2048,
+      });
+    } catch (gptError: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[AI] GPT-5.1 execution FAILED after ${duration}ms:`, {
+        error: gptError.message || gptError,
+        chatId,
+        userId,
+        aiFriendId,
+      });
+      
+      // Provide user-friendly error message
+      const isTimeout = gptError.message?.includes("timeout") || gptError.name === "AbortError";
+      const errorMessage = isTimeout 
+        ? "The AI is taking too long to respond. Try a shorter message or try again."
+        : "The AI encountered an error. Please try again.";
+      
+      return c.json({ error: errorMessage }, 500);
+    }
 
+    const duration = Date.now() - startTime;
     console.log(
-      "[AI] Response received successfully with status:",
+      `[AI] Response received in ${duration}ms with status:`,
       response.status,
       "and",
       response.images.length,
@@ -278,7 +361,16 @@ Respond naturally and concisely based on the conversation.`;
 
     const savedImageUrls = await saveResponseImages(response.images, "ai-chat");
     const primaryImageUrl = savedImageUrls[0] ?? null;
-    const aiResponseText = response.content?.trim() || "";
+    let aiResponseText = response.content?.trim() || "";
+
+    // CRIT-1: Filter AI output for safety before saving
+    if (aiResponseText) {
+      const outputFilter = filterAIOutput(aiResponseText);
+      if (outputFilter.wasModified) {
+        aiResponseText = outputFilter.filtered;
+        logSafetyEvent("filtered", { chatId, userId, flags: ["output_filtered"] });
+      }
+    }
 
     if (!aiResponseText && !primaryImageUrl) {
       console.error("[AI] No text or image found in response");

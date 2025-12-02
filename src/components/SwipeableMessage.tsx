@@ -15,12 +15,14 @@ interface SwipeableMessageProps {
   isCurrentUser: boolean;
 }
 
-const SWIPE_THRESHOLD = -80; // How far left to swipe to reveal timestamp
-const MAX_SWIPE = -120; // Maximum swipe distance
+const SWIPE_THRESHOLD = 80; // How far to swipe to reveal timestamp (absolute value)
+const MAX_SWIPE = 120; // Maximum swipe distance (absolute value)
 
 /**
  * SwipeableMessage - Wraps a message bubble to enable swipe-to-reveal timestamp
- * Similar to iMessage behavior: swipe left to reveal timestamp, release to hide
+ * HIGH-9: Bidirectional swipe support
+ * - Right-aligned messages (currentUser): swipe LEFT to reveal timestamp
+ * - Left-aligned messages (other users): swipe RIGHT to reveal timestamp
  */
 export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
   children,
@@ -38,20 +40,32 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
     .activeOffsetX([-10, 10]) // Require 10px horizontal movement to activate
     .failOffsetY([-15, 15]) // Fail if vertical movement exceeds 15px
     .onUpdate((event) => {
-      // Only allow swiping left (negative translation)
-      // Limit the swipe distance
-      if (event.translationX < 0) {
-        translateX.value = Math.max(event.translationX, MAX_SWIPE);
+      const translation = event.translationX;
+      
+      // HIGH-9: Support bidirectional swipe based on message alignment
+      // Current user (right-aligned): swipe left (negative)
+      // Other users (left-aligned): swipe right (positive)
+      const isValidDirection = isCurrentUser 
+        ? translation < 0  // Swipe left for own messages
+        : translation > 0; // Swipe right for others' messages
+      
+      if (isValidDirection) {
+        // Limit the swipe distance
+        const clampedTranslation = isCurrentUser
+          ? Math.max(translation, -MAX_SWIPE)
+          : Math.min(translation, MAX_SWIPE);
+        translateX.value = clampedTranslation;
         
         // Trigger haptic when crossing threshold
-        if (event.translationX < SWIPE_THRESHOLD && !isRevealed) {
+        const absTranslation = Math.abs(translation);
+        if (absTranslation > SWIPE_THRESHOLD && !isRevealed) {
           runOnJS(setIsRevealed)(true);
           runOnJS(triggerHaptic)();
-        } else if (event.translationX >= SWIPE_THRESHOLD && isRevealed) {
+        } else if (absTranslation <= SWIPE_THRESHOLD && isRevealed) {
           runOnJS(setIsRevealed)(false);
         }
       } else {
-        // Don't allow swiping right
+        // Don't allow swiping in the wrong direction
         translateX.value = 0;
       }
     })
@@ -71,13 +85,13 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
   });
 
   const timestampAnimatedStyle = useAnimatedStyle(() => {
-    // Calculate opacity based on swipe distance
-    const opacity = Math.min(Math.abs(translateX.value) / Math.abs(SWIPE_THRESHOLD), 1);
+    // Calculate opacity based on swipe distance (absolute value)
+    const opacity = Math.min(Math.abs(translateX.value) / SWIPE_THRESHOLD, 1);
     return {
       opacity: opacity,
       transform: [
         {
-          // Slight parallax effect
+          // Slight parallax effect - moves in opposite direction for visual polish
           translateX: translateX.value * 0.3,
         },
       ],

@@ -78,9 +78,13 @@ const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
       
-      // Handle timeout error specifically
+      // HIGH-13: Handle timeout error with user-friendly message
       if (fetchError.name === 'AbortError') {
-        throw new Error(`[api.ts]: Request timeout after ${timeout / 1000} seconds for ${method} ${path}`);
+        const isAIPath = path.includes('/ai/') || path.includes('/custom-commands/') || path.includes('/catchup');
+        const userMessage = isAIPath 
+          ? "The AI is taking longer than expected to respond. Please try again with a simpler request."
+          : `Request timeout after ${timeout / 1000} seconds`;
+        throw new Error(`[api.ts]: ${userMessage} (${method} ${path})`);
       }
       throw fetchError;
     }
@@ -178,13 +182,16 @@ const api = {
    * @param timeout - Optional custom timeout in milliseconds (defaults to 30000ms)
    */
   post: <T>(path: string, body?: object, timeout?: number) => {
-    // Use extended timeout for long-running AI operations
-    const customTimeout = timeout || (
+    // HIGH-13: Extended timeout for long-running AI operations (180 seconds)
+    const isAIOperation = 
       path.includes('/custom-commands/execute') || 
       path.includes('/ai/chat') || 
       path.includes('/ai/generate-image') || 
-      path.includes('/ai/generate-meme')
-    ) ? 120000 : 30000; // 2 minutes for AI operations, 30 seconds for others
+      path.includes('/ai/generate-meme') ||
+      path.includes('/ai/smart-replies') ||
+      path.includes('/catchup');
+    
+    const customTimeout = timeout || (isAIOperation ? 180000 : 30000); // 3 minutes for AI, 30s for others
     
     return fetchFn<T>(path, { method: "POST", body, timeout: customTimeout });
   },

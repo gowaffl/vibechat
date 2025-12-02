@@ -18,6 +18,13 @@ import {
 } from "../services/gpt-responses";
 import { saveResponseImages } from "../services/image-storage";
 import { tagMessage } from "../services/message-tagger";
+import {
+  checkContentSafety,
+  getSafetySystemPrompt,
+  getUserAgeContext,
+  filterAIOutput,
+  logSafetyEvent,
+} from "../services/content-safety";
 
 const app = new Hono<AppType>();
 
@@ -222,6 +229,40 @@ app.post("/execute", async (c) => {
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
+    // CRIT-1/2/3: Content Safety Check
+    const userAgeContext = await getUserAgeContext(validatedData.userId);
+    const safetyResult = await checkContentSafety({
+      userMessage: validatedData.userMessage,
+      userId: validatedData.userId,
+      chatId: validatedData.chatId,
+      isMinor: userAgeContext.isMinor,
+    });
+
+    // Handle crisis situation (CRIT-2)
+    if (safetyResult.crisisDetected && safetyResult.crisisResponse) {
+      logSafetyEvent("crisis", { chatId, userId: validatedData.userId, flags: safetyResult.flags });
+      
+      const { acquireAIResponseLock, releaseAIResponseLock } = await import("../services/ai-locks");
+      releaseAIResponseLock(chatId);
+      
+      // Return crisis response
+      return c.json({
+        content: safetyResult.crisisResponse,
+        isCrisisResponse: true,
+      });
+    }
+
+    // Handle blocked content (CRIT-1)
+    if (safetyResult.isBlocked) {
+      logSafetyEvent("blocked", { chatId, userId: validatedData.userId, flags: safetyResult.flags });
+      const { releaseAIResponseLock } = await import("../services/ai-locks");
+      releaseAIResponseLock(chatId);
+      return c.json({
+        error: safetyResult.blockReason || "I can't help with that request.",
+        blocked: true,
+      }, 400);
+    }
+
     // Fetch the custom command
     const { data: customCommand, error: commandError } = await db
       .from("custom_slash_command")
@@ -308,8 +349,12 @@ app.post("/execute", async (c) => {
       },
     ];
 
-    // Build system prompt using GPT-5.1 best practices
-    const systemPrompt = buildGPT51SystemPrompt(aiName, customCommand.prompt, tools);
+    // Get safety system prompt based on user age (CRIT-1/3)
+    const safetyInstructions = getSafetySystemPrompt(userAgeContext.isMinor);
+
+    // Build system prompt using GPT-5.1 best practices with safety instructions
+    const baseSystemPrompt = buildGPT51SystemPrompt(aiName, customCommand.prompt, tools);
+    const systemPrompt = `${safetyInstructions}\n\n${baseSystemPrompt}`;
 
     // Build the user prompt with context
     let userPrompt = `Context - Recent conversation history:
@@ -336,26 +381,60 @@ User's message: ${validatedData.userMessage}
 
 Please respond according to the command instructions above.`;
 
-    console.log(`[CustomCommands] Executing GPT-5.1 via Responses API with hosted tools`);
+    // MED-19: Enhanced logging and error handling for AI command execution
+    const startTime = Date.now();
+    console.log(`[CustomCommands] Executing GPT-5.1 via Responses API with hosted tools for chat ${chatId}`);
+    console.log(`[CustomCommands] Command: ${customCommand.command}, User: ${validatedData.userId}`);
 
-    const result = await executeGPT51Response({
-      systemPrompt,
-      userPrompt,
-      tools,
-      reasoningEffort: "none",
-      temperature: 1,
-      maxTokens: 4096,
-    });
+    let result;
+    try {
+      result = await executeGPT51Response({
+        systemPrompt,
+        userPrompt,
+        tools,
+        reasoningEffort: "none",
+        temperature: 1,
+        maxTokens: 4096,
+      });
+    } catch (gptError: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[CustomCommands] GPT-5.1 execution FAILED after ${duration}ms:`, {
+        error: gptError.message || gptError,
+        chatId,
+        command: customCommand.command,
+        userId: validatedData.userId,
+      });
+      
+      // Provide user-friendly error message based on error type
+      const isTimeout = gptError.message?.includes("timeout") || gptError.name === "AbortError";
+      const errorMessage = isTimeout 
+        ? "The AI is taking too long to respond. Try a simpler request or try again later."
+        : "The AI encountered an error processing your command. Please try again.";
+      
+      return c.json({ error: errorMessage }, 500);
+    }
 
+    const duration = Date.now() - startTime;
     console.log(
-      `[CustomCommands] GPT-5.1 response completed with status: ${result.status} and ${result.images.length} image(s)`
+      `[CustomCommands] GPT-5.1 response completed in ${duration}ms with status: ${result.status} and ${result.images.length} image(s)`
     );
 
     const savedImageUrls = await saveResponseImages(result.images, "custom-command");
     const primaryImageUrl = savedImageUrls[0] ?? null;
+    
+    // CRIT-1: Filter AI output for safety before saving
+    let responseContent = result.content?.trim() || "";
+    if (responseContent) {
+      const outputFilter = filterAIOutput(responseContent);
+      if (outputFilter.wasModified) {
+        responseContent = outputFilter.filtered;
+        logSafetyEvent("filtered", { chatId, userId: validatedData.userId, flags: ["output_filtered_custom_command"] });
+      }
+    }
+
     const messageContent =
-      result.content?.trim().length > 0
-        ? result.content.trim()
+      responseContent.length > 0
+        ? responseContent
         : primaryImageUrl
           ? "Generated image attached."
           : "Command completed.";

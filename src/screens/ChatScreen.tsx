@@ -21,6 +21,7 @@ import {
   Share,
   PanResponder,
   useColorScheme,
+  TouchableOpacity,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -43,6 +44,7 @@ import * as VideoThumbnails from "expo-video-thumbnails";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Markdown from "react-native-markdown-display";
 import { api } from "@/lib/api";
+import { setActiveChatId } from "@/lib/notifications";
 import { BACKEND_URL } from "@/config";
 import { authClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
@@ -778,6 +780,21 @@ const MessageContextMenu = ({
 
   const quickEmojis = ["❤️", "👍", "👎", "😂", "😮", "🔥", "🎉", "👏", "❓"];
 
+  // MED-B: Get preview text for the message being acted upon
+  const getPreviewText = () => {
+    if (!message) return "";
+    // Check for media content first
+    if (message.imageUrl) return "📷 Image";
+    if (message.pollId) return "📊 Poll";
+    if (message.eventId) return "📅 Event";
+    if (message.content) {
+      return message.content.length > 80 
+        ? message.content.substring(0, 80) + "..." 
+        : message.content;
+    }
+    return "Message";
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
@@ -789,6 +806,30 @@ const MessageContextMenu = ({
           alignItems: "center",
         }}
       >
+        {/* MED-B: Message preview bubble above context menu */}
+        <View
+          style={{
+            backgroundColor: "rgba(45, 45, 45, 0.95)",
+            borderRadius: 12,
+            padding: 10,
+            marginBottom: 12,
+            maxWidth: 280,
+            borderWidth: 1,
+            borderColor: "rgba(255, 255, 255, 0.08)",
+          }}
+        >
+          <Text
+            style={{
+              color: "#AAAAAA",
+              fontSize: 13,
+              lineHeight: 18,
+            }}
+            numberOfLines={3}
+          >
+            {getPreviewText()}
+          </Text>
+        </View>
+
         <View
           style={{
             backgroundColor: "rgba(20, 20, 20, 0.95)",
@@ -1023,8 +1064,9 @@ const ReactionPickerModal = ({
 
   if (!message) return null;
 
+  // MED-A: Use "none" animation for instant reaction picker feedback
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <Pressable
         onPress={onClose}
         style={{
@@ -1615,17 +1657,7 @@ const ChatScreen = () => {
     };
   });
 
-  // Animated style for drag handle - only visible when keyboard is open
-  const dragHandleAnimatedStyle = useAnimatedStyle(() => {
-    'worklet';
-    return {
-      opacity: keyboard.height.value > 0 ? 1 : 0,
-      paddingTop: 8,
-      paddingBottom: 4,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    };
-  });
+  // LOW-A: Drag handle removed - style definition also removed
 
   // Animated style for input row - adjust bottom padding based on keyboard state
   const inputRowAnimatedStyle = useAnimatedStyle(() => {
@@ -1670,13 +1702,62 @@ const ChatScreen = () => {
     enabled: !!chatId,
   });
 
-  // Fetch messages for this chat
-  const { data: messages = [], isLoading } = useQuery({
+  // HIGH-8: Pagination state for message history
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
+
+  // Fetch messages for this chat (with pagination support)
+  const { data: messageData, isLoading } = useQuery({
     queryKey: ["messages", chatId],
-    queryFn: () => api.get<Message[]>(`/api/chats/${chatId}/messages?userId=${user?.id}`),
-    refetchInterval: 3000, // Poll every 3 seconds for new messages (reduced from 1s to prevent race conditions)
+    queryFn: async () => {
+      const response = await api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+        `/api/chats/${chatId}/messages?userId=${user?.id}`
+      );
+      return response;
+    },
+    refetchInterval: 3000, // Poll every 3 seconds for new messages
     enabled: !!user?.id && !!chatId,
   });
+
+  // Update messages state when data changes
+  useEffect(() => {
+    if (messageData) {
+      setAllMessages(messageData.messages || []);
+      setHasMoreMessages(messageData.hasMore || false);
+      setNextCursor(messageData.nextCursor || null);
+    }
+  }, [messageData]);
+
+  // HIGH-8: Load more (older) messages
+  const loadMoreMessages = useCallback(async () => {
+    if (!nextCursor || isLoadingMore || !chatId || !user?.id) return;
+    
+    setIsLoadingMore(true);
+    try {
+      const response = await api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+        `/api/chats/${chatId}/messages?userId=${user.id}&cursor=${encodeURIComponent(nextCursor)}`
+      );
+      
+      if (response.messages && response.messages.length > 0) {
+        // Append older messages to the end of the array
+        setAllMessages(prev => [...prev, ...response.messages]);
+        setHasMoreMessages(response.hasMore || false);
+        setNextCursor(response.nextCursor || null);
+      } else {
+        setHasMoreMessages(false);
+        setNextCursor(null);
+      }
+    } catch (error) {
+      console.error("[ChatScreen] Error loading more messages:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [nextCursor, isLoadingMore, chatId, user?.id]);
+
+  // Use allMessages instead of direct data
+  const messages = allMessages;
 
   // Fetch unread counts for this chat using shared hook
   const { data: unreadCounts = [] } = useUnreadCounts(user?.id);
@@ -1686,6 +1767,18 @@ const ChatScreen = () => {
     const chatUnread = unreadCounts.find((uc) => uc.chatId === chatId);
     return chatUnread?.unreadCount || 0;
   }, [unreadCounts, chatId]);
+
+  // HIGH-7: Track active chat to suppress notifications while viewing
+  useEffect(() => {
+    if (chatId) {
+      setActiveChatId(chatId);
+      console.log("[ChatScreen] Set active chat for notifications:", chatId);
+    }
+    return () => {
+      setActiveChatId(null);
+      console.log("[ChatScreen] Cleared active chat for notifications");
+    };
+  }, [chatId]);
 
   // Persist catch-up button if unread count was high
   useEffect(() => {
@@ -1865,6 +1958,28 @@ const ChatScreen = () => {
         offset: 0,
         animated: animated,
       });
+      // HIGH-4: Update scroll state when scrolling to bottom
+      isAtBottomRef.current = true;
+      setShowScrollToBottom(false);
+    }
+  }, []);
+
+  // HIGH-4: Track scroll position to disable auto-scroll when user is reading history
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    // For inverted list: offsetY 0 means at bottom (newest messages)
+    // Consider "at bottom" if within 50 pixels of bottom
+    const isNowAtBottom = offsetY < 50;
+    
+    if (isNowAtBottom !== isAtBottomRef.current) {
+      isAtBottomRef.current = isNowAtBottom;
+      
+      // Show/hide scroll to bottom button
+      if (!isNowAtBottom) {
+        setShowScrollToBottom(true);
+      } else {
+        setShowScrollToBottom(false);
+      }
     }
   }, []);
 
@@ -2037,21 +2152,31 @@ const ChatScreen = () => {
     enabled: !!user?.id && !!chatId,
   });
 
-  // Mark messages as read when viewing the chat
+  // HIGH-10: Mark messages as read when viewing the chat
+  // Use a ref to track what we've already marked to avoid re-marking on every poll
+  const markedMessageIdsRef = useRef<Set<string>>(new Set());
+  
   useEffect(() => {
     if (!user?.id || !chatId || messages.length === 0) return;
 
-    // Get all message IDs from other users (exclude own messages)
-    const messageIdsToMark = messages
-      .filter((msg) => msg.userId !== user.id && msg.messageType !== "system")
+    // Get message IDs from other users that haven't been marked yet
+    const newMessageIdsToMark = messages
+      .filter((msg) => 
+        msg.userId !== user.id && 
+        msg.messageType !== "system" &&
+        !markedMessageIdsRef.current.has(msg.id)
+      )
       .map((msg) => msg.id);
 
-    if (messageIdsToMark.length === 0) return;
+    if (newMessageIdsToMark.length === 0) return;
+
+    // Add to marked set immediately to prevent duplicate requests
+    newMessageIdsToMark.forEach(id => markedMessageIdsRef.current.add(id));
 
     // Mark messages as read (non-blocking)
     api.post(`/api/chats/${chatId}/read-receipts`, {
       userId: user.id,
-      messageIds: messageIdsToMark,
+      messageIds: newMessageIdsToMark,
     })
       .then(() => {
         // Invalidate unread counts to refresh the badge in chat list
@@ -2059,8 +2184,17 @@ const ChatScreen = () => {
       })
       .catch((error) => {
         console.error("[ChatScreen] Failed to mark messages as read:", error);
+        // Remove from marked set on error so we can retry
+        newMessageIdsToMark.forEach(id => markedMessageIdsRef.current.delete(id));
       });
   }, [messages, user?.id, chatId, queryClient]);
+
+  // HIGH-10: Clear marked messages ref when leaving chat
+  useEffect(() => {
+    return () => {
+      markedMessageIdsRef.current.clear();
+    };
+  }, [chatId]);
 
   // Load catch-up dismiss state from AsyncStorage
   useEffect(() => {
@@ -4379,7 +4513,53 @@ const ChatScreen = () => {
     [isAIMessage, hasContent]
   );
 
-  const renderMessage = ({ item }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } }) => {
+  // HIGH-B: Performance optimization - getItemType for FlashList recycling
+  const getItemType = useCallback((item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }) => {
+    if ('isTyping' in item && item.isTyping) return 'ai-typing';
+    if ('isUserTyping' in item && item.isUserTyping) return 'user-typing';
+    
+    const message = item as Message;
+    if (message.messageType === "system" || message.userId === "system") {
+      if (message.eventId) return 'event';
+      if (message.pollId) return 'poll';
+      return 'system';
+    }
+    if (message.isUnsent) return 'unsent';
+    if (message.messageType === "voice") return 'voice';
+    if (message.messageType === "video") return 'video';
+    if (message.messageType === "image") {
+      const metadata = message.metadata as { mediaUrls?: string[] } | null;
+      if (metadata?.mediaUrls && metadata.mediaUrls.length > 1) return 'multi-image';
+      return 'image';
+    }
+    // Regular text messages - differentiate by alignment for better recycling
+    if (message.aiFriendId && message.userId === null) return 'ai-message';
+    if (message.userId === user?.id) return 'own-message';
+    return 'other-message';
+  }, [user?.id]);
+
+  // LOW-21: Helper to detect crisis/safety messages that should never be truncated
+  const isCrisisMessage = useCallback((content: string): boolean => {
+    if (!content) return false;
+    // Check for crisis response patterns from content-safety service
+    const crisisPatterns = [
+      "I'm really concerned about what you've shared",
+      "Your life matters",
+      "Please reach out to one of these resources",
+      "National Suicide Prevention",
+      "Crisis Text Line",
+      "988",
+      "741741",
+      "Samaritans",
+      "crisis helpline",
+    ];
+    const lowerContent = content.toLowerCase();
+    return crisisPatterns.some(pattern => 
+      lowerContent.includes(pattern.toLowerCase())
+    );
+  }, []);
+
+  const renderMessage = useCallback(({ item }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } }) => {
     // Check if this is the AI typing indicator
     if ('isTyping' in item && item.isTyping) {
       return <AITypingIndicator 
@@ -4436,10 +4616,11 @@ const ChatScreen = () => {
       if (message.eventId) {
         const event = events.find((e) => e.id === message.eventId);
         if (event) {
+          // HIGH-14: Reduced margin for message density
           return (
             <View
               style={{
-                marginVertical: 8,
+                marginVertical: 6,
                 paddingHorizontal: 16,
               }}
             >
@@ -4459,10 +4640,11 @@ const ChatScreen = () => {
       if (message.pollId) {
         const poll = polls.find((p) => p.id === message.pollId);
         // Always render PollCard for poll messages - show loading state if poll not yet loaded
+        // HIGH-14: Reduced margin for message density
         return (
           <View
             style={{
-              marginVertical: 8,
+              marginVertical: 6,
               paddingHorizontal: 16,
             }}
           >
@@ -4502,11 +4684,11 @@ const ChatScreen = () => {
         );
       }
 
-      // Regular system message
+      // Regular system message - HIGH-14: Reduced margin for message density
       return (
         <View
           style={{
-            marginVertical: 8,
+            marginVertical: 6,
             alignItems: "center",
             paddingHorizontal: 16,
           }}
@@ -4535,12 +4717,12 @@ const ChatScreen = () => {
       );
     }
 
-    // Render unsent messages
+    // Render unsent messages - HIGH-14: Reduced margin for message density
     if (message.isUnsent) {
       return (
         <View
           style={{
-            marginVertical: 8,
+            marginVertical: 6,
             flexDirection: "row",
             alignItems: "flex-end",
             justifyContent: isCurrentUser ? "flex-end" : "flex-start",
@@ -4670,13 +4852,13 @@ const ChatScreen = () => {
                 containerWidth={270}
                 borderRadius={0}
               />
-              {/* Caption if exists */}
+              {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
-                <View style={{ paddingHorizontal: 12, paddingVertical: 12 }}>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
                   <MessageText
                     content={message.content}
                     mentions={message.mentions}
-                    style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                    style={{ fontSize: 14, color: "#FFFFFF", lineHeight: 18 }}
                     isOwnMessage={isCurrentUser}
                   />
                 </View>
@@ -4699,13 +4881,13 @@ const ChatScreen = () => {
                 containerWidth={270}
                 borderRadius={0}
               />
-              {/* Caption if exists */}
+              {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
-                <View style={{ paddingHorizontal: 12, paddingVertical: 12 }}>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
                   <MessageText
                     content={message.content}
                     mentions={message.mentions}
-                    style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                    style={{ fontSize: 14, color: "#FFFFFF", lineHeight: 18 }}
                     isOwnMessage={isCurrentUser}
                   />
                 </View>
@@ -4833,13 +5015,13 @@ const ChatScreen = () => {
                   )}
                 </View>
               </Pressable>
-              {/* Caption if exists */}
+              {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
-                <View style={{ paddingHorizontal: 12, paddingVertical: 12 }}>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
                   <MessageText
                     content={message.content}
                     mentions={message.mentions}
-                    style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                    style={{ fontSize: 14, color: "#FFFFFF", lineHeight: 18 }}
                     isOwnMessage={isCurrentUser}
                   />
                 </View>
@@ -4849,23 +5031,28 @@ const ChatScreen = () => {
             /* Text Message */
             <>
               {/* Only show text content if there's no link preview, or if the text is more than just the URL */}
+              {/* HIGH-14: Reduced padding for message density */}
               {(!message.linkPreview || (message.content.trim() !== message.linkPreview.url.trim() && message.content.trim().replace(/https?:\/\//i, '') !== message.linkPreview.url.replace(/https?:\/\//i, ''))) && message.content && (
-                <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
                   {isAI ? (
                     <>
+                      {/* HIGH-12: Lower maxLines for AI messages to improve density */}
+                      {/* LOW-21: Bypass truncation for crisis/safety messages */}
                       <TruncatedText
-                        maxLines={25}
+                        maxLines={10}
                         expandButtonColor="#14B8A6"
+                        bypassTruncation={isCrisisMessage(message.content)}
                       >
+                        {/* HIGH-14: Reduced font sizes for density */}
                         <Markdown
                           style={{
-                            body: { color: "#FFFFFF", fontSize: 16, lineHeight: 20 },
-                            heading1: { color: "#FFFFFF", fontSize: 24, fontWeight: "bold", marginBottom: 8 },
-                            heading2: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
-                            heading3: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", marginBottom: 4 },
-                            heading4: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
-                            heading5: { color: "#FFFFFF", fontSize: 17, fontWeight: "bold", marginBottom: 2 },
-                            heading6: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
+                            body: { color: "#FFFFFF", fontSize: 15, lineHeight: 19 },
+                            heading1: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
+                            heading2: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
+                            heading3: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
+                            heading4: { color: "#FFFFFF", fontSize: 17, fontWeight: "bold", marginBottom: 3 },
+                            heading5: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
+                            heading6: { color: "#FFFFFF", fontSize: 15, fontWeight: "bold", marginBottom: 2 },
                             strong: { fontWeight: "bold", color: "#FFFFFF" },
                             em: { fontStyle: "italic", color: "#FFFFFF" },
                             link: { color: "#14B8A6", textDecorationLine: "underline" },
@@ -4903,9 +5090,9 @@ const ChatScreen = () => {
                             },
                             bullet_list: { marginVertical: 4 },
                             ordered_list: { marginVertical: 4 },
-                            list_item: { color: "#FFFFFF", fontSize: 16, marginVertical: 2 },
-                            paragraph: { color: "#FFFFFF", fontSize: 16, lineHeight: 20, marginVertical: 4 },
-                            text: { color: "#FFFFFF", fontSize: 16 },
+                            list_item: { color: "#FFFFFF", fontSize: 15, marginVertical: 2 },
+                            paragraph: { color: "#FFFFFF", fontSize: 15, lineHeight: 19, marginVertical: 3 },
+                            text: { color: "#FFFFFF", fontSize: 15 },
                             hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
                           }}
                         >
@@ -4924,10 +5111,11 @@ const ChatScreen = () => {
                         maxLines={25}
                         expandButtonColor="#007AFF"
                       >
+                        {/* HIGH-14: Reduced font size for message density */}
                         <MessageText
                           content={message.content}
                           mentions={message.mentions}
-                          style={{ fontSize: 16, color: "#FFFFFF", lineHeight: 22 }}
+                          style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
                           isOwnMessage={isCurrentUser}
                         />
                       </TruncatedText>
@@ -5020,25 +5208,29 @@ const ChatScreen = () => {
               {isAI ? aiName : message.user?.name || "Unknown"}
             </Text>
           )}
-          {/* Reply Preview */}
+          {/* Reply Preview - HIGH-15: Compact inline design for better density */}
           {message.replyTo && (
             <View
               style={{
-                marginLeft: 8,
-                marginBottom: 4,
-                padding: 8,
-                borderRadius: 12,
+                marginLeft: 4,
+                marginBottom: 2,
+                paddingVertical: 4,
+                paddingHorizontal: 8,
+                borderRadius: 8,
                 backgroundColor: "rgba(255, 255, 255, 0.05)",
-                borderLeftWidth: 3,
+                borderLeftWidth: 2,
                 borderLeftColor: isCurrentUser ? "#007AFF" : "#8E8E93",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              <Text style={{ fontSize: 12, color: "#8E8E93", fontWeight: "600" }}>
-                {message.replyTo.user?.name || "Unknown"}
+              <Text style={{ fontSize: 11, color: "#8E8E93", fontWeight: "600" }} numberOfLines={1}>
+                {message.replyTo.user?.name || "Unknown"}:
               </Text>
               <Text
-                style={{ fontSize: 13, color: "#FFFFFF", marginTop: 2 }}
-                numberOfLines={2}
+                style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.7)", flex: 1 }}
+                numberOfLines={1}
               >
                 {message.replyTo.messageType === "image"
                   ? "📷 Image"
@@ -5133,7 +5325,22 @@ const ChatScreen = () => {
         </View>
       </Reanimated.View>
     );
-  };
+  }, [
+    // Core dependencies for message rendering
+    user?.id, typingAIFriend, aiFriends, chat, events, polls, threads,
+    // UI state dependencies
+    highlightedMessageId, contextMenuMessage, reactionPickerMessage,
+    selectionMode, selectedMessageIds, imageSelectionMode, selectedImageMessageIds,
+    loadingImageIds, viewerImage,
+    // Handlers
+    handleLongPress, handleReply, handleCopy, handleReact, enableSelectionMode,
+    toggleMessageSelection, cancelSelectionMode, enableImageSelectionMode, toggleImageSelection,
+    votePoll, isVotingPoll, bookmarkedMessageIds, canDeleteMessage,
+    setShowEventsTab, setContextMenuMessage, setReactionPickerMessage, setViewerImage,
+    toggleBookmark,
+    // LOW-21: Crisis message detection
+    isCrisisMessage,
+  ]);
 
   if (isLoading) {
     return (
@@ -5279,8 +5486,15 @@ const ChatScreen = () => {
           renderItem={renderMessage as any}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           keyExtractor={((item: { id: string }) => item.id) as any}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          getItemType={getItemType as any}
           estimatedItemSize={120}
+          // HIGH-B: Performance optimization - drawDistance for smoother scrolling
+          drawDistance={500}
           inverted={true}
+          // HIGH-4: Track scroll position to disable auto-scroll when reading history
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={{
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
             // Padding bottom creates space for header/threads
@@ -5291,6 +5505,29 @@ const ChatScreen = () => {
           }}
           // Spacer for Input Bar (Glassmorphism effect)
           ListHeaderComponent={<View style={{ height: 100 }} />}
+          // HIGH-8: Load earlier messages button (appears at top in inverted list)
+          ListFooterComponent={
+            hasMoreMessages ? (
+              <TouchableOpacity
+                onPress={loadMoreMessages}
+                disabled={isLoadingMore}
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 20,
+                  alignItems: "center",
+                  marginBottom: 20,
+                }}
+              >
+                {isLoadingMore ? (
+                  <ActivityIndicator size="small" color="rgba(255, 255, 255, 0.6)" />
+                ) : (
+                  <Text style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: 14 }}>
+                    Load earlier messages
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : null
+          }
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="interactive"
           {...{
@@ -5485,17 +5722,7 @@ const ChatScreen = () => {
           }}
         />
         
-        {/* Drag Handle - only visible when keyboard is open */}
-        <Reanimated.View style={dragHandleAnimatedStyle}>
-          <View
-            style={{
-              width: 36,
-              height: 5,
-              borderRadius: 2.5,
-              backgroundColor: 'rgba(255, 255, 255, 0.3)',
-            }}
-          />
-        </Reanimated.View>
+        {/* LOW-A: Drag handle removed per design request */}
         
         {/* Mention Picker - positioned above input */}
         {(() => {
@@ -6025,7 +6252,8 @@ const ChatScreen = () => {
                     }}
                     multiline={true}
                     scrollEnabled={true}
-                    maxLength={500}
+                    // HIGH-11: Increased character limit with UI feedback
+                    maxLength={4000}
                     onSubmitEditing={() => handleSend()}
                     blurOnSubmit={false}
                     keyboardType="default"
@@ -6042,6 +6270,34 @@ const ChatScreen = () => {
                     showSoftInputOnFocus={true}
                     caretHidden={false}
                   />
+                  {/* HIGH-11: Character count indicator - shows when approaching limit */}
+                  {messageText.length > 3000 && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        bottom: 4,
+                        right: 8,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 8,
+                        backgroundColor: messageText.length > 3800 
+                          ? "rgba(255, 59, 48, 0.2)" 
+                          : "rgba(255, 255, 255, 0.15)",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: messageText.length > 3800 
+                            ? "#FF3B30" 
+                            : "rgba(255, 255, 255, 0.5)",
+                          fontWeight: "500",
+                        }}
+                      >
+                        {messageText.length}/4000
+                      </Text>
+                    </View>
+                  )}
                     </Animated.View>
                   </View>
                   </Animated.View>

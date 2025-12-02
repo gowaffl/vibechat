@@ -92,21 +92,7 @@ aiFriends.post("/", zValidator("json", createAIFriendRequestSchema), async (c) =
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    // Verify chat creator (only creator can manage AI friends)
-    const { data: chat, error: chatError } = await db
-      .from("chat")
-      .select("*")
-      .eq("id", data.chatId)
-      .single();
-
-    if (chatError || !chat) {
-      return c.json({ error: "Chat not found" }, 404);
-    }
-
-    if (chat.creatorId !== data.userId) {
-      return c.json({ error: "Only the chat creator can manage AI friends" }, 403);
-    }
-
+    // HIGH-A: Any chat member can now add AI friends (not just creator)
     // Get existing AI friends to determine next sortOrder and color
     const { data: existingFriends, error: friendsError } = await db
       .from("ai_friend")
@@ -192,20 +178,16 @@ aiFriends.patch("/:id", zValidator("json", updateAIFriendRequestSchema), async (
       return c.json({ error: "AI friend not found" }, 404);
     }
 
-    // Get the chat to verify creator
-    const { data: chat, error: chatError } = await db
-      .from("chat")
+    // HIGH-A: Verify user is a member of this chat (any member can now edit AI friends)
+    const { data: membership } = await db
+      .from("chat_member")
       .select("*")
-      .eq("id", aiFriend.chatId)
+      .eq("chatId", aiFriend.chatId)
+      .eq("userId", data.userId)
       .single();
 
-    if (chatError || !chat) {
-      return c.json({ error: "Chat not found" }, 404);
-    }
-
-    // Verify user is the chat creator
-    if (chat.creatorId !== data.userId) {
-      return c.json({ error: "Only the chat creator can update AI friends" }, 403);
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
     }
 
     // Build update object
@@ -282,20 +264,16 @@ aiFriends.delete("/:id", zValidator("json", deleteAIFriendRequestSchema), async 
       return c.json({ error: "AI friend not found" }, 404);
     }
 
-    // Get the chat to verify creator
-    const { data: chat, error: chatError } = await db
-      .from("chat")
+    // HIGH-A: Verify user is a member of this chat (any member can now delete AI friends)
+    const { data: membership } = await db
+      .from("chat_member")
       .select("*")
-      .eq("id", aiFriend.chatId)
+      .eq("chatId", aiFriend.chatId)
+      .eq("userId", userId)
       .single();
 
-    if (chatError || !chat) {
-      return c.json({ error: "Chat not found" }, 404);
-    }
-
-    // Verify user is the chat creator
-    if (chat.creatorId !== userId) {
-      return c.json({ error: "Only the chat creator can delete AI friends" }, 403);
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
     }
 
     // Check if this is the last AI friend
@@ -341,19 +319,16 @@ aiFriends.patch("/reorder", zValidator("json", reorderAIFriendsRequestSchema), a
   const { chatId, userId, items } = c.req.valid("json");
 
   try {
-    // Verify user is the chat creator
-    const { data: chat, error: chatError } = await db
-      .from("chat")
+    // HIGH-A: Verify user is a member of this chat (any member can now reorder AI friends)
+    const { data: membership } = await db
+      .from("chat_member")
       .select("*")
-      .eq("id", chatId)
+      .eq("chatId", chatId)
+      .eq("userId", userId)
       .single();
 
-    if (chatError || !chat) {
-      return c.json({ error: "Chat not found" }, 404);
-    }
-
-    if (chat.creatorId !== userId) {
-      return c.json({ error: "Only the chat creator can reorder AI friends" }, 403);
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
     }
 
     // Update sortOrder for each AI friend

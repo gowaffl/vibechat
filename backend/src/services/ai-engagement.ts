@@ -19,6 +19,11 @@ import {
 import { executeGPT51Response } from "./gpt-responses";
 import { saveResponseImages } from "./image-storage";
 import { tagMessage } from "./message-tagger";
+import {
+  getSafetySystemPrompt,
+  filterAIOutput,
+  logSafetyEvent,
+} from "./content-safety";
 
 /**
  * Check if AI should engage based on engagement settings
@@ -198,8 +203,13 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
           .join("\n")
       : "";
 
-    // Create an enhanced, natural system prompt
-    const systemPrompt = `You are ${aiName}, a friend in this group chat. You're part of the conversation naturally - think of yourself as another person in the group, not a formal AI friend.
+    // Get safety system prompt (CRIT-1)
+    const safetyInstructions = getSafetySystemPrompt(false); // Default to adult content restrictions for auto-engagement
+
+    // Create an enhanced, natural system prompt with safety instructions
+    const systemPrompt = `${safetyInstructions}
+
+You are ${aiName}, a friend in this group chat. You're part of the conversation naturally - think of yourself as another person in the group, not a formal AI friend.
 
 # Chat Context
 Group: "${chat.name}"${chat.bio ? `\nAbout: ${chat.bio}` : ""}
@@ -273,7 +283,16 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
 
     const savedImageUrls = await saveResponseImages(response.images, "ai-auto");
     const primaryImageUrl = savedImageUrls[0] ?? null;
-    const aiResponseText = response.content?.trim() || "";
+    let aiResponseText = response.content?.trim() || "";
+
+    // CRIT-1: Filter AI output for safety before saving
+    if (aiResponseText) {
+      const outputFilter = filterAIOutput(aiResponseText);
+      if (outputFilter.wasModified) {
+        aiResponseText = outputFilter.filtered;
+        logSafetyEvent("filtered", { chatId, flags: ["output_filtered_auto_engagement"] });
+      }
+    }
 
     if (!aiResponseText && !primaryImageUrl) {
       console.log("[AI Engagement] AI decided not to respond (empty response)");

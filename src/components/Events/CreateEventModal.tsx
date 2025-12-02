@@ -243,6 +243,18 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
     console.log("[CreateEventModal] onCreate called successfully");
   };
 
+  // LOW-20: Get a sensible default time (next hour, rounded)
+  const getDefaultDateTime = () => {
+    const now = new Date();
+    const defaultDate = new Date(now);
+    // Round up to the next hour
+    defaultDate.setHours(now.getHours() + 1);
+    defaultDate.setMinutes(0);
+    defaultDate.setSeconds(0);
+    defaultDate.setMilliseconds(0);
+    return defaultDate;
+  };
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
     if (Platform.OS === "android") {
       setShowDatePicker(false);
@@ -254,7 +266,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
         setEventDate(new Date(selectedDate));
       } else {
         // On Android, we have separate pickers, so preserve time when selecting date
-        const currentDate = eventDate || new Date();
+        const currentDate = eventDate || getDefaultDateTime();
         const newDate = new Date(currentDate);
         
         // Update the date portion while preserving time
@@ -278,7 +290,8 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
     }
     if (selectedTime) {
       // Create a new Date object to avoid mutating the existing state
-      const currentDate = eventDate || new Date();
+      // LOW-20: Use sensible default if no date set
+      const currentDate = eventDate || getDefaultDateTime();
       const newDate = new Date(currentDate);
       
       // Update the time portion while preserving date
@@ -640,8 +653,9 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                   </Text>
                                 </Pressable>
                               </View>
+                              {/* LOW-20: Use sensible default (next hour, rounded) */}
                               <DateTimePicker
-                                value={eventDate || new Date()}
+                                value={eventDate || getDefaultDateTime()}
                                 mode="datetime"
                                 display="spinner"
                                 onChange={handleDateChange}
@@ -654,10 +668,10 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                         </Modal>
                       )}
 
-                      {/* Date/Time Picker - Android */}
+                      {/* Date/Time Picker - Android - LOW-20: Use sensible default */}
                       {showDatePicker && Platform.OS === "android" && (
                         <DateTimePicker
-                          value={eventDate || new Date()}
+                          value={eventDate || getDefaultDateTime()}
                           mode="date"
                           display="default"
                           onChange={handleDateChange}
@@ -666,7 +680,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                       )}
                       {showTimePicker && Platform.OS === "android" && (
                         <DateTimePicker
-                          value={eventDate || new Date()}
+                          value={eventDate || getDefaultDateTime()}
                           mode="time"
                           display="default"
                           onChange={handleTimeChange}

@@ -862,6 +862,8 @@ const ChatListScreen = () => {
             ]}
             keyExtractor={(item) => item.id}
             estimatedItemSize={100}
+            // HIGH-B: Performance optimization - drawDistance for smoother scrolling
+            drawDistance={300}
             renderItem={({ item }) => (
               <ChatItem 
                 item={item} 

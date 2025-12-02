@@ -762,15 +762,31 @@ chats.get("/:id/messages", async (c) => {
         });
     }
 
-    // Fetch last 100 messages
-    const { data: messagesData, error: messagesError } = await db
+    // HIGH-8: Support pagination for message history
+    const limit = parseInt(c.req.query("limit") || "100");
+    const cursor = c.req.query("cursor"); // ISO date string for cursor-based pagination
+    
+    // Build query with optional cursor
+    let query = db
       .from("message")
       .select("*")
       .eq("chatId", chatId)
       .order("createdAt", { ascending: false })
-      .limit(100);
+      .limit(limit + 1); // Fetch one extra to check if there are more
     
-    const messages = messagesData || [];
+    // If cursor is provided, fetch messages older than cursor
+    if (cursor) {
+      query = query.lt("createdAt", cursor);
+    }
+    
+    const { data: messagesData, error: messagesError } = await query;
+    
+    // Check if there are more messages
+    const hasMore = messagesData && messagesData.length > limit;
+    const messages = (messagesData || []).slice(0, limit); // Remove the extra item
+    const nextCursor = hasMore && messages.length > 0 
+      ? messages[messages.length - 1].createdAt 
+      : null;
 
     if (messagesError) {
       console.error("[Chats] Error fetching messages:", messagesError);
@@ -1007,7 +1023,12 @@ chats.get("/:id/messages", async (c) => {
     };
     });
 
-    return c.json(formattedMessages);
+    // HIGH-8: Return pagination info with messages
+    return c.json({
+      messages: formattedMessages,
+      hasMore: hasMore,
+      nextCursor: nextCursor,
+    });
   } catch (error) {
     console.error("[Chats] Error fetching messages:", error);
     return c.json({ error: "Failed to fetch messages" }, 500);

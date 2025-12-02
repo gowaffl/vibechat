@@ -44,15 +44,15 @@ const MessageText: React.FC<MessageTextProps> = ({
     // Process mentions in markdown content
     let processedContent = content;
     
-    // Find and mark mentions for special rendering
+    // HIGH-16: Find and mark mentions for special rendering (without @ symbol)
     if (mentions && mentions.length > 0) {
       mentions.forEach((mention) => {
         if (mention.mentionedUser) {
           const mentionPattern = new RegExp(`@${mention.mentionedUser.name}(?!\\w)`, 'g');
-          // Wrap mentions in special markdown that will be styled
+          // Wrap mentions in bold markdown without the @ symbol for cleaner look
           processedContent = processedContent.replace(
             mentionPattern,
-            `**@${mention.mentionedUser.name}**`
+            `**${mention.mentionedUser.name}**`
           );
         }
       });
@@ -213,10 +213,25 @@ const MessageText: React.FC<MessageTextProps> = ({
     console.log("[@] Mention tapped:", mention.mentionedUser?.name);
   };
 
+  // HIGH-16: Get user's assigned color for mentions (if available) or use accent color
+  const getMentionColor = (mention: Mention) => {
+    // Check if user has an assigned color
+    const userColor = mention.mentionedUser?.color;
+    if (userColor) return userColor;
+    // Default to theme accent based on message ownership
+    return isOwnMessage ? "#A0D4FF" : "#007AFF";
+  };
+
   return (
     <Text style={style}>
       {parts.map((part, index) => {
         if (part.isMention && part.mention) {
+          // HIGH-16: Display mention name without @ symbol, with distinctive styling
+          const displayName = part.text.startsWith('@') 
+            ? part.text.substring(1) // Remove @ symbol
+            : part.text;
+          const mentionColor = getMentionColor(part.mention);
+          
           return (
             <Pressable
               key={index}
@@ -227,12 +242,15 @@ const MessageText: React.FC<MessageTextProps> = ({
             >
               <Text
                 style={{
-                  color: isOwnMessage ? "#FFFFFF" : "#007AFF",
-                  fontWeight: "600",
-                  textDecorationLine: "none",
+                  color: mentionColor,
+                  fontWeight: "700",
+                  // Add subtle background for visibility
+                  backgroundColor: `${mentionColor}15`,
+                  paddingHorizontal: 2,
+                  borderRadius: 4,
                 }}
               >
-                {part.text}
+                {displayName}
               </Text>
             </Pressable>
           );
