@@ -5,6 +5,41 @@ import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 
 import { env } from "./env";
+import { db } from "./db";
+
+// Test database connectivity at startup
+async function testDatabaseConnection() {
+  console.log("🔌 Testing database connection with service role...");
+  try {
+    const { count, error } = await db
+      .from("chat")
+      .select("*", { count: "exact", head: true });
+    
+    if (error) {
+      console.error("❌ Database connection test FAILED:", error.message);
+      console.error("   Error code:", error.code);
+      console.error("   Error details:", error.details);
+    } else {
+      console.log(`✅ Database connection test PASSED - Found ${count} chats`);
+    }
+
+    // Also test chat_member table
+    const { count: memberCount, error: memberError } = await db
+      .from("chat_member")
+      .select("*", { count: "exact", head: true });
+    
+    if (memberError) {
+      console.error("❌ chat_member table test FAILED:", memberError.message);
+    } else {
+      console.log(`✅ chat_member table test PASSED - Found ${memberCount} memberships`);
+    }
+  } catch (e) {
+    console.error("❌ Database connection test threw exception:", e);
+  }
+}
+
+// Run the test immediately
+testDatabaseConnection();
 export type { AppType } from "./types";
 import { uploadRouter } from "./routes/upload";
 import usersRouter from "./routes/users";

@@ -254,11 +254,9 @@ chats.get("/:id", async (c) => {
   }
 
   try {
-    const token = c.req.header("Authorization")?.replace("Bearer ", "");
-    const client = token ? createUserClient(token) : db;
-
-    // Check if user is a member
-    const { data: membership } = await client
+    // Always use db (service role) for membership checks to bypass RLS
+    // This ensures single-member chats work correctly
+    const { data: membership } = await db
       .from("chat_member")
       .select("*")
       .eq("chatId", chatId)
@@ -682,9 +680,15 @@ chats.get("/:id/messages", async (c) => {
     return c.json({ error: "userId is required" }, 400);
   }
 
+  // Debug: Test if service role can access the database at all
+  const { count: totalChats, error: debugError } = await db
+    .from("chat")
+    .select("*", { count: "exact", head: true });
+  console.log(`[Chats] Debug - Service role test: totalChats=${totalChats}, error=${debugError?.message}`);
+
   try {
     // Check if user is a member
-    const { data: membership, error: membershipError } = await db
+    const { data: membership, error: membershipError, status, statusText } = await db
       .from("chat_member")
       .select("*")
       .eq("chatId", chatId)
@@ -693,7 +697,12 @@ chats.get("/:id/messages", async (c) => {
 
     console.log(`[Chats] Membership check result:`, { 
       membership: !!membership, 
+      membershipData: membership,
       error: membershipError?.message,
+      errorCode: membershipError?.code,
+      errorDetails: membershipError?.details,
+      status,
+      statusText,
       chatId,
       userId
     });
@@ -702,7 +711,7 @@ chats.get("/:id/messages", async (c) => {
     if (!membership) {
       // First check if the chat exists
       console.log(`[Chats] User not a member, checking if chat exists: ${chatId}`);
-      const { data: chatExists, error: chatCheckError } = await db
+      const { data: chatExists, error: chatCheckError, status: chatStatus, statusText: chatStatusText } = await db
         .from("chat")
         .select("id")
         .eq("id", chatId)
@@ -710,7 +719,12 @@ chats.get("/:id/messages", async (c) => {
 
       console.log(`[Chats] Chat exists check:`, { 
         chatExists: !!chatExists, 
-        error: chatCheckError?.message 
+        chatData: chatExists,
+        error: chatCheckError?.message,
+        errorCode: chatCheckError?.code,
+        errorDetails: chatCheckError?.details,
+        status: chatStatus,
+        statusText: chatStatusText
       });
 
       if (chatCheckError || !chatExists) {

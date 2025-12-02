@@ -11,6 +11,7 @@
 -- - add_phone_to_user ✅ APPLIED (November 24, 2025)
 -- - add_birthdate_to_user ✅ APPLIED (November 24, 2025)
 -- - fix_corrupted_image_urls ✅ APPLIED (January 26, 2025) - Fixed double-prepended URLs
+-- - add_service_role_policies ✅ APPLIED (December 2, 2025) - Added explicit service role RLS policies
 --
 -- FEATURE: Multi-Image & Video Support (December 2, 2025)
 -- - Added messageType 'video' to message table
