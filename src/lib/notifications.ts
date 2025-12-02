@@ -147,3 +147,10 @@ export function addNotificationReceivedListener(
 export async function clearBadgeCount() {
   await Notifications.setBadgeCountAsync(0);
 }
+
+/**
+ * Set the app icon badge to a specific count
+ */
+export async function setBadgeCount(count: number) {
+  await Notifications.setBadgeCountAsync(count);
+}

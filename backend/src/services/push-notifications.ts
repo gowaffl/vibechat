@@ -13,6 +13,54 @@ interface SendPushNotificationParams {
 }
 
 /**
+ * Calculate total unread message count for a user across all chats
+ */
+async function getTotalUnreadCount(userId: string): Promise<number> {
+  try {
+    // Get all chats the user is a member of
+    const { data: memberships } = await db
+      .from("chat_member")
+      .select("chatId")
+      .eq("userId", userId);
+
+    if (!memberships || memberships.length === 0) {
+      return 0;
+    }
+
+    const chatIds = memberships.map((m: any) => m.chatId);
+
+    // Get all messages in user's chats (excluding their own and system messages)
+    const { data: messages } = await db
+      .from("message")
+      .select("id, chatId")
+      .in("chatId", chatIds)
+      .neq("userId", userId)
+      .neq("messageType", "system");
+
+    if (!messages || messages.length === 0) {
+      return 0;
+    }
+
+    const messageIds = messages.map((m: any) => m.id);
+
+    // Get read receipts for these messages
+    const { data: readReceipts } = await db
+      .from("read_receipt")
+      .select("messageId")
+      .eq("userId", userId)
+      .in("messageId", messageIds);
+
+    const readMessageIdSet = new Set((readReceipts || []).map((r: any) => r.messageId));
+    const unreadCount = messageIds.filter((id: string) => !readMessageIdSet.has(id)).length;
+
+    return unreadCount;
+  } catch (error) {
+    console.error("[Push] Error calculating total unread count:", error);
+    return 0;
+  }
+}
+
+/**
  * Send a push notification to a specific user about a new message
  */
 export async function sendPushNotification(params: SendPushNotificationParams): Promise<void> {
@@ -37,6 +85,9 @@ export async function sendPushNotification(params: SendPushNotificationParams): 
       return;
     }
 
+    // Calculate actual total unread count for accurate badge
+    const totalUnreadCount = await getTotalUnreadCount(userId);
+
     // Create the push notification message
     const message: ExpoPushMessage = {
       to: user.pushToken,
@@ -49,8 +100,8 @@ export async function sendPushNotification(params: SendPushNotificationParams): 
       },
       // High priority for message notifications
       priority: "high",
-      // Show badge on app icon
-      badge: 1,
+      // Show actual unread count on app icon badge
+      badge: totalUnreadCount,
     };
 
     // Send the push notification
