@@ -8,7 +8,7 @@ import {
   Image,
   Text,
 } from "react-native";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { useVideoPlayer, VideoView, type VideoView as VideoViewType } from "expo-video";
 import { useEvent } from "expo";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -20,6 +20,7 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from "react-native-reanimated";
+import { FullscreenVideoModal } from "./FullscreenVideoModal";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MAX_VIDEO_WIDTH = Math.min(SCREEN_WIDTH * 0.75, 280);
@@ -50,7 +51,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [showThumbnail, setShowThumbnail] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const videoViewRef = useRef<VideoViewType>(null);
   
   const controlsOpacity = useSharedValue(1);
 
@@ -148,9 +151,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (onFullscreenPress) {
       onFullscreenPress();
     } else {
-      player.enterFullscreen();
+      // Pause the inline player and open fullscreen modal
+      player.pause();
+      setIsFullscreen(true);
     }
   }, [onFullscreenPress, player]);
+
+  const handleCloseFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    // Resume playing if it was playing before
+    if (isPlaying) {
+      player.play();
+    }
+  }, [isPlaying, player]);
 
   const controlsAnimatedStyle = useAnimatedStyle(() => ({
     opacity: controlsOpacity.value,
@@ -171,6 +184,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(200)}
           style={[StyleSheet.absoluteFill, styles.thumbnailContainer, { borderRadius }]}
+          pointerEvents="none"
         >
           <Image
             source={{ uri: thumbnailUrl }}
@@ -183,6 +197,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Video View */}
       <Pressable onPress={handleVideoPress} style={styles.videoContainer}>
         <VideoView
+          ref={videoViewRef}
           player={player}
           style={[styles.video, { borderRadius }]}
           contentFit="cover"
@@ -254,6 +269,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <View style={styles.videoIndicator}>
         <Ionicons name="videocam" size={12} color="#fff" />
       </View>
+
+      {/* Fullscreen Modal */}
+      <FullscreenVideoModal
+        visible={isFullscreen}
+        videoUrl={videoUrl}
+        onClose={handleCloseFullscreen}
+        initialMuted={isMuted}
+      />
     </View>
   );
 };
@@ -302,6 +325,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 20,
   },
   centerPlayButton: {
     justifyContent: "center",

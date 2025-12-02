@@ -4460,14 +4460,15 @@ const ChatScreen = () => {
       // Check if this is a poll notification message
       if (message.pollId) {
         const poll = polls.find((p) => p.id === message.pollId);
-        if (poll) {
-          return (
-            <View
-              style={{
-                marginVertical: 8,
-                paddingHorizontal: 16,
-              }}
-            >
+        // Always render PollCard for poll messages - show loading state if poll not yet loaded
+        return (
+          <View
+            style={{
+              marginVertical: 8,
+              paddingHorizontal: 16,
+            }}
+          >
+            {poll ? (
               <PollCard
                 poll={poll}
                 currentUserId={user?.id || ""}
@@ -4476,9 +4477,31 @@ const ChatScreen = () => {
                 }}
                 isVoting={isVotingPoll}
               />
-            </View>
-          );
-        }
+            ) : (
+              <View
+                style={{
+                  backgroundColor: "rgba(48, 209, 88, 0.1)",
+                  borderRadius: 16,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: "rgba(48, 209, 88, 0.2)",
+                }}
+              >
+                <ActivityIndicator size="small" color="#30D158" />
+                <Text
+                  style={{
+                    color: "rgba(255, 255, 255, 0.6)",
+                    fontSize: 13,
+                    textAlign: "center",
+                    marginTop: 8,
+                  }}
+                >
+                  Loading poll...
+                </Text>
+              </View>
+            )}
+          </View>
+        );
       }
 
       // Regular system message

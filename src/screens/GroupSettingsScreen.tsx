@@ -25,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, ChevronDown, ChevronUp } from "lucide-react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
@@ -35,6 +36,8 @@ import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
+import { FullscreenVideoModal } from "@/components/FullscreenVideoModal";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type {
   Chat,
@@ -193,6 +196,8 @@ const GroupSettingsScreen = () => {
     senderName: string;
     timestamp: string;
     messageId?: string;
+    isVideo?: boolean;
+    videoUrl?: string | null;
   } | null>(null);
 
   // AI Friends state
@@ -232,9 +237,19 @@ const GroupSettingsScreen = () => {
     enabled: !!user?.id && !!chatId,
   });
 
-  // Filter messages for photos and sort by most recent first
-  const photoMessages = messages
-    .filter((msg: any) => msg.messageType === "image" && msg.imageUrl && !msg.isUnsent)
+  // Filter messages for media (photos and videos) and sort by most recent first
+  const mediaMessages = messages
+    .filter((msg: any) => {
+      if (msg.isUnsent) return false;
+      // Include image messages with imageUrl
+      if (msg.messageType === "image" && msg.imageUrl) return true;
+      // Include video messages with videoUrl in metadata
+      if (msg.messageType === "video") {
+        const metadata = typeof msg.metadata === "string" ? JSON.parse(msg.metadata) : msg.metadata;
+        return metadata?.videoUrl;
+      }
+      return false;
+    })
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Extract all links from messages
@@ -1211,7 +1226,7 @@ const GroupSettingsScreen = () => {
                         Media
                       </Text>
                       <Text className="text-sm mt-1" style={{ color: "#8E8E93" }}>
-                        {photoMessages.length} {photoMessages.length === 1 ? "photo" : "photos"}
+                        {mediaMessages.length} {mediaMessages.length === 1 ? "item" : "items"}
                       </Text>
                     </View>
                   </View>
@@ -1219,21 +1234,45 @@ const GroupSettingsScreen = () => {
                 </View>
                 
                 {/* Preview Grid */}
-                {photoMessages.length > 0 && (
+                {mediaMessages.length > 0 && (
                   <View className="flex-row gap-2 mt-4">
-                    {photoMessages.slice(0, Math.min(5, photoMessages.length)).map((msg: any, index: number) => (
-                      <Image
-                        key={msg.id}
-                        source={{ uri: msg.imageUrl?.startsWith('http') ? msg.imageUrl : `${BACKEND_URL}${msg.imageUrl}` }}
-                        style={{
-                          width: 50,
-                          height: 50,
-                          borderRadius: 8,
-                        }}
-                        resizeMode="cover"
-                      />
-                    ))}
-                    {photoMessages.length > 5 && (
+                    {mediaMessages.slice(0, Math.min(5, mediaMessages.length)).map((msg: any, index: number) => {
+                      const isVideo = msg.messageType === "video";
+                      const metadata = typeof msg.metadata === "string" ? JSON.parse(msg.metadata) : msg.metadata;
+                      const thumbnailUrl = isVideo 
+                        ? (metadata?.videoThumbnailUrl?.startsWith('http') ? metadata.videoThumbnailUrl : `${BACKEND_URL}${metadata?.videoThumbnailUrl}`)
+                        : (msg.imageUrl?.startsWith('http') ? msg.imageUrl : `${BACKEND_URL}${msg.imageUrl}`);
+                      
+                      return (
+                        <View key={msg.id} style={{ position: "relative" }}>
+                          <Image
+                            source={{ uri: thumbnailUrl }}
+                            style={{
+                              width: 50,
+                              height: 50,
+                              borderRadius: 8,
+                            }}
+                            resizeMode="cover"
+                          />
+                          {isVideo && (
+                            <View style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              borderRadius: 8,
+                              backgroundColor: "rgba(0,0,0,0.3)",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}>
+                              <Ionicons name="play" size={16} color="#fff" />
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                    {mediaMessages.length > 5 && (
                       <View
                         style={{
                           width: 50,
@@ -1245,7 +1284,7 @@ const GroupSettingsScreen = () => {
                         }}
                       >
                         <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "600" }}>
-                          +{photoMessages.length - 5}
+                          +{mediaMessages.length - 5}
                         </Text>
                       </View>
                     )}
@@ -2754,7 +2793,7 @@ const GroupSettingsScreen = () => {
                         Photo Gallery
                       </Text>
                       <Text style={{ color: "#A0A0A0", fontSize: 13, marginTop: 2 }}>
-                        {photoMessages.length} {photoMessages.length === 1 ? "photo" : "photos"}
+                        {mediaMessages.length} {mediaMessages.length === 1 ? "item" : "items"}
                       </Text>
                     </View>
                   </View>
@@ -2775,8 +2814,8 @@ const GroupSettingsScreen = () => {
               </View>
             </View>
 
-            {/* Image Grid */}
-            {photoMessages.length === 0 ? (
+            {/* Media Grid */}
+            {mediaMessages.length === 0 ? (
               <View
                 style={{
                   flex: 1,
@@ -2795,7 +2834,7 @@ const GroupSettingsScreen = () => {
               </View>
             ) : (
               <FlashList
-                data={photoMessages}
+                data={mediaMessages}
                 numColumns={3}
                 keyExtractor={(item: any) => item.id}
                 estimatedItemSize={Dimensions.get("window").width / 3}
@@ -2803,18 +2842,27 @@ const GroupSettingsScreen = () => {
                   padding: 0,
                   paddingBottom: insets.bottom + 20,
                 }}
-                renderItem={({ item }: { item: any }) => (
+                renderItem={({ item }: { item: any }) => {
+                  const isVideo = item.messageType === "video";
+                  const metadata = typeof item.metadata === "string" ? JSON.parse(item.metadata) : item.metadata;
+                  const thumbnailUrl = isVideo 
+                    ? (metadata?.videoThumbnailUrl?.startsWith('http') ? metadata.videoThumbnailUrl : `${BACKEND_URL}${metadata?.videoThumbnailUrl}`)
+                    : (item.imageUrl?.startsWith('http') ? item.imageUrl : `${BACKEND_URL}${item.imageUrl}`);
+                  const videoUrl = isVideo 
+                    ? (metadata?.videoUrl?.startsWith('http') ? metadata.videoUrl : `${BACKEND_URL}${metadata?.videoUrl}`)
+                    : null;
+                  
+                  return (
                   <Pressable
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      const imageUrl = item.imageUrl?.startsWith('http') ? item.imageUrl : `${BACKEND_URL}${item.imageUrl}`;
                       const sender = item.user || item.sender;
-                      // Hide gallery modal first to allow image viewer to show on top
+                      // Hide gallery modal first to allow viewer to show on top
                       setShowPhotoGallery(false);
                       // Use setTimeout to ensure gallery closes before opening viewer
                       setTimeout(() => {
                         setGalleryViewerImage({
-                          url: imageUrl,
+                          url: thumbnailUrl,
                           senderName: sender?.name || "Unknown",
                           timestamp: new Date(item.createdAt).toLocaleString("en-US", {
                             month: "short",
@@ -2824,6 +2872,8 @@ const GroupSettingsScreen = () => {
                             minute: "2-digit",
                           }),
                           messageId: item.id,
+                          isVideo: isVideo,
+                          videoUrl: videoUrl,
                         });
                       }, 100);
                     }}
@@ -2835,10 +2885,34 @@ const GroupSettingsScreen = () => {
                   >
                     <View style={{ flex: 1, backgroundColor: "#2A2A2A" }}>
                       <Image
-                        source={{ uri: item.imageUrl?.startsWith('http') ? item.imageUrl : `${BACKEND_URL}${item.imageUrl}` }}
+                        source={{ uri: thumbnailUrl }}
                         style={{ width: "100%", height: "100%" }}
                         contentFit="cover"
                       />
+                      {/* Video indicator overlay */}
+                      {isVideo && (
+                        <View style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: "rgba(0,0,0,0.2)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}>
+                          <View style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 16,
+                            backgroundColor: "rgba(0,0,0,0.5)",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}>
+                            <Ionicons name="play" size={16} color="#fff" style={{ marginLeft: 2 }} />
+                          </View>
+                        </View>
+                      )}
                       {/* Gradient overlay at bottom for date */}
                       <LinearGradient
                         colors={["transparent", "rgba(0, 0, 0, 0.7)"]}
@@ -2862,7 +2936,8 @@ const GroupSettingsScreen = () => {
                       </LinearGradient>
                     </View>
                   </Pressable>
-                )}
+                  );
+                }}
               />
             )}
           </LinearGradient>
@@ -3047,10 +3122,10 @@ const GroupSettingsScreen = () => {
           </LinearGradient>
         </Modal>
 
-        {/* Gallery Image Viewer Modal - Rendered last to appear on top */}
-        {galleryViewerImage && (
+        {/* Gallery Media Viewer Modal - Rendered last to appear on top */}
+        {galleryViewerImage && !galleryViewerImage.isVideo && (
           <ZoomableImageViewer
-            visible={!!galleryViewerImage}
+            visible={!!galleryViewerImage && !galleryViewerImage.isVideo}
             imageUrl={galleryViewerImage.url}
             senderName={galleryViewerImage.senderName}
             timestamp={galleryViewerImage.timestamp}
@@ -3063,6 +3138,21 @@ const GroupSettingsScreen = () => {
               }, 100);
             }}
             showToolbar={true}
+          />
+        )}
+
+        {/* Gallery Video Viewer Modal */}
+        {galleryViewerImage?.isVideo && galleryViewerImage?.videoUrl && (
+          <FullscreenVideoModal
+            visible={!!galleryViewerImage?.isVideo}
+            videoUrl={galleryViewerImage.videoUrl}
+            onClose={() => {
+              setGalleryViewerImage(null);
+              // Reopen the gallery after a brief delay
+              setTimeout(() => {
+                setShowPhotoGallery(true);
+              }, 100);
+            }}
           />
         )}
     </View>

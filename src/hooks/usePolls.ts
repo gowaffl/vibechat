@@ -17,8 +17,12 @@ export function usePolls(chatId: string, userId: string) {
   } = useQuery<Poll[]>({
     queryKey: ["polls", chatId],
     queryFn: async () => {
-      return api.get<Poll[]>(`/api/polls/${chatId}?userId=${userId}`);
+      console.log("[usePolls] Fetching polls for chat:", chatId, "user:", userId);
+      const result = await api.get<Poll[]>(`/api/polls/${chatId}?userId=${userId}`);
+      console.log("[usePolls] Fetched polls:", result?.length, "polls");
+      return result;
     },
+    enabled: !!chatId && !!userId,
   });
 
   // Create poll
