@@ -68,6 +68,7 @@ import MessageText from "@/components/MessageText";
 import { SwipeableMessage } from "@/components/SwipeableMessage";
 import { TruncatedText } from "@/components/TruncatedText";
 import { VibeSelector, VIBE_CONFIG, VibeSelectorStatic } from "@/components/VibeSelector";
+import { VibeAnimatedBubble } from "@/components/VibeAnimatedBubble";
 import type { VibeType } from "@shared/contracts";
 import { useCatchUp } from "@/hooks/useCatchUp";
 import { useEvents } from "@/hooks/useEvents";
@@ -2811,7 +2812,7 @@ const ChatScreen = () => {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (overrideVibe?: VibeType | null) => {
     if (!user) return;
 
     // Re-enable auto-scroll when user sends a message
@@ -3064,7 +3065,7 @@ const ChatScreen = () => {
         // Clear input immediately for instant feedback
         const currentReplyTo = replyToMessage;
         const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
-        const currentVibe = selectedVibe;
+        const currentVibe = overrideVibe !== undefined ? overrideVibe : selectedVibe;
         setMessageText("");
         setReplyToMessage(null);
         setMentionedUserIds([]);
@@ -3072,7 +3073,7 @@ const ChatScreen = () => {
         setSelectedVibe(null);
 
         // Send the user's message (optimistic update will show it immediately)
-        console.log('[ChatScreen] Sending user message...');
+        console.log('[ChatScreen] Sending user message with vibeType:', currentVibe);
         sendMessageMutation.mutate({
           content: trimmedMessage,
           messageType: "text",
@@ -3105,13 +3106,14 @@ const ChatScreen = () => {
       // Clear input immediately for instant feedback
       const currentReplyTo = replyToMessage;
       const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
-      const currentVibe = selectedVibe;
+      const currentVibe = overrideVibe !== undefined ? overrideVibe : selectedVibe;
       setMessageText("");
       setReplyToMessage(null);
       setMentionedUserIds([]);
       setInputHeight(MIN_INPUT_HEIGHT);
       setSelectedVibe(null);
       
+      console.log('[ChatScreen] Sending regular message with vibeType:', currentVibe);
       sendMessageMutation.mutate({
         content: trimmedMessage,
         messageType: "text",
@@ -3177,12 +3179,9 @@ const ChatScreen = () => {
     setSelectedVibe(vibe);
     setPreviewVibe(null);
     setShowVibeSelector(false);
-    // Immediately send with the selected vibe
+    // Immediately send with the selected vibe - pass vibe directly to avoid state timing issues
     if (vibe) {
-      // Trigger send after a brief delay to allow state update
-      setTimeout(() => {
-        handleSend();
-      }, 50);
+      handleSend(vibe);
     }
   }, [handleSend]);
 
@@ -4383,7 +4382,7 @@ const ChatScreen = () => {
             shadowColor: "#000",
           };
 
-      return (
+      const bubbleContent = (
         <View
           style={{
             borderRadius: 20,
@@ -4689,45 +4688,21 @@ const ChatScreen = () => {
               )}
             </>
           )}
-          
-              {/* Vibe indicator */}
-              {vibeConfig && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 6,
-                    right: 6,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: `${vibeConfig.color}30`,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                    borderRadius: 8,
-                    gap: 3,
-                  }}
-                >
-                  {React.createElement(vibeConfig.icon, {
-                    size: 10,
-                    color: vibeConfig.color,
-                    strokeWidth: 2.5,
-                  })}
-                  <Text
-                    style={{
-                      fontSize: 9,
-                      fontWeight: "600",
-                      color: vibeConfig.color,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.3,
-                    }}
-                  >
-                    {vibeConfig.label}
-                  </Text>
-                </View>
-              )}
             </LinearGradient>
           </BlurView>
         </View>
       );
+
+      // Wrap with animated bubble if message has a vibe
+      if (messageVibe) {
+        return (
+          <VibeAnimatedBubble vibeType={messageVibe}>
+            {bubbleContent}
+          </VibeAnimatedBubble>
+        );
+      }
+
+      return bubbleContent;
     };
 
     return (
@@ -5681,7 +5656,7 @@ const ChatScreen = () => {
                     multiline={true}
                     scrollEnabled={true}
                     maxLength={500}
-                    onSubmitEditing={handleSend}
+                    onSubmitEditing={() => handleSend()}
                     blurOnSubmit={false}
                     keyboardType="default"
                     keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
@@ -5710,7 +5685,7 @@ const ChatScreen = () => {
                 <Pressable
                   onPress={(!messageText.trim() && selectedImages.length === 0) 
                     ? () => setIsRecordingVoice(true)
-                    : (showVibeSelector ? undefined : handleSend)
+                    : (showVibeSelector ? undefined : () => handleSend())
                   }
                   onPressIn={handleSendButtonPressIn}
                   onPressOut={handleSendButtonPressOut}
