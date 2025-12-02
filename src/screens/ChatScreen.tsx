@@ -67,6 +67,8 @@ import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
 import { SwipeableMessage } from "@/components/SwipeableMessage";
 import { TruncatedText } from "@/components/TruncatedText";
+import { VibeSelector, VIBE_CONFIG, VibeSelectorStatic } from "@/components/VibeSelector";
+import type { VibeType } from "@shared/contracts";
 import { useCatchUp } from "@/hooks/useCatchUp";
 import { useEvents } from "@/hooks/useEvents";
 import { useReactor } from "@/hooks/useReactor";
@@ -1523,6 +1525,14 @@ const ChatScreen = () => {
   const [showAttachmentsMenu, setShowAttachmentsMenu] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // VibeWrapper state
+  const [selectedVibe, setSelectedVibe] = useState<VibeType | null>(null);
+  const [previewVibe, setPreviewVibe] = useState<VibeType | null>(null);
+  const [showVibeSelector, setShowVibeSelector] = useState(false);
+  const [sendButtonPosition, setSendButtonPosition] = useState({ x: 0, y: 0 });
+  const sendButtonRef = useRef<View>(null);
+  const vibeLongPressTimer = useRef<NodeJS.Timeout | null>(null);
   const searchModalDragY = useRef(new Animated.Value(0)).current;
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [showBookmarksModal, setShowBookmarksModal] = useState(false);
@@ -2081,6 +2091,7 @@ const ChatScreen = () => {
       voiceDuration?: number;
       replyToId?: string;
       mentionedUserIds?: string[];
+      vibeType?: VibeType | null;
     }) =>
       api.post<Message>(`/api/chats/${chatId}/messages`, {
         content: data.content || "",
@@ -2091,6 +2102,7 @@ const ChatScreen = () => {
         userId: user?.id,
         replyToId: data.replyToId,
         mentionedUserIds: data.mentionedUserIds,
+        vibeType: data.vibeType,
       }),
     onMutate: async (newMessage) => {
       // Cancel any outgoing refetches to prevent them from overwriting our optimistic update
@@ -2108,6 +2120,7 @@ const ChatScreen = () => {
           imageUrl: newMessage.imageUrl,
           voiceUrl: newMessage.voiceUrl,
           voiceDuration: newMessage.voiceDuration,
+          vibeType: newMessage.vibeType,
           userId: user.id,
           chatId: chatId,
           createdAt: new Date().toISOString(),
@@ -3051,10 +3064,12 @@ const ChatScreen = () => {
         // Clear input immediately for instant feedback
         const currentReplyTo = replyToMessage;
         const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
+        const currentVibe = selectedVibe;
         setMessageText("");
         setReplyToMessage(null);
         setMentionedUserIds([]);
         setInputHeight(MIN_INPUT_HEIGHT);
+        setSelectedVibe(null);
 
         // Send the user's message (optimistic update will show it immediately)
         console.log('[ChatScreen] Sending user message...');
@@ -3063,6 +3078,7 @@ const ChatScreen = () => {
           messageType: "text",
           replyToId: currentReplyTo?.id,
           mentionedUserIds: currentMentions,
+          vibeType: currentVibe,
         });
         console.log('[ChatScreen] User message mutation called');
 
@@ -3089,16 +3105,19 @@ const ChatScreen = () => {
       // Clear input immediately for instant feedback
       const currentReplyTo = replyToMessage;
       const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
+      const currentVibe = selectedVibe;
       setMessageText("");
       setReplyToMessage(null);
       setMentionedUserIds([]);
       setInputHeight(MIN_INPUT_HEIGHT);
+      setSelectedVibe(null);
       
       sendMessageMutation.mutate({
         content: trimmedMessage,
         messageType: "text",
         replyToId: currentReplyTo?.id,
         mentionedUserIds: currentMentions,
+        vibeType: currentVibe,
       });
     }
   };
@@ -3108,6 +3127,73 @@ const ChatScreen = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setContextMenuMessage(message);
   };
+
+  // VibeSelector handlers
+  const vibeTouchStartTime = useRef<number>(0);
+  const vibeTouchStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  
+  const handleSendButtonPressIn = useCallback((event: any) => {
+    // Only show vibe selector if there's text to send
+    if (!messageText.trim() && selectedImages.length === 0) return;
+    
+    // Record touch start time and position
+    vibeTouchStartTime.current = Date.now();
+    const { pageX, pageY } = event.nativeEvent;
+    vibeTouchStartPos.current = { x: pageX, y: pageY };
+    
+    // Start long press timer
+    vibeLongPressTimer.current = setTimeout(() => {
+      // Get send button position for vibe selector placement
+      if (sendButtonRef.current) {
+        sendButtonRef.current.measureInWindow((x, y, width, height) => {
+          setSendButtonPosition({ x: x + width / 2, y: y });
+          setShowVibeSelector(true);
+        });
+      }
+    }, 300); // 300ms long press threshold
+  }, [messageText, selectedImages]);
+
+  const handleSendButtonPressOut = useCallback(() => {
+    // Clear long press timer if released before threshold
+    if (vibeLongPressTimer.current) {
+      clearTimeout(vibeLongPressTimer.current);
+      vibeLongPressTimer.current = null;
+    }
+  }, []);
+  
+  const handleSendButtonTouchMove = useCallback((event: any) => {
+    if (!showVibeSelector) return;
+    const { pageX, pageY } = event.nativeEvent;
+    VibeSelectorStatic.handleTouchMove(pageX, pageY);
+  }, [showVibeSelector]);
+  
+  const handleSendButtonTouchEnd = useCallback((event: any) => {
+    if (!showVibeSelector) return;
+    const { pageX, pageY } = event.nativeEvent;
+    VibeSelectorStatic.handleTouchEnd(pageX, pageY);
+  }, [showVibeSelector]);
+
+  const handleVibeSelect = useCallback((vibe: VibeType | null) => {
+    setSelectedVibe(vibe);
+    setPreviewVibe(null);
+    setShowVibeSelector(false);
+    // Immediately send with the selected vibe
+    if (vibe) {
+      // Trigger send after a brief delay to allow state update
+      setTimeout(() => {
+        handleSend();
+      }, 50);
+    }
+  }, [handleSend]);
+
+  const handleVibePreview = useCallback((vibe: VibeType | null) => {
+    setPreviewVibe(vibe);
+  }, []);
+
+  const handleVibeCancel = useCallback(() => {
+    setPreviewVibe(null);
+    setShowVibeSelector(false);
+  }, []);
 
   // Handler for replying to message
   const handleReply = (message: Message) => {
@@ -4269,7 +4355,17 @@ const ChatScreen = () => {
     // Function to render message bubble content
     const renderMessageContent = () => {
       const isHighlighted = highlightedMessageId === message.id;
-      const bubbleStyle = isCurrentUser
+      const messageVibe = message.vibeType;
+      const vibeConfig = messageVibe ? VIBE_CONFIG[messageVibe] : null;
+      
+      // Determine bubble style - vibe takes precedence for styling
+      const bubbleStyle = vibeConfig
+        ? {
+            backgroundColor: `${vibeConfig.color}20`, // 12% opacity
+            borderColor: vibeConfig.color,
+            shadowColor: vibeConfig.color,
+          }
+        : isCurrentUser
         ? {
             backgroundColor: "rgba(0, 122, 255, 0.15)",
             borderColor: "#007AFF",
@@ -4319,7 +4415,9 @@ const ChatScreen = () => {
           >
             <LinearGradient
               colors={
-                isCurrentUser
+                vibeConfig
+                  ? vibeConfig.gradient
+                  : isCurrentUser
                   ? [
                       "rgba(0, 122, 255, 0.25)",
                       "rgba(0, 122, 255, 0.15)",
@@ -4591,6 +4689,41 @@ const ChatScreen = () => {
               )}
             </>
           )}
+          
+              {/* Vibe indicator */}
+              {vibeConfig && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 6,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: `${vibeConfig.color}30`,
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 8,
+                    gap: 3,
+                  }}
+                >
+                  {React.createElement(vibeConfig.icon, {
+                    size: 10,
+                    color: vibeConfig.color,
+                    strokeWidth: 2.5,
+                  })}
+                  <Text
+                    style={{
+                      fontSize: 9,
+                      fontWeight: "600",
+                      color: vibeConfig.color,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {vibeConfig.label}
+                  </Text>
+                </View>
+              )}
             </LinearGradient>
           </BlurView>
         </View>
@@ -4877,7 +5010,7 @@ const ChatScreen = () => {
         <View
           style={{
             position: "absolute",
-            top: insets.top + 95,
+            top: insets.top + 85, // Reduced from 95
             left: 0,
             right: 0,
             zIndex: 99,
@@ -4910,13 +5043,13 @@ const ChatScreen = () => {
           contentContainerStyle={{
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
             // Padding bottom creates space for header/threads
-            paddingBottom: insets.top + 95 + (threads ? 56 : 0) + 20,
+            paddingBottom: insets.top + 80 + (threads ? 56 : 0) + 20, // Reduced base from 95 to 80
             paddingHorizontal: 16,
             // Visual bottom - small padding to push recent messages up slightly
             paddingTop: 16, 
           }}
           // Spacer for Input Bar (Glassmorphism effect)
-          ListHeaderComponent={<View style={{ height: 120 }} />}
+          ListHeaderComponent={<View style={{ height: 100 }} />}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="interactive"
           onScrollToIndexFailed={(info) => {
@@ -5567,17 +5700,26 @@ const ChatScreen = () => {
                     </Animated.View>
                   </View>
                   </Animated.View>
-                {/* Animated Mic/Send button */}
+                {/* Animated Mic/Send button with Vibe long-press */}
+                <View 
+                  ref={sendButtonRef} 
+                  collapsable={false}
+                  onTouchMove={handleSendButtonTouchMove}
+                  onTouchEnd={handleSendButtonTouchEnd}
+                >
                 <Pressable
                   onPress={(!messageText.trim() && selectedImages.length === 0) 
                     ? () => setIsRecordingVoice(true)
-                    : handleSend
+                    : (showVibeSelector ? undefined : handleSend)
                   }
+                  onPressIn={handleSendButtonPressIn}
+                  onPressOut={handleSendButtonPressOut}
                   disabled={
                     (!messageText.trim() && selectedImages.length === 0) 
                       ? isUploadingVoice 
                       : ((!messageText.trim() && selectedImages.length === 0) || sendMessageMutation.isPending || isUploadingImage)
                   }
+                  delayLongPress={300}
                 >
                   <Animated.View
                     style={{
@@ -5585,7 +5727,9 @@ const ChatScreen = () => {
                       height: 44,
                       borderRadius: 22,
                       overflow: "hidden",
-                      shadowColor: messageText.toLowerCase().includes("@ai")
+                      shadowColor: (selectedVibe || previewVibe)
+                        ? VIBE_CONFIG[selectedVibe || previewVibe!].color
+                        : messageText.toLowerCase().includes("@ai")
                         ? "#14B8A6"
                         : messageText.trim() || selectedImages.length > 0
                         ? "#007AFF"
@@ -5712,10 +5856,28 @@ const ChatScreen = () => {
                             <ArrowUp size={20} color="#FFFFFF" strokeWidth={2.5} />
                           </Animated.View>
                         )}
+                        
+                        {/* Vibe indicator dot when vibe is selected */}
+                        {(selectedVibe || previewVibe) && (
+                          <View
+                            style={{
+                              position: "absolute",
+                              top: 2,
+                              right: 2,
+                              width: 10,
+                              height: 10,
+                              borderRadius: 5,
+                              backgroundColor: VIBE_CONFIG[selectedVibe || previewVibe!].color,
+                              borderWidth: 1.5,
+                              borderColor: "rgba(0, 0, 0, 0.3)",
+                            }}
+                          />
+                        )}
                       </Animated.View>
                     </BlurView>
                   </Animated.View>
                 </Pressable>
+                </View>
               </Reanimated.View>
             )}
           </Reanimated.ScrollView>
@@ -6739,6 +6901,15 @@ const ChatScreen = () => {
             });
           }}
           isCreating={createAIFriendMutation.isPending}
+        />
+
+        {/* VibeSelector for emotional message context */}
+        <VibeSelector
+          visible={showVibeSelector}
+          onSelect={handleVibeSelect}
+          onPreview={handleVibePreview}
+          onCancel={handleVibeCancel}
+          anchorPosition={sendButtonPosition}
         />
       </View>
     );

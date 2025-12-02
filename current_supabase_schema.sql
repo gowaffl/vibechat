@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS "message" (
     "voiceUrl" TEXT,
     "voiceDuration" INTEGER,
     "eventId" TEXT,
+    "vibeType" TEXT, -- VibeWrapper: genuine, playful, serious, soft, hype
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "message_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user" ("id") ON DELETE CASCADE,
     CONSTRAINT "message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "chat" ("id") ON DELETE CASCADE,

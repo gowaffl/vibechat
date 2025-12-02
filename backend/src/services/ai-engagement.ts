@@ -153,28 +153,48 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
     const recentMessages = messagesInOrder.slice(-10);
     const lastFiveMessages = messagesInOrder.slice(-5);
 
+    // Helper function to format link preview context
+    const formatLinkContext = (msg: any): string => {
+      if (msg.linkPreviewTitle || msg.linkPreviewDescription) {
+        const title = msg.linkPreviewTitle || msg.linkPreviewSiteName || "Link";
+        const desc = msg.linkPreviewDescription ? ` - ${msg.linkPreviewDescription.substring(0, 100)}` : "";
+        return ` [Link: "${title}"${desc}]`;
+      }
+      return "";
+    };
+
     // Format recent conversation context
     const recentContextText = lastFiveMessages
       .map((msg) => {
         const userName = msg.user?.name || "Unknown";
-        const timestamp = new Date(msg.createdAt).toLocaleString();
         const timeAgo = Math.floor((currentTime.getTime() - new Date(msg.createdAt).getTime()) / 1000);
         const timeDesc = timeAgo < 60 ? "just now" : timeAgo < 300 ? "a few minutes ago" : "earlier";
+        const linkContext = formatLinkContext(msg);
 
         if (msg.messageType === "image" && msg.imageDescription) {
-          return `${userName} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}`;
+          return `${userName} (${timeDesc}): [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}${linkContext}`;
         } else if (msg.messageType === "image") {
-          return `${userName} (${timeDesc}): [shared an image]${msg.content ? ` "${msg.content}"` : ""}`;
+          return `${userName} (${timeDesc}): [shared an image]${msg.content ? ` "${msg.content}"` : ""}${linkContext}`;
         }
-        return `${userName} (${timeDesc}): "${msg.content}"`;
+        return `${userName} (${timeDesc}): "${msg.content}"${linkContext}`;
       })
       .join("\n");
 
-    // Format earlier context (messages 5-10 from the end)
+    // Format earlier context (messages 5-10 from the end) - include image/link context
     const earlierContext = recentMessages.slice(0, -5);
     const earlierContextText = earlierContext.length > 0
       ? earlierContext
-          .map((msg) => `${msg.user?.name || "Unknown"}: "${msg.content}"`)
+          .map((msg) => {
+            const userName = msg.user?.name || "Unknown";
+            const linkContext = formatLinkContext(msg);
+            
+            if (msg.messageType === "image" && msg.imageDescription) {
+              return `${userName}: [shared image: ${msg.imageDescription}]${msg.content ? ` "${msg.content}"` : ""}${linkContext}`;
+            } else if (msg.messageType === "image") {
+              return `${userName}: [shared an image]${msg.content ? ` "${msg.content}"` : ""}${linkContext}`;
+            }
+            return `${userName}: "${msg.content}"${linkContext}`;
+          })
           .join("\n")
       : "";
 

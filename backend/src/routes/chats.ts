@@ -866,6 +866,8 @@ chats.get("/:id/messages", async (c) => {
       userId: msg.userId,
       chatId: msg.chatId,
       replyToId: msg.replyToId,
+      vibeType: msg.vibeType || null,
+      metadata: msg.metadata,
       aiFriendId: msg.aiFriendId, // Include AI friend ID
       aiFriend: aiFriend ? {
         id: aiFriend.id,
@@ -1019,6 +1021,8 @@ chats.post("/:id/messages", async (c) => {
         userId: validated.userId,
         chatId,
         replyToId: validated.replyToId,
+        vibeType: validated.vibeType || null,
+        metadata: validated.metadata ? JSON.stringify(validated.metadata) : null,
       })
       .select("*")
       .single();
@@ -1150,6 +1154,8 @@ chats.post("/:id/messages", async (c) => {
       userId: message.userId,
       chatId: message.chatId,
       replyToId: message.replyToId,
+      vibeType: message.vibeType || null,
+      metadata: message.metadata,
       user: user ? {
         id: user.id,
         name: user.name,

@@ -109,6 +109,10 @@ export const chatWithMembersSchema = chatSchema.extend({
 });
 export type ChatWithMembers = z.infer<typeof chatWithMembersSchema>;
 
+// VibeWrapper type for emotional message context
+export const vibeTypeSchema = z.enum(["genuine", "playful", "serious", "soft", "hype"]);
+export type VibeType = z.infer<typeof vibeTypeSchema>;
+
 // Message schemas (recursive for replyTo)
 export const messageSchema: z.ZodType<{
   id: string;
@@ -126,6 +130,7 @@ export const messageSchema: z.ZodType<{
   voiceUrl?: string | null;
   voiceDuration?: number | null;
   eventId?: string | null;
+  vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | null;
   user: User;
   replyTo?: Message | null;
   reactions?: Reaction[];
@@ -149,6 +154,7 @@ export const messageSchema: z.ZodType<{
     voiceUrl: z.string().nullable().optional(),
     voiceDuration: z.number().nullable().optional(),
     eventId: z.string().nullable().optional(),
+    vibeType: vibeTypeSchema.nullable().optional(),
     user: userSchema,
     replyTo: messageSchema.nullable().optional(),
     reactions: z.array(reactionSchema).optional(),
@@ -227,6 +233,7 @@ export const sendMessageRequestSchema = z.object({
   voiceDuration: z.number().optional(),
   userId: z.string(),
   replyToId: z.string().optional(),
+  vibeType: vibeTypeSchema.nullable().optional(),
   mentionedUserIds: z.array(z.string()).optional(),
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
@@ -449,6 +456,7 @@ export const executeCustomCommandRequestSchema = z.object({
   userMessage: z.string(),
   chatId: z.string(),
   replyToId: z.string().optional(),
+  vibeType: vibeTypeSchema.nullable().optional(),
 });
 export type ExecuteCustomCommandRequest = z.infer<typeof executeCustomCommandRequestSchema>;
 export const executeCustomCommandResponseSchema = messageSchema;
@@ -611,6 +619,7 @@ export const sendChatMessageRequestSchema = z.object({
   voiceDuration: z.number().optional(),
   userId: z.string(),
   replyToId: z.string().optional(),
+  vibeType: vibeTypeSchema.nullable().optional(),
 });
 export type SendChatMessageRequest = z.infer<typeof sendChatMessageRequestSchema>;
 export const sendChatMessageResponseSchema = messageSchema;
