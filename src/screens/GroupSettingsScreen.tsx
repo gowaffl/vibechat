@@ -231,11 +231,14 @@ const GroupSettingsScreen = () => {
   });
 
   // Fetch messages to extract photos and links
-  const { data: messages = [] } = useQuery({
+  const { data: messagesData } = useQuery({
     queryKey: ["messages", chatId],
-    queryFn: () => api.get<any[]>(`/api/chats/${chatId}/messages?userId=${user?.id}`),
+    queryFn: () => api.get<{ messages: any[], hasMore: boolean, nextCursor: string | null }>(`/api/chats/${chatId}/messages?userId=${user?.id}`),
     enabled: !!user?.id && !!chatId,
   });
+  
+  // Extract messages array from paginated response
+  const messages = messagesData?.messages || [];
 
   // Filter messages for media (photos and videos) and sort by most recent first
   const mediaMessages = messages
@@ -1515,7 +1518,7 @@ const GroupSettingsScreen = () => {
                         value={aiName}
                         onChangeText={setAiName}
                         className="rounded-lg px-4 py-3 text-base mb-3"
-                        keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                        keyboardAppearance="dark"
                         style={{
                           backgroundColor: "rgba(255, 255, 255, 0.05)",
                           color: "#FFFFFF",
@@ -1587,7 +1590,7 @@ const GroupSettingsScreen = () => {
                         value={aiPersonality}
                         onChangeText={setAiPersonality}
                         className="rounded-lg px-4 py-3 text-base mb-3"
-                        keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                        keyboardAppearance="dark"
                         style={{
                           backgroundColor: "rgba(255, 255, 255, 0.05)",
                           color: "#FFFFFF",
@@ -1941,6 +1944,7 @@ const GroupSettingsScreen = () => {
                     value={newCommand}
                     onChangeText={setNewCommand}
                     className="rounded-lg px-4 py-3 text-base mb-2"
+                    keyboardAppearance="dark"
                     style={{
                       backgroundColor: "rgba(255, 255, 255, 0.05)",
                       color: "#FFFFFF",
@@ -1959,6 +1963,7 @@ const GroupSettingsScreen = () => {
                     value={newPrompt}
                     onChangeText={setNewPrompt}
                     className="rounded-lg px-4 py-3 text-base mb-3"
+                    keyboardAppearance="dark"
                     style={{
                       backgroundColor: "rgba(255, 255, 255, 0.05)",
                       color: "#FFFFFF",
@@ -2019,6 +2024,7 @@ const GroupSettingsScreen = () => {
                     value={newCommand}
                     onChangeText={setNewCommand}
                     className="rounded-lg px-4 py-3 text-base mb-2"
+                    keyboardAppearance="dark"
                     style={{
                       backgroundColor: "rgba(255, 255, 255, 0.05)",
                       color: "#FFFFFF",
@@ -2037,6 +2043,7 @@ const GroupSettingsScreen = () => {
                     value={newPrompt}
                     onChangeText={setNewPrompt}
                     className="rounded-lg px-4 py-3 text-base mb-3"
+                    keyboardAppearance="dark"
                     style={{
                       backgroundColor: "rgba(255, 255, 255, 0.05)",
                       color: "#FFFFFF",
@@ -2441,6 +2448,7 @@ const GroupSettingsScreen = () => {
                   value={name}
                   onChangeText={setName}
                   className="rounded-lg px-4 py-3 text-base"
+                  keyboardAppearance="dark"
                   style={{
                     backgroundColor: "rgba(255, 255, 255, 0.05)",
                     color: "#FFFFFF",
@@ -2461,6 +2469,7 @@ const GroupSettingsScreen = () => {
                   value={bio}
                   onChangeText={setBio}
                   className="rounded-lg px-4 py-3 text-base"
+                  keyboardAppearance="dark"
                   style={{
                     backgroundColor: "rgba(255, 255, 255, 0.05)",
                     color: "#FFFFFF",

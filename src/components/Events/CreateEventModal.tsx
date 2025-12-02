@@ -499,7 +499,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           onChangeText={setTitle}
                           placeholder="e.g., Movie Night, Dinner Plans..."
                           placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                          keyboardAppearance="dark"
                           style={{
                             backgroundColor: "rgba(255, 255, 255, 0.08)",
                             borderRadius: 12,
@@ -523,7 +523,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           onChangeText={setDescription}
                           placeholder="Add details about the event..."
                           placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                          keyboardAppearance="dark"
                           multiline
                           numberOfLines={3}
                           style={{
@@ -834,7 +834,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                         : "Option " + (index + 1)
                                     }
                                     placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                    keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                                    keyboardAppearance="dark"
                                     style={{
                                       backgroundColor: "rgba(255, 255, 255, 0.08)",
                                       borderRadius: 10,

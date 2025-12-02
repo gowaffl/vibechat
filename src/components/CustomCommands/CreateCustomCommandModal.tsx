@@ -276,7 +276,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             onChangeText={setCommand}
                             placeholder="e.g., /summarize, /translate, /joke"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                            keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                            keyboardAppearance="dark"
                             style={{
                               backgroundColor: "rgba(255, 255, 255, 0.08)",
                               borderRadius: 12,
@@ -302,7 +302,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             onChangeText={setPrompt}
                             placeholder="e.g., Summarize the above conversation in 3 bullet points"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                            keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                            keyboardAppearance="dark"
                             style={{
                               backgroundColor: "rgba(255, 255, 255, 0.08)",
                               borderRadius: 12,

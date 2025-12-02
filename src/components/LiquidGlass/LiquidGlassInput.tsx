@@ -182,6 +182,7 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
             {...textInputProps}
             onFocus={handleFocus}
             onBlur={handleBlur}
+            keyboardAppearance="dark"
             style={[
               {
                 flex: 1,

@@ -431,7 +431,7 @@ const ProfileScreen = () => {
                 onChangeText={setName}
                 placeholder="Enter your name"
                 placeholderTextColor="#666666"
-                keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                keyboardAppearance="dark"
                 className="rounded-2xl px-5 py-4 text-base"
                 style={{
                   backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -454,7 +454,7 @@ const ProfileScreen = () => {
                 onChangeText={setBio}
                 placeholder="Tell us about yourself"
                 placeholderTextColor="#666666"
-                keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                keyboardAppearance="dark"
                 className="rounded-2xl px-5 py-4 text-base"
                 style={{
                   backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -733,7 +733,7 @@ const ProfileScreen = () => {
                     onChangeText={setDeletionFeedback}
                     placeholder="Your feedback (optional)..."
                     placeholderTextColor="#666666"
-                    keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                    keyboardAppearance="dark"
                     multiline
                     numberOfLines={4}
                     maxLength={500}

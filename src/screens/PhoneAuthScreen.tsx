@@ -292,6 +292,7 @@ export default function PhoneAuthScreen() {
                       autoFocus={false} 
                   maxLength={step === "phone" ? 15 : 6}
                   selectionColor="#3B82F6"
+                  keyboardAppearance="dark"
                 />
               </LinearGradient>
             </BlurView>

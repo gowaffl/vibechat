@@ -1,0 +1,54 @@
+# .easignore - Exclude files from EAS Build uploads
+# This dramatically reduces upload size and build time
+
+# Node modules (EAS will install fresh from package.json)
+node_modules/
+
+# iOS build artifacts (will be regenerated)
+ios/build/
+ios/Pods/
+ios/.xcode.env.local
+
+# Android build artifacts (will be regenerated)
+android/build/
+android/app/build/
+android/.gradle/
+
+# Git history (not needed for build)
+.git/
+
+# Documentation files (not needed for build)
+*.md
+!README.md
+
+# Local development files
+*.log
+*.local
+
+# Test files (not needed for build)
+test_*.ts
+*.test.ts
+*.spec.ts
+
+# SQL migration files (not needed for mobile build)
+*.sql
+
+# Temporary files
+*.tmp
+temp_*
+.cache/
+
+# IDE settings
+.idea/
+.vscode/
+
+# Backend files not needed for mobile build
+backend/uploads/
+backend/bun.lock
+backend/package-lock.json
+backend/server.log
+backend/temp_output.txt
+
+# OS files
+.DS_Store
+Thumbs.db

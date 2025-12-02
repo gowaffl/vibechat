@@ -80,7 +80,7 @@ const fetchFn = async <T>(path: string, options: FetchOptions): Promise<T> => {
       
       // HIGH-13: Handle timeout error with user-friendly message
       if (fetchError.name === 'AbortError') {
-        const isAIPath = path.includes('/ai/') || path.includes('/custom-commands/') || path.includes('/catchup');
+        const isAIPath = path.includes('/ai/') || path.includes('/custom-commands/') || path.includes('/catchup') || path.includes('/reactor/');
         const userMessage = isAIPath 
           ? "The AI is taking longer than expected to respond. Please try again with a simpler request."
           : `Request timeout after ${timeout / 1000} seconds`;
@@ -189,7 +189,10 @@ const api = {
       path.includes('/ai/generate-image') || 
       path.includes('/ai/generate-meme') ||
       path.includes('/ai/smart-replies') ||
-      path.includes('/catchup');
+      path.includes('/catchup') ||
+      path.includes('/reactor/remix') ||
+      path.includes('/reactor/meme') ||
+      path.includes('/reactor/caption');
     
     const customTimeout = timeout || (isAIOperation ? 180000 : 30000); // 3 minutes for AI, 30s for others
     

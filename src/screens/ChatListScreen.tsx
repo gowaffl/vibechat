@@ -778,6 +778,7 @@ const ChatListScreen = () => {
                     onChangeText={setSearchQuery}
                     placeholder="Search chats..."
                     placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                    keyboardAppearance="dark"
                     style={{
                       flex: 1,
                       marginLeft: 12,

@@ -118,6 +118,7 @@ export default function LoginWithEmailPassword() {
               className="border border-gray-300 rounded-lg p-4 bg-white"
               autoCapitalize="words"
               editable={!isLoading}
+              keyboardAppearance="dark"
             />
           </View>
         )}
@@ -133,6 +134,7 @@ export default function LoginWithEmailPassword() {
             autoCapitalize="none"
             className="border border-gray-300 rounded-lg p-4 bg-white"
             editable={!isLoading}
+            keyboardAppearance="dark"
           />
         </View>
 
@@ -146,6 +148,7 @@ export default function LoginWithEmailPassword() {
             secureTextEntry
             className="border border-gray-300 rounded-lg p-4 bg-white"
             editable={!isLoading}
+            keyboardAppearance="dark"
           />
         </View>
 

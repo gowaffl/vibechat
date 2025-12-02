@@ -315,7 +315,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           onChangeText={setName}
                           placeholder="e.g., places, gaming, work..."
                           placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                          keyboardAppearance="dark"
                           style={{
                             backgroundColor: "rgba(255, 255, 255, 0.08)",
                             borderRadius: 12,
@@ -340,7 +340,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           onChangeText={setKeywords}
                           placeholder="e.g., restaurant, vacation, coding"
                           placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                          keyboardAppearance="dark"
                           style={{
                             backgroundColor: "rgba(255, 255, 255, 0.08)",
                             borderRadius: 12,

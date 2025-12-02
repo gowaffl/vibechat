@@ -169,9 +169,9 @@ const ChatHeader = ({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingTop: insets.top + 6,
-          paddingHorizontal: 16,
-          paddingBottom: 8,
+          paddingTop: insets.top + 2,
+          paddingHorizontal: 14,
+          paddingBottom: 4,
         }}
       >
         {/* Left Button - Back to Chat List */}
@@ -193,7 +193,7 @@ const ChatHeader = ({
           }}
         >
           <View
-            className="w-10 h-10 rounded-full items-center justify-center"
+            className="w-8 h-8 rounded-full items-center justify-center"
             style={{
               backgroundColor: "rgba(255, 255, 255, 0.15)",
               shadowColor: "#000",
@@ -202,7 +202,7 @@ const ChatHeader = ({
               shadowRadius: 2,
             }}
           >
-            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.5} />
+            <ChevronLeft size={20} color="#FFFFFF" strokeWidth={2.5} />
           </View>
         </Pressable>
 
@@ -221,31 +221,31 @@ const ChatHeader = ({
               <Image
                 source={{ uri: groupImageUrl }}
                 style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  marginBottom: 4,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  marginBottom: 2,
                 }}
                 contentFit="cover"
               />
             ) : (
               <View
                 style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
                   backgroundColor: "rgba(255, 255, 255, 0.15)",
                   alignItems: "center",
                   justifyContent: "center",
-                  marginBottom: 4,
+                  marginBottom: 2,
                 }}
               >
-                <Users size={26} color="#FFFFFF" />
+                <Users size={20} color="#FFFFFF" />
               </View>
             )}
             {/* Group Name */}
             <Text
-              className="text-sm font-semibold"
+              className="text-xs font-semibold"
               style={{ color: "#FFFFFF" }}
               numberOfLines={1}
             >
@@ -262,7 +262,7 @@ const ChatHeader = ({
           }}
         >
           <View
-            className="w-10 h-10 rounded-full items-center justify-center"
+            className="w-8 h-8 rounded-full items-center justify-center"
             style={{
               backgroundColor: "rgba(255, 255, 255, 0.15)",
               shadowColor: "#000",
@@ -271,7 +271,7 @@ const ChatHeader = ({
               shadowRadius: 2,
             }}
           >
-            <MoreVertical size={22} color="#FFFFFF" />
+            <MoreVertical size={18} color="#FFFFFF" />
           </View>
         </Pressable>
       </View>
@@ -1189,10 +1189,10 @@ const MessageSelectionToolbar = ({
         borderTopWidth: 1,
         borderTopColor: "rgba(255, 255, 255, 0.1)",
         paddingBottom: insets.bottom,
-        paddingTop: 12,
-        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingHorizontal: 12,
         flexDirection: "row",
-        gap: 12,
+        gap: 8,
       }}
     >
       <Pressable
@@ -1511,8 +1511,8 @@ const ReactionDetailsModal = ({
   );
 };
 
-const MIN_INPUT_HEIGHT = 44;
-const MAX_INPUT_HEIGHT = 120;
+const MIN_INPUT_HEIGHT = 36;
+const MAX_INPUT_HEIGHT = 100;
 
 const ChatScreen = () => {
   const insets = useSafeAreaInsets();
@@ -2264,11 +2264,11 @@ const ChatScreen = () => {
       // Cancel any outgoing refetches to prevent them from overwriting our optimistic update
       await queryClient.cancelQueries({ queryKey: ["messages", chatId] });
 
-      // Snapshot the previous messages
-      const previousMessages = queryClient.getQueryData<Message[]>(["messages", chatId]);
+      // Snapshot the previous data (now in paginated format)
+      const previousData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
 
       // Optimistically update to the new value
-      if (previousMessages && user) {
+      if (previousData?.messages && user) {
         const optimisticMessage: Message = {
           id: `optimistic-${Date.now()}`, // Temporary ID
           content: newMessage.content || "",
@@ -2283,23 +2283,32 @@ const ChatScreen = () => {
           isUnsent: false,
           user: user,
           reactions: [],
-          replyTo: newMessage.replyToId ? previousMessages.find(m => m.id === newMessage.replyToId) : undefined,
+          replyTo: newMessage.replyToId ? previousData.messages.find(m => m.id === newMessage.replyToId) : undefined,
           mentions: [], // Mentions will be populated by the server response
         };
 
-        queryClient.setQueryData<Message[]>(
+        // Update with paginated format
+        queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
-          [...previousMessages, optimisticMessage]
+          {
+            messages: [...previousData.messages, optimisticMessage],
+            hasMore: previousData.hasMore,
+            nextCursor: previousData.nextCursor,
+          }
         );
+        
+        // Also update allMessages state for immediate UI update
+        setAllMessages(prev => [...prev, optimisticMessage]);
       }
 
-      // Return context with the previous messages for rollback
-      return { previousMessages };
+      // Return context with the previous data for rollback
+      return { previousData };
     },
     onError: (err, newMessage, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousMessages) {
-        queryClient.setQueryData(["messages", chatId], context.previousMessages);
+      if (context?.previousData) {
+        queryClient.setQueryData(["messages", chatId], context.previousData);
+        setAllMessages(context.previousData.messages || []);
       }
       console.error("Error sending message:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -2307,11 +2316,20 @@ const ChatScreen = () => {
     },
     onSuccess: (newMessage) => {
       // Smoothly replace optimistic message with real one from server
-      const previousMessages = queryClient.getQueryData<Message[]>(["messages", chatId]);
-      if (previousMessages) {
+      const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
+      if (currentData?.messages) {
         // Remove optimistic message and add real one
-        const withoutOptimistic = previousMessages.filter(m => !m.id.startsWith('optimistic-'));
-        queryClient.setQueryData<Message[]>(["messages", chatId], [...withoutOptimistic, newMessage]);
+        const withoutOptimistic = currentData.messages.filter(m => !m.id.startsWith('optimistic-'));
+        const updatedMessages = [...withoutOptimistic, newMessage];
+        queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+          ["messages", chatId],
+          {
+            messages: updatedMessages,
+            hasMore: currentData.hasMore,
+            nextCursor: currentData.nextCursor,
+          }
+        );
+        setAllMessages(updatedMessages);
       }
       
       // Clear state (these may have already been cleared for text messages, but need to be cleared for image/voice)
@@ -6084,15 +6102,15 @@ const ChatScreen = () => {
               >
                 <View
                   style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
                     overflow: "hidden",
                     shadowColor: "#007AFF",
-                    shadowOffset: { width: 0, height: 4 },
+                    shadowOffset: { width: 0, height: 3 },
                     shadowOpacity: 0.1,
-                    shadowRadius: 8,
-                    elevation: 4,
+                    shadowRadius: 6,
+                    elevation: 3,
                   }}
                   pointerEvents="box-only"
                 >
@@ -6105,7 +6123,7 @@ const ChatScreen = () => {
                       justifyContent: "center",
                       borderWidth: 1.5,
                       borderColor: "rgba(255, 255, 255, 0.2)",
-                      borderRadius: 22,
+                      borderRadius: 18,
                       overflow: "hidden",
                     }}
                   >
@@ -6123,30 +6141,30 @@ const ChatScreen = () => {
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        borderRadius: 22,
+                        borderRadius: 18,
                       }}
                       pointerEvents="none"
                     />
-                    <Plus size={20} color="#FFFFFF" />
+                    <Plus size={18} color="#FFFFFF" />
                   </BlurView>
                 </View>
               </Pressable>
                   <Animated.View
                     style={{
                       flex: 1,
-                      borderRadius: 24,
+                      borderRadius: 20,
                       overflow: "hidden",
                       shadowColor: inputContainerShadowColor,
-                      shadowOffset: { width: 0, height: 4 },
+                      shadowOffset: { width: 0, height: 3 },
                       shadowOpacity: animatedShadowOpacity,
-                      shadowRadius: 12,
-                      elevation: 4,
+                      shadowRadius: 8,
+                      elevation: 3,
                     }}
                   >
                     <View
                     style={{
                       flex: 1,
-                      borderRadius: 24,
+                      borderRadius: 20,
                       overflow: "hidden",
                       backgroundColor: "#1C1C1E", // Solid dark background
                     }}
@@ -6154,7 +6172,7 @@ const ChatScreen = () => {
                     <Animated.View
                       style={{
                         flex: 1,
-                        borderRadius: 24,
+                        borderRadius: 20,
                         borderWidth: 1.5,
                         borderColor: animatedBorderColor,
                         overflow: "hidden",
@@ -6241,10 +6259,10 @@ const ChatScreen = () => {
                     placeholderTextColor="#666666"
                     style={{
                       flex: 1,
-                      paddingHorizontal: 16,
-                      paddingVertical: 10,
-                      fontSize: 16,
-                      lineHeight: 20,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      fontSize: 15,
+                      lineHeight: 19,
                       color: inputTextColor,
                       fontWeight: inputFontWeight,
                       textAlignVertical: "top",
@@ -6257,7 +6275,7 @@ const ChatScreen = () => {
                     onSubmitEditing={() => handleSend()}
                     blurOnSubmit={false}
                     keyboardType="default"
-                    keyboardAppearance={colorScheme === "dark" ? "dark" : "light"}
+                    keyboardAppearance="dark"
                     returnKeyType="default"
                     enablesReturnKeyAutomatically={false}
                     onFocus={() => {
@@ -6324,9 +6342,9 @@ const ChatScreen = () => {
                 >
                   <Animated.View
                     style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 22,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
                       overflow: "hidden",
                       shadowColor: (selectedVibe || previewVibe)
                         ? VIBE_CONFIG[selectedVibe || previewVibe!].color
@@ -6335,10 +6353,10 @@ const ChatScreen = () => {
                         : messageText.trim() || selectedImages.length > 0 || selectedVideo
                         ? "#007AFF"
                         : "#007AFF",
-                      shadowOffset: { width: 0, height: 4 },
+                      shadowOffset: { width: 0, height: 3 },
                       shadowOpacity: animatedShadowOpacity,
-                      shadowRadius: 8,
-                      elevation: 4,
+                      shadowRadius: 6,
+                      elevation: 3,
                     }}
                     pointerEvents="box-only"
                   >
@@ -6347,7 +6365,7 @@ const ChatScreen = () => {
                       tint="dark"
                       style={{
                         flex: 1,
-                        borderRadius: 22,
+                        borderRadius: 18,
                       }}
                     >
                       <Animated.View
@@ -6357,7 +6375,7 @@ const ChatScreen = () => {
                           justifyContent: "center",
                           borderWidth: 1.5,
                           borderColor: animatedBorderColor,
-                          borderRadius: 22,
+                          borderRadius: 18,
                         }}
                       >
                         {/* Layered animated gradient backgrounds for send button */}
@@ -6443,7 +6461,7 @@ const ChatScreen = () => {
                               ],
                             }}
                           >
-                            <Mic size={20} color="#FFFFFF" />
+                            <Mic size={18} color="#FFFFFF" />
                           </Animated.View>
                         ) : (
                           <Animated.View
@@ -6454,7 +6472,7 @@ const ChatScreen = () => {
                               ],
                             }}
                           >
-                            <ArrowUp size={20} color="#FFFFFF" strokeWidth={2.5} />
+                            <ArrowUp size={18} color="#FFFFFF" strokeWidth={2.5} />
                           </Animated.View>
                         )}
                         
@@ -6463,13 +6481,13 @@ const ChatScreen = () => {
                           <View
                             style={{
                               position: "absolute",
-                              top: 2,
-                              right: 2,
-                              width: 10,
-                              height: 10,
-                              borderRadius: 5,
+                              top: 1,
+                              right: 1,
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
                               backgroundColor: VIBE_CONFIG[selectedVibe || previewVibe!].color,
-                              borderWidth: 1.5,
+                              borderWidth: 1,
                               borderColor: "rgba(0, 0, 0, 0.3)",
                             }}
                           />
@@ -6619,6 +6637,7 @@ const ChatScreen = () => {
                   onChangeText={handleEditTyping}
                   multiline
                   autoFocus
+                  keyboardAppearance="dark"
                   style={{
                     backgroundColor: "rgba(255, 255, 255, 0.1)",
                     borderRadius: 12,
@@ -6843,6 +6862,7 @@ const ChatScreen = () => {
                         placeholderTextColor="#666"
                         style={{ flex: 1, color: "#FFFFFF", fontSize: 17 }}
                         autoFocus
+                        keyboardAppearance="dark"
                       />
                       <Pressable onPress={() => { setShowSearchModal(false); setSearchQuery(""); }}>
                         <X size={20} color="#FFFFFF" />

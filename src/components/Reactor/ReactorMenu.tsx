@@ -362,6 +362,7 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
                               placeholderTextColor="rgba(255, 255, 255, 0.4)"
                               multiline
                               numberOfLines={4}
+                              keyboardAppearance="dark"
                               style={{
                                 backgroundColor: "rgba(255, 255, 255, 0.08)",
                                 borderRadius: 12,
@@ -429,6 +430,7 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
                               placeholderTextColor="rgba(255, 255, 255, 0.4)"
                               multiline
                               numberOfLines={4}
+                              keyboardAppearance="dark"
                               style={{
                                 backgroundColor: "rgba(255, 255, 255, 0.08)",
                                 borderRadius: 12,

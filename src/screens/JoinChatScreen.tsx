@@ -131,6 +131,7 @@ const JoinChatScreen = () => {
                   maxLength={8}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardAppearance="dark"
                   style={styles.input}
                 />
                 <Text style={styles.helperText}>

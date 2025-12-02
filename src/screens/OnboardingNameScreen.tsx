@@ -213,6 +213,7 @@ const OnboardingNameScreen = () => {
                       autoCapitalize="words"
                       maxLength={50}
                       returnKeyType="next"
+                      keyboardAppearance="dark"
                     />
                   </LinearGradient>
                 </BlurView>
@@ -234,6 +235,7 @@ const OnboardingNameScreen = () => {
                                   numberOfLines={3}
                       maxLength={200}
                       returnKeyType="done"
+                      keyboardAppearance="dark"
                     />
                   </LinearGradient>
                 </BlurView>

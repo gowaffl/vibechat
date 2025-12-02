@@ -360,9 +360,7 @@ const CreatePollModal: React.FC<CreatePollModalProps> = ({
                             onChangeText={setQuestion}
                             placeholder="What would you like to ask?"
                             placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                            keyboardAppearance={
-                              colorScheme === "dark" ? "dark" : "light"
-                            }
+                            keyboardAppearance="dark"
                             multiline
                             numberOfLines={2}
                             style={{
@@ -424,9 +422,7 @@ const CreatePollModal: React.FC<CreatePollModalProps> = ({
                                     }
                                     placeholder={`Option ${index + 1}`}
                                     placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                    keyboardAppearance={
-                                      colorScheme === "dark" ? "dark" : "light"
-                                    }
+                                    keyboardAppearance="dark"
                                     style={{
                                       backgroundColor: "rgba(255, 255, 255, 0.08)",
                                       borderRadius: 10,

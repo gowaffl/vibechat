@@ -60,10 +60,24 @@ export function useReactor(chatId: string, userId: string) {
     onError: (error: Error) => {
       console.log("[Reactor] Remix mutation error:", error.message);
       console.log("[Reactor] Full error object:", error);
-      // Invalidate queries anyway to refresh the chat - the remix might have succeeded
+      // Invalidate queries to refresh the chat
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      // Don't show error alert - if the remix actually succeeded, it will appear in the chat
-      // If it truly failed, the user won't see the remixed image
+      
+      // Parse error message to give user helpful feedback
+      let userMessage = "Could not remix image. Please try again.";
+      const errorStr = error.message || "";
+      
+      if (errorStr.includes("timeout") || errorStr.includes("AbortError")) {
+        userMessage = "Image remixing took too long. Please try a simpler prompt.";
+      } else if (errorStr.includes("rate limit") || errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
+        userMessage = "Too many requests. Please wait a moment and try again.";
+      } else if (errorStr.includes("safety") || errorStr.includes("blocked")) {
+        userMessage = "Your prompt was blocked by safety filters. Please try a different prompt.";
+      } else if (errorStr.includes("503") || errorStr.includes("unavailable")) {
+        userMessage = "Image service is temporarily unavailable. Please try again later.";
+      }
+      
+      Alert.alert("❌ Remix Failed", userMessage, [{ text: "OK" }]);
     },
   });
 
@@ -94,10 +108,24 @@ export function useReactor(chatId: string, userId: string) {
     onError: (error: Error) => {
       console.log("[Reactor] Meme mutation error:", error);
       console.log("[Reactor] Full error object:", error);
-      // Invalidate queries anyway to refresh the chat - the meme might have succeeded
+      // Invalidate queries to refresh the chat
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      // Don't show error alert - if the meme actually succeeded, it will appear in the chat
-      // If it truly failed, the user won't see the meme
+      
+      // Parse error message to give user helpful feedback
+      let userMessage = "Could not create meme. Please try again.";
+      const errorStr = error.message || "";
+      
+      if (errorStr.includes("timeout") || errorStr.includes("AbortError")) {
+        userMessage = "Meme creation took too long. Please try a simpler prompt.";
+      } else if (errorStr.includes("rate limit") || errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
+        userMessage = "Too many requests. Please wait a moment and try again.";
+      } else if (errorStr.includes("safety") || errorStr.includes("blocked")) {
+        userMessage = "Your prompt was blocked by safety filters. Please try a different prompt.";
+      } else if (errorStr.includes("503") || errorStr.includes("unavailable")) {
+        userMessage = "Image service is temporarily unavailable. Please try again later.";
+      }
+      
+      Alert.alert("❌ Meme Failed", userMessage, [{ text: "OK" }]);
     },
   });
 

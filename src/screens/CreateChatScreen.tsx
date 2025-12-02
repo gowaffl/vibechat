@@ -216,6 +216,7 @@ const CreateChatScreen = () => {
                   placeholder="Enter chat name..."
                   placeholderTextColor="rgba(255, 255, 255, 0.4)"
                   maxLength={100}
+                  keyboardAppearance="dark"
                   style={styles.input}
                 />
               </View>
@@ -230,6 +231,7 @@ const CreateChatScreen = () => {
                   maxLength={200}
                   multiline
                   numberOfLines={3}
+                  keyboardAppearance="dark"
                   style={[styles.input, styles.textArea]}
                 />
               </View>
