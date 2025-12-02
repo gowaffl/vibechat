@@ -296,7 +296,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                         <View style={[styles.compactIconContainer, { backgroundColor: "rgba(138, 43, 226, 0.2)", shadowColor: "#8A2BE2" }]}>
                           <ImageIcon size={20} color="#8A2BE2" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.compactButtonText}>Gallery</Text>
+                        <Text style={styles.compactButtonText}>Photos</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -317,7 +317,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                         <View style={[styles.compactIconContainer, { backgroundColor: "rgba(255, 69, 58, 0.2)", shadowColor: "#FF453A" }]}>
                           <Video size={20} color="#FF453A" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.compactButtonText}>Video</Text>
+                        <Text style={styles.compactButtonText}>Videos</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>

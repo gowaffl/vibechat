@@ -873,6 +873,7 @@ chats.get("/:id/messages", async (c) => {
       voiceUrl: msg.voiceUrl,
       voiceDuration: msg.voiceDuration,
       eventId: msg.eventId,
+      pollId: msg.pollId,
       userId: msg.userId,
       chatId: msg.chatId,
       replyToId: msg.replyToId,
