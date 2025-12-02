@@ -854,10 +854,20 @@ chats.get("/:id/messages", async (c) => {
       const msgReactions = reactionsByMessage.get(msg.id) || [];
       const msgMentions = mentionsByMessage.get(msg.id) || [];
 
+      // Parse metadata if it's a string (from JSONB column)
+      let parsedMetadata = msg.metadata;
+      if (typeof msg.metadata === "string") {
+        try {
+          parsedMetadata = JSON.parse(msg.metadata);
+        } catch {
+          parsedMetadata = null;
+        }
+      }
+
       return {
       id: msg.id,
       content: msg.content,
-      messageType: msg.messageType as "text" | "image" | "voice",
+      messageType: msg.messageType as "text" | "image" | "voice" | "video",
       imageUrl: msg.imageUrl,
       imageDescription: msg.imageDescription,
       voiceUrl: msg.voiceUrl,
@@ -867,7 +877,7 @@ chats.get("/:id/messages", async (c) => {
       chatId: msg.chatId,
       replyToId: msg.replyToId,
       vibeType: msg.vibeType || null,
-      metadata: msg.metadata,
+      metadata: parsedMetadata,
       aiFriendId: msg.aiFriendId, // Include AI friend ID
       aiFriend: aiFriend ? {
         id: aiFriend.id,
@@ -897,7 +907,7 @@ chats.get("/:id/messages", async (c) => {
       replyTo: replyTo ? {
         id: replyTo.id,
         content: replyTo.content,
-        messageType: replyTo.messageType as "text" | "image" | "voice",
+        messageType: replyTo.messageType as "text" | "image" | "voice" | "video",
         imageUrl: replyTo.imageUrl,
         imageDescription: replyTo.imageDescription,
         voiceUrl: replyTo.voiceUrl,
@@ -1122,6 +1132,8 @@ chats.post("/:id/messages", async (c) => {
         ? "📷 Image"
         : message.messageType === "voice"
         ? "🎤 Voice message"
+        : message.messageType === "video"
+        ? "🎬 Video"
         : (message.content || "New message");
 
       sendChatPushNotifications({
@@ -1143,10 +1155,20 @@ chats.post("/:id/messages", async (c) => {
       });
     }
 
+    // Parse metadata if it's a string
+    let parsedMessageMetadata = message.metadata;
+    if (typeof message.metadata === "string") {
+      try {
+        parsedMessageMetadata = JSON.parse(message.metadata);
+      } catch {
+        parsedMessageMetadata = null;
+      }
+    }
+
     return c.json({
       id: message.id,
       content: message.content,
-      messageType: message.messageType as "text" | "image" | "voice",
+      messageType: message.messageType as "text" | "image" | "voice" | "video",
       imageUrl: message.imageUrl,
       imageDescription: message.imageDescription,
       voiceUrl: message.voiceUrl,
@@ -1155,7 +1177,7 @@ chats.post("/:id/messages", async (c) => {
       chatId: message.chatId,
       replyToId: message.replyToId,
       vibeType: message.vibeType || null,
-      metadata: message.metadata,
+      metadata: parsedMessageMetadata,
       user: user ? {
         id: user.id,
         name: user.name,
@@ -1168,7 +1190,7 @@ chats.post("/:id/messages", async (c) => {
       replyTo: replyTo ? {
         id: replyTo.id,
         content: replyTo.content,
-        messageType: replyTo.messageType as "text" | "image" | "voice",
+        messageType: replyTo.messageType as "text" | "image" | "voice" | "video",
         imageUrl: replyTo.imageUrl,
         imageDescription: replyTo.imageDescription,
         voiceUrl: replyTo.voiceUrl,

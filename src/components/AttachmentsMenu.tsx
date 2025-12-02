@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Camera, Image as ImageIcon, Sparkles, Wand2, Plus, Zap } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Sparkles, Wand2, Plus, Zap, Video, BarChart3 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import Animated, {
   useSharedValue,
@@ -32,8 +32,10 @@ interface AttachmentsMenuProps {
   onClose: () => void;
   onTakePhoto: () => Promise<void>;
   onPickImage: () => Promise<void>;
+  onPickVideo: () => Promise<void>;
   onSelectCommand: (command: string) => void;
   onCreateCommand: () => void;
+  onCreatePoll: () => void;
   onOpenSettings: () => void;
   customCommands: CustomSlashCommand[];
 }
@@ -45,8 +47,10 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   onClose,
   onTakePhoto,
   onPickImage,
+  onPickVideo,
   onSelectCommand,
   onCreateCommand,
+  onCreatePoll,
   onOpenSettings,
   customCommands,
 }) => {
@@ -252,9 +256,9 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Photo Options */}
-              <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
-                <View style={{ flexDirection: "row", gap: 12, marginBottom: 16 }}>
+              {/* Media Options - Single Row */}
+              <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
                   <Pressable
                     onPress={() => handlePhotoAction(onTakePhoto)}
                     style={({ pressed }) => ({
@@ -263,15 +267,15 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 20, overflow: "hidden" }}>
+                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
                       <LinearGradient
                         colors={["rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.08)"]}
-                        style={styles.buttonGradient}
+                        style={styles.compactButtonGradient}
                       >
-                        <View style={[styles.iconContainer, { backgroundColor: "rgba(0, 122, 255, 0.2)", shadowColor: "#007AFF" }]}>
-                          <Camera size={24} color="#007AFF" strokeWidth={2.5} />
+                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(0, 122, 255, 0.2)", shadowColor: "#007AFF" }]}>
+                          <Camera size={20} color="#007AFF" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.buttonText}>Camera</Text>
+                        <Text style={styles.compactButtonText}>Camera</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -284,15 +288,57 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 20, overflow: "hidden" }}>
+                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
                       <LinearGradient
                         colors={["rgba(138, 43, 226, 0.15)", "rgba(138, 43, 226, 0.08)"]}
-                        style={styles.buttonGradient}
+                        style={styles.compactButtonGradient}
                       >
-                        <View style={[styles.iconContainer, { backgroundColor: "rgba(138, 43, 226, 0.2)", shadowColor: "#8A2BE2" }]}>
-                          <ImageIcon size={24} color="#8A2BE2" strokeWidth={2.5} />
+                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(138, 43, 226, 0.2)", shadowColor: "#8A2BE2" }]}>
+                          <ImageIcon size={20} color="#8A2BE2" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.buttonText}>Photos</Text>
+                        <Text style={styles.compactButtonText}>Gallery</Text>
+                      </LinearGradient>
+                    </BlurView>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => handlePhotoAction(onPickVideo)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                    })}
+                  >
+                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
+                      <LinearGradient
+                        colors={["rgba(255, 69, 58, 0.15)", "rgba(255, 69, 58, 0.08)"]}
+                        style={styles.compactButtonGradient}
+                      >
+                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(255, 69, 58, 0.2)", shadowColor: "#FF453A" }]}>
+                          <Video size={20} color="#FF453A" strokeWidth={2.5} />
+                        </View>
+                        <Text style={styles.compactButtonText}>Video</Text>
+                      </LinearGradient>
+                    </BlurView>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => handleCommandAction(onCreatePoll)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                    })}
+                  >
+                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
+                      <LinearGradient
+                        colors={["rgba(48, 209, 88, 0.15)", "rgba(48, 209, 88, 0.08)"]}
+                        style={styles.compactButtonGradient}
+                      >
+                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(48, 209, 88, 0.2)", shadowColor: "#30D158" }]}>
+                          <BarChart3 size={20} color="#30D158" strokeWidth={2.5} />
+                        </View>
+                        <Text style={styles.compactButtonText}>Poll</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -472,6 +518,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "rgba(255, 255, 255, 0.6)",
     lineHeight: 16,
+  },
+  compactButtonGradient: {
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    borderRadius: 16,
+  },
+  compactIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  compactButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    letterSpacing: -0.1,
   },
 });
 

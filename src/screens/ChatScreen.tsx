@@ -39,6 +39,7 @@ import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
+import * as VideoThumbnails from "expo-video-thumbnails";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Markdown from "react-native-markdown-display";
 import { api } from "@/lib/api";
@@ -52,13 +53,16 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { VoicePlayer } from "@/components/VoicePlayer";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { MediaCarousel } from "@/components/MediaCarousel";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import AttachmentsMenu from "@/components/AttachmentsMenu";
 import type { RootStackScreenProps } from "@/navigation/types";
-import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, Event } from "@/shared/contracts";
+import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, Event, UploadImageResponse, Poll } from "@/shared/contracts";
 
 // AI Super Features imports
 import { CatchUpModal, CatchUpButton } from "@/components/CatchUp";
 import { EventsList, CreateEventModal, EventNotificationCard } from "@/components/Events";
+import { CreatePollModal, PollCard } from "@/components/Poll";
 import { ReactorMenu } from "@/components/Reactor";
 import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/components/Threads";
 import { CreateCustomCommandModal } from "@/components/CustomCommands";
@@ -72,6 +76,7 @@ import { VibeAnimatedBubble } from "@/components/VibeAnimatedBubble";
 import type { VibeType } from "@shared/contracts";
 import { useCatchUp } from "@/hooks/useCatchUp";
 import { useEvents } from "@/hooks/useEvents";
+import { usePolls } from "@/hooks/usePolls";
 import { useReactor } from "@/hooks/useReactor";
 import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
@@ -1488,8 +1493,10 @@ const ChatScreen = () => {
   const [lastKnownLength, setLastKnownLength] = useState(0);
   const [messageText, setMessageText] = useState("");
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<{ uri: string; duration?: number } | null>(null);
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [viewerImage, setViewerImage] = useState<{
     url: string;
     senderName: string;
@@ -1544,6 +1551,7 @@ const ChatScreen = () => {
   const [showCatchUpModal, setShowCatchUpModal] = useState(false);
   const [showEventsTab, setShowEventsTab] = useState(false);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [showReactorMenu, setShowReactorMenu] = useState(false);
   const [reactorMessageId, setReactorMessageId] = useState<string | null>(null);
   const [showThreadsPanel, setShowThreadsPanel] = useState(false);
@@ -1696,6 +1704,7 @@ const ChatScreen = () => {
   // AI Super Features hooks
   const { cachedSummary, generateCatchUp, clearCachedSummary, isGenerating: isGeneratingCatchUp, error: catchUpError } = useCatchUp(chatId || "", user?.id || "");
   const { events, createEvent, vote, rsvp, exportEvent, deleteEvent, updateEvent, isLoading: isLoadingEvents, isCreating: isCreatingEvent } = useEvents(chatId || "", user?.id || "");
+  const { polls, createPoll, vote: votePoll, isCreating: isCreatingPoll, isVoting: isVotingPoll } = usePolls(chatId || "", user?.id || "");
   const { 
     generateCaption, 
     remix, 
@@ -1797,10 +1806,20 @@ const ChatScreen = () => {
     }
   }, [catchUpError]);
 
-  // Filter messages to get only images for gallery (memoized for performance)
-  const imageMessages = useMemo(
+  // Filter messages to get media (images and videos) for gallery (memoized for performance)
+  const mediaMessages = useMemo(
     () => messages.filter(
-      (msg) => msg.messageType === "image" && msg.imageUrl && !msg.isUnsent
+      (msg) => {
+        if (msg.isUnsent) return false;
+        // Include image messages with imageUrl
+        if (msg.messageType === "image" && msg.imageUrl) return true;
+        // Include video messages with videoUrl in metadata
+        if (msg.messageType === "video") {
+          const meta = msg.metadata as { videoUrl?: string } | null;
+          return !!meta?.videoUrl;
+        }
+        return false;
+      }
     ),
     [messages]
   );
@@ -2086,13 +2105,14 @@ const ChatScreen = () => {
   const sendMessageMutation = useMutation({
     mutationFn: (data: { 
       content?: string; 
-      messageType: "text" | "image" | "voice"; 
+      messageType: "text" | "image" | "voice" | "video"; 
       imageUrl?: string; 
       voiceUrl?: string;
       voiceDuration?: number;
       replyToId?: string;
       mentionedUserIds?: string[];
       vibeType?: VibeType | null;
+      metadata?: Record<string, unknown>;
     }) =>
       api.post<Message>(`/api/chats/${chatId}/messages`, {
         content: data.content || "",
@@ -2104,6 +2124,7 @@ const ChatScreen = () => {
         replyToId: data.replyToId,
         mentionedUserIds: data.mentionedUserIds,
         vibeType: data.vibeType,
+        metadata: data.metadata,
       }),
     onMutate: async (newMessage) => {
       // Cancel any outgoing refetches to prevent them from overwriting our optimistic update
@@ -2639,7 +2660,7 @@ const ChatScreen = () => {
         allowsEditing: false,
         allowsMultipleSelection: true, // Allow multiple selection
         quality: 0.8,
-        selectionLimit: 2, // Max 2 images
+        selectionLimit: 10, // Max 10 images
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -2693,52 +2714,67 @@ const ChatScreen = () => {
 
     setIsUploadingImage(true);
     try {
-      // Use the first selected image for regular image messages
-      const imageUri = selectedImages[0];
-      const filename = imageUri.split('/').pop() || "image.jpg";
-
-      console.log("[ChatScreen] Uploading image:", imageUri);
-
       // Get auth token
       const token = await authClient.getToken();
-
-      // Use FileSystem.uploadAsync for proper file upload in React Native
-      const uploadResult = await FileSystem.uploadAsync(
-        `${BACKEND_URL}/api/upload/image`,
-        imageUri,
-        {
-          httpMethod: "POST",
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          fieldName: "image",
-          headers: token ? {
-            Authorization: `Bearer ${token}`,
-          } : undefined,
-        }
-      );
-
-      console.log("[ChatScreen] Image upload result status:", uploadResult.status);
-
-      if (uploadResult.status !== 200) {
-        console.error("Image upload failed:", uploadResult.status, uploadResult.body);
-        throw new Error(`Upload failed: ${uploadResult.status}`);
-      }
-
-      const uploadData: UploadImageResponse = JSON.parse(uploadResult.body);
       
-      if (!uploadData.success || !uploadData.url) {
-        console.error("Invalid upload response:", uploadData);
-        throw new Error("Invalid upload response");
+      // Upload all selected images
+      const uploadedUrls: string[] = [];
+      
+      for (const imageUri of selectedImages) {
+        console.log("[ChatScreen] Uploading image:", imageUri);
+
+        // Use FileSystem.uploadAsync for proper file upload in React Native
+        const uploadResult = await FileSystem.uploadAsync(
+          `${BACKEND_URL}/api/upload/image`,
+          imageUri,
+          {
+            httpMethod: "POST",
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            fieldName: "image",
+            headers: token ? {
+              Authorization: `Bearer ${token}`,
+            } : undefined,
+          }
+        );
+
+        console.log("[ChatScreen] Image upload result status:", uploadResult.status);
+
+        if (uploadResult.status !== 200) {
+          console.error("Image upload failed:", uploadResult.status, uploadResult.body);
+          throw new Error(`Upload failed: ${uploadResult.status}`);
+        }
+
+        const uploadData: UploadImageResponse = JSON.parse(uploadResult.body);
+        
+        if (!uploadData.success || !uploadData.url) {
+          console.error("Invalid upload response:", uploadData);
+          throw new Error("Invalid upload response");
+        }
+
+        console.log("[ChatScreen] Image uploaded successfully:", uploadData.url);
+        uploadedUrls.push(uploadData.url);
       }
 
-      console.log("[ChatScreen] Image uploaded successfully:", uploadData.url);
-
-      // Send message with image URL
-      await sendMessageMutation.mutateAsync({
-        content: messageText.trim(),
-        messageType: "image",
-        imageUrl: uploadData.url,
-        replyToId: replyToMessage?.id,
-      });
+      // Send message with image URL(s)
+      // For multiple images, store URLs in metadata.mediaUrls
+      // For single image, use imageUrl for backward compatibility
+      if (uploadedUrls.length === 1) {
+        await sendMessageMutation.mutateAsync({
+          content: messageText.trim(),
+          messageType: "image",
+          imageUrl: uploadedUrls[0],
+          replyToId: replyToMessage?.id,
+        });
+      } else {
+        // Multiple images - store in metadata
+        await sendMessageMutation.mutateAsync({
+          content: messageText.trim(),
+          messageType: "image",
+          imageUrl: uploadedUrls[0], // First image for thumbnail/preview
+          metadata: { mediaUrls: uploadedUrls },
+          replyToId: replyToMessage?.id,
+        });
+      }
 
       // Clear selected images after successful send
       setSelectedImages([]);
@@ -2747,6 +2783,127 @@ const ChatScreen = () => {
       Alert.alert("Error", "Failed to upload image");
     } finally {
       setIsUploadingImage(false);
+    }
+  };
+
+  const pickVideo = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "videos",
+        allowsEditing: true,
+        quality: 0.8,
+        videoMaxDuration: 60, // Max 60 seconds
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const pickedVideo = result.assets[0];
+        console.log(`[ChatScreen] Selected video: ${pickedVideo.uri}`);
+        console.log(`[ChatScreen] Video duration: ${pickedVideo.duration}ms`);
+        
+        setSelectedVideo({
+          uri: pickedVideo.uri,
+          duration: pickedVideo.duration ? Math.round(pickedVideo.duration / 1000) : undefined,
+        });
+      }
+    } catch (error) {
+      console.error("Error picking video:", error);
+      Alert.alert("Error", "Failed to pick video");
+    }
+  };
+
+  const uploadVideoAndSend = async () => {
+    if (!selectedVideo || !user) return;
+
+    setIsUploadingVideo(true);
+    try {
+      // Get auth token
+      const token = await authClient.getToken();
+
+      console.log("[ChatScreen] Uploading video:", selectedVideo.uri);
+
+      // Upload video
+      const uploadResult = await FileSystem.uploadAsync(
+        `${BACKEND_URL}/api/upload/video`,
+        selectedVideo.uri,
+        {
+          httpMethod: "POST",
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: "video",
+          headers: token ? {
+            Authorization: `Bearer ${token}`,
+          } : undefined,
+        }
+      );
+
+      console.log("[ChatScreen] Video upload result status:", uploadResult.status);
+
+      if (uploadResult.status !== 200) {
+        console.error("Video upload failed:", uploadResult.status, uploadResult.body);
+        throw new Error(`Upload failed: ${uploadResult.status}`);
+      }
+
+      const uploadData = JSON.parse(uploadResult.body);
+      
+      if (!uploadData.success || !uploadData.url) {
+        console.error("Invalid upload response:", uploadData);
+        throw new Error("Invalid upload response");
+      }
+
+      console.log("[ChatScreen] Video uploaded successfully:", uploadData.url);
+
+      // Generate thumbnail
+      let thumbnailUrl: string | null = null;
+      try {
+        const { uri: thumbnailUri } = await VideoThumbnails.getThumbnailAsync(
+          selectedVideo.uri,
+          { time: 1000 } // Get thumbnail at 1 second
+        );
+        
+        // Upload thumbnail
+        const thumbnailUploadResult = await FileSystem.uploadAsync(
+          `${BACKEND_URL}/api/upload/image`,
+          thumbnailUri,
+          {
+            httpMethod: "POST",
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            fieldName: "image",
+            headers: token ? {
+              Authorization: `Bearer ${token}`,
+            } : undefined,
+          }
+        );
+
+        if (thumbnailUploadResult.status === 200) {
+          const thumbnailData = JSON.parse(thumbnailUploadResult.body);
+          if (thumbnailData.success && thumbnailData.url) {
+            thumbnailUrl = thumbnailData.url;
+            console.log("[ChatScreen] Thumbnail uploaded successfully:", thumbnailUrl);
+          }
+        }
+      } catch (thumbnailError) {
+        console.warn("[ChatScreen] Failed to generate/upload thumbnail:", thumbnailError);
+        // Continue without thumbnail
+      }
+
+      // Send video message
+      await sendMessageMutation.mutateAsync({
+        content: messageText.trim(),
+        messageType: "video",
+        metadata: {
+          videoUrl: uploadData.url,
+          videoThumbnailUrl: thumbnailUrl,
+          videoDuration: selectedVideo.duration,
+        },
+        replyToId: replyToMessage?.id,
+      });
+
+      // Clear selected video after successful send
+      setSelectedVideo(null);
+    } catch (error) {
+      console.error("Error uploading video:", error);
+      Alert.alert("Error", "Failed to upload video");
+    } finally {
+      setIsUploadingVideo(false);
     }
   };
 
@@ -2974,6 +3131,12 @@ const ChatScreen = () => {
     }
 
 
+    // If video is selected, upload and send video message
+    if (selectedVideo) {
+      await uploadVideoAndSend();
+      return;
+    }
+
     // If images are selected (but not /image or /meme command), upload and send image message
     if (selectedImages.length > 0) {
       await uploadImageAndSend();
@@ -3135,8 +3298,8 @@ const ChatScreen = () => {
   const vibeTouchStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   
   const handleSendButtonPressIn = useCallback((event: any) => {
-    // Only show vibe selector if there's text to send
-    if (!messageText.trim() && selectedImages.length === 0) return;
+    // Only show vibe selector if there's content to send
+    if (!messageText.trim() && selectedImages.length === 0 && !selectedVideo) return;
     
     // Record touch start time and position
     vibeTouchStartTime.current = Date.now();
@@ -4103,7 +4266,7 @@ const ChatScreen = () => {
 
   // Animate button icon transition with rotation
   useEffect(() => {
-    const showSend = messageText.trim() || selectedImages.length > 0;
+    const showSend = messageText.trim() || selectedImages.length > 0 || selectedVideo;
     
     // Add subtle haptic feedback on transition
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -4138,7 +4301,7 @@ const ChatScreen = () => {
       // Subtle haptic on animation complete
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     });
-  }, [messageText.trim().length > 0, selectedImages.length > 0]);
+  }, [messageText.trim().length > 0, selectedImages.length > 0, selectedVideo]);
 
   // Interpolated animated colors for input border
   const animatedBorderColor = colorAnimValue.interpolate({
@@ -4248,6 +4411,12 @@ const ChatScreen = () => {
     const aiName = aiFriend?.name || "AI Friend";
     const isImage = message.messageType === "image";
     const isVoice = message.messageType === "voice";
+    const isVideo = message.messageType === "video";
+    
+    // Check for multi-image message (mediaUrls in metadata)
+    const metadata = message.metadata as { mediaUrls?: string[]; videoUrl?: string; videoThumbnailUrl?: string | null; videoDuration?: number } | null;
+    const mediaUrls = metadata?.mediaUrls || [];
+    const hasMultipleImages = isImage && mediaUrls.length > 1;
     const messageTime = new Date(message.createdAt).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -4282,6 +4451,30 @@ const ChatScreen = () => {
                   // Open events panel
                   setShowEventsTab(true);
                 }}
+              />
+            </View>
+          );
+        }
+      }
+
+      // Check if this is a poll notification message
+      if (message.pollId) {
+        const poll = polls.find((p) => p.id === message.pollId);
+        if (poll) {
+          return (
+            <View
+              style={{
+                marginVertical: 8,
+                paddingHorizontal: 16,
+              }}
+            >
+              <PollCard
+                poll={poll}
+                currentUserId={user?.id || ""}
+                onVote={(optionId) => {
+                  votePoll({ pollId: poll.id, optionId });
+                }}
+                isVoting={isVotingPoll}
               />
             </View>
           );
@@ -4447,7 +4640,57 @@ const ChatScreen = () => {
                 isCurrentUser={isCurrentUser}
               />
             </View>
-          ) : /* Image Message */ isImage && message.imageUrl ? (
+          ) : /* Video Message */ isVideo && metadata?.videoUrl ? (
+            <View style={{ width: 270 }}>
+              <VideoPlayer
+                videoUrl={getFullImageUrl(metadata.videoUrl)}
+                thumbnailUrl={metadata.videoThumbnailUrl ? getFullImageUrl(metadata.videoThumbnailUrl) : null}
+                duration={metadata.videoDuration}
+                containerWidth={270}
+                borderRadius={0}
+              />
+              {/* Caption if exists */}
+              {message.content && (
+                <View style={{ paddingHorizontal: 12, paddingVertical: 12 }}>
+                  <MessageText
+                    content={message.content}
+                    mentions={message.mentions}
+                    style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                    isOwnMessage={isCurrentUser}
+                  />
+                </View>
+              )}
+            </View>
+          ) : /* Multi-Image Carousel */ hasMultipleImages ? (
+            <View style={{ width: 270 }}>
+              <MediaCarousel
+                imageUrls={mediaUrls.map(url => getFullImageUrl(url))}
+                onImagePress={(index, imageUrl) => {
+                  setViewerImage({
+                    url: imageUrl,
+                    senderName: message.user?.name || "Unknown",
+                    timestamp: new Date(message.createdAt).toLocaleString(),
+                    messageId: message.id,
+                    caption: message.content,
+                    isOwnMessage: isCurrentUser,
+                  });
+                }}
+                containerWidth={270}
+                borderRadius={0}
+              />
+              {/* Caption if exists */}
+              {message.content && (
+                <View style={{ paddingHorizontal: 12, paddingVertical: 12 }}>
+                  <MessageText
+                    content={message.content}
+                    mentions={message.mentions}
+                    style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                    isOwnMessage={isCurrentUser}
+                  />
+                </View>
+              )}
+            </View>
+          ) : /* Single Image Message */ isImage && message.imageUrl ? (
             <View style={{ width: 270 }}>
               <Pressable
                 onPress={() => {
@@ -4520,7 +4763,7 @@ const ChatScreen = () => {
                       });
                     }}
                     onError={(error) => {
-                      console.error(`[ChatScreen] Image load error for message ${message.id}:`, error.nativeEvent);
+                      console.error(`[ChatScreen] Image load error for message ${message.id}:`);
                       setLoadingImageIds(prev => {
                         const next = new Set(prev);
                         next.delete(message.id);
@@ -5469,6 +5712,107 @@ const ChatScreen = () => {
                 ))}
               </ScrollView>
             )}
+            {/* Video Preview */}
+            {selectedVideo && (
+              <View style={{ marginBottom: 12 }}>
+                <View
+                  style={{
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    backgroundColor: "rgba(255, 255, 255, 0.15)",
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 69, 58, 0.4)",
+                    width: 120,
+                  }}
+                >
+                  <View style={{ position: "relative", width: 120, height: 160, backgroundColor: "#1C1C1E" }}>
+                    {/* Video icon overlay */}
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: "rgba(255, 69, 58, 0.9)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text style={{ color: "#FFFFFF", fontSize: 18 }}>▶</Text>
+                      </View>
+                    </View>
+                    {/* Duration badge */}
+                    {selectedVideo.duration && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          bottom: 4,
+                          right: 4,
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                          backgroundColor: "rgba(0, 0, 0, 0.7)",
+                        }}
+                      >
+                        <Text style={{ color: "#FFFFFF", fontSize: 10, fontWeight: "600" }}>
+                          {Math.floor(selectedVideo.duration / 60)}:{(selectedVideo.duration % 60).toString().padStart(2, "0")}
+                        </Text>
+                      </View>
+                    )}
+                    {/* Remove button */}
+                    <Pressable
+                      onPress={() => {
+                        setSelectedVideo(null);
+                        textInputRef.current?.focus();
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <X size={16} color="#FFFFFF" />
+                    </Pressable>
+                    {/* Uploading overlay */}
+                    {isUploadingVideo && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: "rgba(0, 0, 0, 0.7)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <LuxeLogoLoader size="small" />
+                        <Text style={{ color: "#FFFFFF", marginTop: 4, fontSize: 10 }}>
+                          Uploading...
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            )}
             {/* Voice Recorder Mode */}
             {isRecordingVoice ? (
               <VoiceRecorder
@@ -5640,7 +5984,7 @@ const ChatScreen = () => {
                     ref={textInputRef}
                     value={messageText}
                     onChangeText={handleTyping}
-                    placeholder={selectedImages.length > 0 ? "Add a caption (optional)" : "Message"}
+                    placeholder={selectedImages.length > 0 || selectedVideo ? "Add a caption (optional)" : "Message"}
                     placeholderTextColor="#666666"
                     style={{
                       flex: 1,
@@ -5683,16 +6027,16 @@ const ChatScreen = () => {
                   onTouchEnd={handleSendButtonTouchEnd}
                 >
                 <Pressable
-                  onPress={(!messageText.trim() && selectedImages.length === 0) 
+                  onPress={(!messageText.trim() && selectedImages.length === 0 && !selectedVideo) 
                     ? () => setIsRecordingVoice(true)
                     : (showVibeSelector ? undefined : () => handleSend())
                   }
                   onPressIn={handleSendButtonPressIn}
                   onPressOut={handleSendButtonPressOut}
                   disabled={
-                    (!messageText.trim() && selectedImages.length === 0) 
+                    (!messageText.trim() && selectedImages.length === 0 && !selectedVideo) 
                       ? isUploadingVoice 
-                      : ((!messageText.trim() && selectedImages.length === 0) || sendMessageMutation.isPending || isUploadingImage)
+                      : ((!messageText.trim() && selectedImages.length === 0 && !selectedVideo) || sendMessageMutation.isPending || isUploadingImage || isUploadingVideo)
                   }
                   delayLongPress={300}
                 >
@@ -5706,7 +6050,7 @@ const ChatScreen = () => {
                         ? VIBE_CONFIG[selectedVibe || previewVibe!].color
                         : messageText.toLowerCase().includes("@ai")
                         ? "#14B8A6"
-                        : messageText.trim() || selectedImages.length > 0
+                        : messageText.trim() || selectedImages.length > 0 || selectedVideo
                         ? "#007AFF"
                         : "#007AFF",
                       shadowOffset: { width: 0, height: 4 },
@@ -5808,7 +6152,7 @@ const ChatScreen = () => {
                         </Animated.View>
                         
                         {/* Always show animated icons, no loading spinner */}
-                        {(!messageText.trim() && selectedImages.length === 0) ? (
+                        {(!messageText.trim() && selectedImages.length === 0 && !selectedVideo) ? (
                           <Animated.View
                             style={{
                               transform: [
@@ -6159,6 +6503,7 @@ const ChatScreen = () => {
           onClose={() => setShowAttachmentsMenu(false)}
           onTakePhoto={takePhoto}
           onPickImage={pickImage}
+          onPickVideo={pickVideo}
           onSelectCommand={(command) => {
             // Insert the command into the message input
             setMessageText(command + " ");
@@ -6169,6 +6514,10 @@ const ChatScreen = () => {
           }}
           onOpenSettings={() => {
             navigation.navigate("GroupSettings", { chatId });
+          }}
+          onCreatePoll={() => {
+            setShowAttachmentsMenu(false);
+            setTimeout(() => setShowCreatePoll(true), 300);
           }}
           customCommands={customCommands}
         />
@@ -6723,6 +7072,34 @@ const ChatScreen = () => {
               }
             }}
             isCreating={isCreatingEvent}
+          />
+        )}
+
+        {/* Create Poll Modal */}
+        {showCreatePoll && (
+          <CreatePollModal
+            visible={showCreatePoll}
+            onClose={() => setShowCreatePoll(false)}
+            onCreate={(question, options) => {
+              createPoll(
+                {
+                  question,
+                  options,
+                },
+                {
+                  onSuccess: () => {
+                    setShowCreatePoll(false);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  },
+                  onError: (error) => {
+                    console.error("Failed to create poll:", error);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    Alert.alert("Error", "Failed to create poll. Please try again.");
+                  },
+                }
+              );
+            }}
+            isCreating={isCreatingPoll}
           />
         )}
 

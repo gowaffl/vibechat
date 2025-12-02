@@ -23,6 +23,7 @@ import threadsRouter from "./routes/threads";
 import eventsRouter from "./routes/events";
 import reactorRouter from "./routes/reactor";
 import catchupRouter from "./routes/catchup";
+import pollsRouter from "./routes/polls";
 // import notificationsRouter from "./routes/notifications"; // Moved to chats router
 import authRouter from "./routes/auth";
 import { startAvatarCron } from "./services/avatar-cron";
@@ -92,6 +93,9 @@ app.route("/api/reactor", reactorRouter);
 console.log("⚡ Mounting catchup routes at /api/catchup");
 app.route("/api/catchup", catchupRouter);
 
+console.log("📊 Mounting polls routes at /api/polls");
+app.route("/api/polls", pollsRouter);
+
 // console.log("🔔 Mounting notifications routes at /api");
 // app.route("/api", notificationsRouter); // Moved to chats router
 
@@ -131,6 +135,7 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
   console.log("  📅 Events:   GET/POST/PATCH /api/events");
   console.log("  🎨 Reactor:  POST /api/reactor/*");
   console.log("  ⚡ Catch-Up: GET/POST /api/catchup");
+  console.log("  📊 Polls:    GET/POST/PATCH/DELETE /api/polls");
   console.log("\n  💚 Health:   GET /health");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 

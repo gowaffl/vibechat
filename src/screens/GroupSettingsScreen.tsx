@@ -1183,7 +1183,7 @@ const GroupSettingsScreen = () => {
               </Pressable>
             </View>
 
-            {/* Photos Section */}
+            {/* Media Section */}
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1208,7 +1208,7 @@ const GroupSettingsScreen = () => {
                     <Images size={20} color="#007AFF" />
                     <View className="ml-3 flex-1">
                       <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
-                        Photos
+                        Media
                       </Text>
                       <Text className="text-sm mt-1" style={{ color: "#8E8E93" }}>
                         {photoMessages.length} {photoMessages.length === 1 ? "photo" : "photos"}
@@ -2787,10 +2787,10 @@ const GroupSettingsScreen = () => {
               >
                 <Images size={64} color="#666" />
                 <Text style={{ color: "#8E8E93", fontSize: 17, fontWeight: "600", marginTop: 16, textAlign: "center" }}>
-                  No Photos Yet
+                  No Media Yet
                 </Text>
                 <Text style={{ color: "#666", fontSize: 15, marginTop: 8, textAlign: "center", lineHeight: 20 }}>
-                  Photos shared in this chat will appear here
+                  Photos and videos shared in this chat will appear here
                 </Text>
               </View>
             ) : (

@@ -12,6 +12,11 @@
 -- - add_birthdate_to_user ✅ APPLIED (November 24, 2025)
 -- - fix_corrupted_image_urls ✅ APPLIED (January 26, 2025) - Fixed double-prepended URLs
 --
+-- FEATURE: Multi-Image & Video Support (December 2, 2025)
+-- - Added messageType 'video' to message table
+-- - Using existing metadata JSONB column for mediaUrls (multi-image) and video data
+-- - No schema migration needed - metadata column already exists
+--
 -- CODE MIGRATION STATUS:
 -- ✅ All Prisma-style queries converted to Supabase (November 25, 2025)
 --    - backend/src/services/ai-engagement.ts: Fixed all db.aIFriend/message queries
@@ -47,9 +52,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ==========================================
 -- Storage bucket "uploads" is configured via Supabase UI with:
 -- - Public access enabled
--- - File size limit: 10MB (Unset in UI = 10MB default)
--- - Allowed MIME types: Any
+-- - File size limit: 50MB (increased from 10MB to support video uploads)
+-- - Allowed MIME types: Any (images: jpeg, png, gif, webp; videos: mp4, mov, quicktime)
 -- - RLS policies: 4 policies configured for authenticated users
+--
+-- MEDIA UPLOAD LIMITS (December 2025):
+-- - Images: Max 10 images per message, each up to 10MB after compression
+-- - Videos: Max 1 video per message, up to 50MB, max 60 seconds duration
 
 -- ==========================================
 -- Utilities
@@ -150,10 +159,18 @@ CREATE TRIGGER update_ai_friend_updatedAt
 
 -- Message
 -- NOTE: userId is NULL for AI-generated messages. aiFriendId identifies which AI friend sent the message.
+-- 
+-- METADATA JSONB USAGE (December 2025):
+-- The "metadata" column stores additional message data as JSON:
+--   - For multi-image messages (messageType='image'): { "mediaUrls": ["url1", "url2", ...] }
+--     Up to 10 images per message. First image URL is also stored in imageUrl for thumbnails.
+--   - For video messages (messageType='video'): { "videoUrl": "url", "videoThumbnailUrl": "url", "videoDuration": 30 }
+--     Videos stored in Supabase Storage, up to 50MB per file.
+-- 
 CREATE TABLE IF NOT EXISTS "message" (
     "id" TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
     "content" TEXT NOT NULL DEFAULT '',
-    "messageType" TEXT NOT NULL DEFAULT 'text',
+    "messageType" TEXT NOT NULL DEFAULT 'text', -- text, image, voice, video, system
     "imageUrl" TEXT,
     "imageDescription" TEXT,
     "userId" TEXT, -- NULL for AI messages, actual user ID for human messages
@@ -173,6 +190,7 @@ CREATE TABLE IF NOT EXISTS "message" (
     "voiceDuration" INTEGER,
     "eventId" TEXT,
     "vibeType" TEXT, -- VibeWrapper: genuine, playful, serious, soft, hype
+    "metadata" JSONB, -- Stores multi-image URLs (mediaUrls), video data (videoUrl, videoThumbnailUrl, videoDuration)
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "message_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user" ("id") ON DELETE CASCADE,
     CONSTRAINT "message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "chat" ("id") ON DELETE CASCADE,
@@ -543,3 +561,86 @@ CREATE POLICY "Members can view media reactions" ON "media_reaction" FOR SELECT 
 
 -- Conversation Summary
 CREATE POLICY "Users can view their own summaries" ON "conversation_summary" FOR SELECT USING (is_self("userId"));
+
+-- ==========================================
+-- POLL FEATURE (December 2, 2025)
+-- ==========================================
+-- Migration: create_poll_tables
+
+-- Poll table
+CREATE TABLE IF NOT EXISTS "poll" (
+  "id" TEXT PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "chatId" TEXT NOT NULL REFERENCES "chat"("id") ON DELETE CASCADE,
+  "creatorId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "question" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'open' CHECK ("status" IN ('open', 'closed')),
+  "createdAt" TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  "closedAt" TIMESTAMP WITHOUT TIME ZONE
+);
+
+-- Poll Option table
+CREATE TABLE IF NOT EXISTS "poll_option" (
+  "id" TEXT PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "pollId" TEXT NOT NULL REFERENCES "poll"("id") ON DELETE CASCADE,
+  "optionText" TEXT NOT NULL,
+  "sortOrder" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Poll Vote table (one vote per user per poll)
+CREATE TABLE IF NOT EXISTS "poll_vote" (
+  "id" TEXT PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "pollId" TEXT NOT NULL REFERENCES "poll"("id") ON DELETE CASCADE,
+  "optionId" TEXT NOT NULL REFERENCES "poll_option"("id") ON DELETE CASCADE,
+  "userId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "createdAt" TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("pollId", "userId")
+);
+
+-- Add pollId to message table for poll messages
+ALTER TABLE "message" ADD COLUMN IF NOT EXISTS "pollId" TEXT REFERENCES "poll"("id") ON DELETE SET NULL;
+
+-- Poll indexes
+CREATE INDEX IF NOT EXISTS "idx_poll_chatId" ON "poll"("chatId");
+CREATE INDEX IF NOT EXISTS "idx_poll_option_pollId" ON "poll_option"("pollId");
+CREATE INDEX IF NOT EXISTS "idx_poll_vote_pollId" ON "poll_vote"("pollId");
+CREATE INDEX IF NOT EXISTS "idx_poll_vote_userId" ON "poll_vote"("userId");
+CREATE INDEX IF NOT EXISTS "idx_message_pollId" ON "message"("pollId");
+
+-- Enable RLS on poll tables
+ALTER TABLE "poll" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "poll_option" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "poll_vote" ENABLE ROW LEVEL SECURITY;
+
+-- Poll RLS policies
+CREATE POLICY "Users can view polls in their chats" ON "poll"
+  FOR SELECT USING (is_chat_member("chatId"));
+CREATE POLICY "Users can create polls in their chats" ON "poll"
+  FOR INSERT WITH CHECK (is_chat_member("chatId"));
+CREATE POLICY "Poll creators can update their polls" ON "poll"
+  FOR UPDATE USING ("creatorId" = auth.uid()::text);
+
+-- Poll Option RLS policies
+CREATE POLICY "Users can view poll options" ON "poll_option"
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM "poll" p WHERE p."id" = "poll_option"."pollId" AND is_chat_member(p."chatId"))
+  );
+CREATE POLICY "Users can create poll options" ON "poll_option"
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM "poll" p WHERE p."id" = "poll_option"."pollId" AND is_chat_member(p."chatId"))
+  );
+
+-- Poll Vote RLS policies
+CREATE POLICY "Users can view votes in their chats" ON "poll_vote"
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM "poll" p WHERE p."id" = "poll_vote"."pollId" AND is_chat_member(p."chatId"))
+  );
+CREATE POLICY "Users can vote on polls in their chats" ON "poll_vote"
+  FOR INSERT WITH CHECK (
+    "userId" = auth.uid()::text
+    AND EXISTS (SELECT 1 FROM "poll" p WHERE p."id" = "poll_vote"."pollId" AND is_chat_member(p."chatId") AND p."status" = 'open')
+  );
+CREATE POLICY "Users can update their own votes" ON "poll_vote"
+  FOR UPDATE USING ("userId" = auth.uid()::text);
+CREATE POLICY "Users can delete their own votes" ON "poll_vote"
+  FOR DELETE USING ("userId" = auth.uid()::text);

@@ -113,11 +113,20 @@ export type ChatWithMembers = z.infer<typeof chatWithMembersSchema>;
 export const vibeTypeSchema = z.enum(["genuine", "playful", "serious", "soft", "hype"]);
 export type VibeType = z.infer<typeof vibeTypeSchema>;
 
+// Message metadata schema for multi-image and video support
+export const messageMetadataSchema = z.object({
+  mediaUrls: z.array(z.string()).optional(), // Array of image URLs for multi-image messages
+  videoUrl: z.string().optional(), // URL for video file
+  videoThumbnailUrl: z.string().optional(), // Generated thumbnail for video preview
+  videoDuration: z.number().optional(), // Video duration in seconds
+}).passthrough(); // Allow additional fields
+export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
+
 // Message schemas (recursive for replyTo)
 export const messageSchema: z.ZodType<{
   id: string;
   content: string;
-  messageType: "text" | "image" | "system" | "voice";
+  messageType: "text" | "image" | "system" | "voice" | "video";
   imageUrl?: string | null;
   imageDescription?: string | null;
   userId: string;
@@ -130,7 +139,9 @@ export const messageSchema: z.ZodType<{
   voiceUrl?: string | null;
   voiceDuration?: number | null;
   eventId?: string | null;
+  pollId?: string | null;
   vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | null;
+  metadata?: MessageMetadata | null;
   user: User;
   replyTo?: Message | null;
   reactions?: Reaction[];
@@ -141,7 +152,7 @@ export const messageSchema: z.ZodType<{
   z.object({
     id: z.string(),
     content: z.string(),
-    messageType: z.enum(["text", "image", "system", "voice"]).default("text"),
+    messageType: z.enum(["text", "image", "system", "voice", "video"]).default("text"),
     imageUrl: z.string().nullable().optional(),
     imageDescription: z.string().nullable().optional(),
     userId: z.string(),
@@ -154,7 +165,9 @@ export const messageSchema: z.ZodType<{
     voiceUrl: z.string().nullable().optional(),
     voiceDuration: z.number().nullable().optional(),
     eventId: z.string().nullable().optional(),
+    pollId: z.string().nullable().optional(),
     vibeType: vibeTypeSchema.nullable().optional(),
+    metadata: messageMetadataSchema.nullable().optional(),
     user: userSchema,
     replyTo: messageSchema.nullable().optional(),
     reactions: z.array(reactionSchema).optional(),
@@ -227,7 +240,7 @@ export type GetMessagesResponse = z.infer<typeof getMessagesResponseSchema>;
 // POST /api/messages - Send message
 export const sendMessageRequestSchema = z.object({
   content: z.string().default(""),
-  messageType: z.enum(["text", "image", "voice"]).default("text"),
+  messageType: z.enum(["text", "image", "voice", "video"]).default("text"),
   imageUrl: z.string().optional(),
   voiceUrl: z.string().optional(),
   voiceDuration: z.number().optional(),
@@ -235,6 +248,7 @@ export const sendMessageRequestSchema = z.object({
   replyToId: z.string().optional(),
   vibeType: vibeTypeSchema.nullable().optional(),
   mentionedUserIds: z.array(z.string()).optional(),
+  metadata: messageMetadataSchema.optional(), // For multi-image and video data
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 export const sendMessageResponseSchema = messageSchema;
@@ -293,6 +307,21 @@ export const uploadImageResponseSchema = z.object({
   filename: z.string(),
 });
 export type UploadImageResponse = z.infer<typeof uploadImageResponseSchema>;
+
+// POST /api/upload/video
+export const uploadVideoRequestSchema = z.object({
+  video: z.instanceof(File),
+});
+export type UploadVideoRequest = z.infer<typeof uploadVideoRequestSchema>;
+export const uploadVideoResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  url: z.string(),
+  thumbnailUrl: z.string().optional(), // Generated thumbnail
+  filename: z.string(),
+  duration: z.number().optional(), // Duration in seconds
+});
+export type UploadVideoResponse = z.infer<typeof uploadVideoResponseSchema>;
 
 // POST /api/ai/chat - AI assistant
 export const aiChatRequestSchema = z.object({
@@ -613,13 +642,14 @@ export type GetChatMessagesResponse = z.infer<typeof getChatMessagesResponseSche
 // POST /api/chats/:id/messages - Send a message to a specific chat
 export const sendChatMessageRequestSchema = z.object({
   content: z.string().default(""),
-  messageType: z.enum(["text", "image", "voice"]).default("text"),
+  messageType: z.enum(["text", "image", "voice", "video"]).default("text"),
   imageUrl: z.string().optional(),
   voiceUrl: z.string().optional(),
   voiceDuration: z.number().optional(),
   userId: z.string(),
   replyToId: z.string().optional(),
   vibeType: vibeTypeSchema.nullable().optional(),
+  metadata: messageMetadataSchema.optional(), // For multi-image and video data
 });
 export type SendChatMessageRequest = z.infer<typeof sendChatMessageRequestSchema>;
 export const sendChatMessageResponseSchema = messageSchema;
@@ -1163,3 +1193,104 @@ export const getCatchUpRequestSchema = z.object({
 export type GetCatchUpRequest = z.infer<typeof getCatchUpRequestSchema>;
 export const getCatchUpResponseSchema = conversationSummarySchema.nullable();
 export type GetCatchUpResponse = z.infer<typeof getCatchUpResponseSchema>;
+
+// ============================================================================
+// POLL FEATURE SCHEMAS
+// ============================================================================
+
+// Poll Option schema
+export const pollOptionSchema = z.object({
+  id: z.string(),
+  pollId: z.string(),
+  optionText: z.string(),
+  sortOrder: z.number().int(),
+  voteCount: z.number().int().default(0),
+  createdAt: z.string(),
+});
+export type PollOption = z.infer<typeof pollOptionSchema>;
+
+// Poll Vote schema
+export const pollVoteSchema = z.object({
+  id: z.string(),
+  pollId: z.string(),
+  optionId: z.string(),
+  userId: z.string(),
+  createdAt: z.string(),
+});
+export type PollVote = z.infer<typeof pollVoteSchema>;
+
+// Poll schema
+export const pollSchema = z.object({
+  id: z.string(),
+  chatId: z.string(),
+  creatorId: z.string(),
+  question: z.string(),
+  status: z.enum(["open", "closed"]),
+  createdAt: z.string(),
+  closedAt: z.string().nullable(),
+  options: z.array(pollOptionSchema).optional(),
+  votes: z.array(pollVoteSchema).optional(),
+  totalVotes: z.number().int().optional(),
+  memberCount: z.number().int().optional(), // Total members in chat for calculating if all voted
+});
+export type Poll = z.infer<typeof pollSchema>;
+
+// POST /api/polls - Create poll
+export const createPollRequestSchema = z.object({
+  chatId: z.string(),
+  creatorId: z.string(),
+  question: z.string().min(1).max(500),
+  options: z.array(z.string().min(1).max(200)).min(2).max(4),
+});
+export type CreatePollRequest = z.infer<typeof createPollRequestSchema>;
+export const createPollResponseSchema = pollSchema;
+export type CreatePollResponse = z.infer<typeof createPollResponseSchema>;
+
+// GET /api/polls/:chatId - Get all polls for a chat
+export const getPollsRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetPollsRequest = z.infer<typeof getPollsRequestSchema>;
+export const getPollsResponseSchema = z.array(pollSchema);
+export type GetPollsResponse = z.infer<typeof getPollsResponseSchema>;
+
+// GET /api/polls/:chatId/:pollId - Get a specific poll
+export const getPollRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetPollRequest = z.infer<typeof getPollRequestSchema>;
+export const getPollResponseSchema = pollSchema;
+export type GetPollResponse = z.infer<typeof getPollResponseSchema>;
+
+// POST /api/polls/:pollId/vote - Vote on a poll
+export const votePollRequestSchema = z.object({
+  userId: z.string(),
+  optionId: z.string(),
+});
+export type VotePollRequest = z.infer<typeof votePollRequestSchema>;
+export const votePollResponseSchema = z.object({
+  success: z.boolean(),
+  vote: pollVoteSchema,
+  poll: pollSchema,
+  allVoted: z.boolean(), // True if all chat members have voted
+});
+export type VotePollResponse = z.infer<typeof votePollResponseSchema>;
+
+// DELETE /api/polls/:pollId - Delete poll (creator only)
+export const deletePollRequestSchema = z.object({
+  userId: z.string(),
+});
+export type DeletePollRequest = z.infer<typeof deletePollRequestSchema>;
+export const deletePollResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+export type DeletePollResponse = z.infer<typeof deletePollResponseSchema>;
+
+// PATCH /api/polls/:pollId/close - Close poll manually
+export const closePollRequestSchema = z.object({
+  userId: z.string(),
+});
+export type ClosePollRequest = z.infer<typeof closePollRequestSchema>;
+export const closePollResponseSchema = pollSchema;
+export type ClosePollResponse = z.infer<typeof closePollResponseSchema>;
