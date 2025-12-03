@@ -1532,6 +1532,7 @@ const ChatScreen = () => {
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
   const isAtBottomRef = useRef(true); // Tracks if user is at bottom of list
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false); // Tracks if there are new messages while scrolled up
   const [lastKnownLength, setLastKnownLength] = useState(0);
   const [messageText, setMessageText] = useState("");
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -1961,6 +1962,7 @@ const ChatScreen = () => {
       // HIGH-4: Update scroll state when scrolling to bottom
       isAtBottomRef.current = true;
       setShowScrollToBottom(false);
+      setHasNewMessages(false); // Clear new messages flag
     }
   }, []);
 
@@ -1977,8 +1979,10 @@ const ChatScreen = () => {
       // Show/hide scroll to bottom button
       if (!isNowAtBottom) {
         setShowScrollToBottom(true);
+        // Don't set hasNewMessages here - only when messages actually arrive
       } else {
         setShowScrollToBottom(false);
+        setHasNewMessages(false); // Clear new messages flag when reaching bottom
       }
     }
   }, []);
@@ -3127,6 +3131,7 @@ const ChatScreen = () => {
       console.log(`[HandleSend] Re-enabling auto-scroll (user sent a message)`);
     }
     isManualScrolling.current = false;
+    setHasNewMessages(false); // Clear new messages flag when user sends a message
 
     const trimmedMessage = messageText.trim();
 
@@ -4237,8 +4242,9 @@ const ChatScreen = () => {
           // Inverted list automatically shows new items at the bottom (index 0).
           // We DO NOT force a scroll here to avoid "jumpy" behavior.
         } else {
-          // If not at bottom, show "New Messages" button
+          // If not at bottom, show scroll button and mark that there are new messages
           setShowScrollToBottom(true);
+          setHasNewMessages(true); // Mark that there are NEW unread messages
         }
       } else if (lastKnownLength === 0) {
          // Initial load
@@ -7037,13 +7043,13 @@ const ChatScreen = () => {
           }}
         />
 
-        {/* New Messages Button */}
+        {/* Scroll to Bottom Button - Shows "New Messages" only when there are actual new messages */}
         {showScrollToBottom && (
           <View
             style={{
               position: "absolute",
               bottom: 100 + insets.bottom, // Positioned above input
-              alignSelf: "center",
+              right: 16, // Position on the right side
               zIndex: 100,
             }}
           >
@@ -7051,6 +7057,7 @@ const ChatScreen = () => {
               onPress={() => {
                 scrollToBottom(true);
                 setShowScrollToBottom(false);
+                setHasNewMessages(false);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               }}
               style={({ pressed }) => ({
@@ -7062,11 +7069,11 @@ const ChatScreen = () => {
                 intensity={80}
                 tint="dark"
                 style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
+                  paddingHorizontal: hasNewMessages ? 16 : 12,
+                  paddingVertical: hasNewMessages ? 8 : 8,
                   borderRadius: 20,
                   borderWidth: 1,
-                  borderColor: "rgba(52, 199, 89, 0.5)", // Green tint
+                  borderColor: hasNewMessages ? "rgba(52, 199, 89, 0.5)" : "rgba(255, 255, 255, 0.3)",
                   backgroundColor: "rgba(0, 0, 0, 0.3)",
                   flexDirection: "row",
                   alignItems: "center",
@@ -7074,16 +7081,22 @@ const ChatScreen = () => {
                   overflow: "hidden",
                 }}
               >
-                 <LinearGradient
-                    colors={["rgba(52, 199, 89, 0.2)", "rgba(52, 199, 89, 0.05)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                  />
-                <Text style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>
-                  New Messages
-                </Text>
-                <ChevronDown size={16} color="#FFFFFF" />
+                {hasNewMessages ? (
+                  <>
+                    <LinearGradient
+                      colors={["rgba(52, 199, 89, 0.2)", "rgba(52, 199, 89, 0.05)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                    />
+                    <Text style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>
+                      New Messages
+                    </Text>
+                    <ChevronDown size={16} color="#FFFFFF" />
+                  </>
+                ) : (
+                  <ChevronDown size={20} color="#FFFFFF" />
+                )}
               </BlurView>
             </Pressable>
           </View>
