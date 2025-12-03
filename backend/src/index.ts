@@ -40,6 +40,12 @@ async function testDatabaseConnection() {
 
 // Run the test immediately
 testDatabaseConnection();
+
+// Run periodic connection health checks every 2 minutes
+setInterval(async () => {
+  console.log("🔄 Running periodic database health check...");
+  await testDatabaseConnection();
+}, 2 * 60 * 1000); // Every 2 minutes
 export type { AppType } from "./types";
 import { uploadRouter } from "./routes/upload";
 import usersRouter from "./routes/users";

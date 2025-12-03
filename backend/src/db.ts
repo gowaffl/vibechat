@@ -25,6 +25,20 @@ export const supabaseAdmin = createClient(
       autoRefreshToken: false,
       persistSession: false,
     },
+    db: {
+      schema: "public",
+    },
+    global: {
+      headers: {
+        "x-client-info": "vibeChat-backend",
+      },
+    },
+    // Realtime connection settings - keep connection alive
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
   }
 );
 
@@ -53,3 +67,65 @@ export function createUserClient(accessToken: string) {
 
 // Alias for backwards compatibility
 export const supabase = db;
+
+/**
+ * Execute a query with automatic retry on connection failures
+ * This helps handle stale connections that may occur after periods of inactivity
+ */
+export async function executeWithRetry<T>(
+  queryFn: () => Promise<{ data: T | null; error: any; status?: number; statusText?: string }>,
+  maxRetries = 2,
+  retryDelay = 100
+): Promise<{ data: T | null; error: any; status?: number; statusText?: string }> {
+  let lastError;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await queryFn();
+      
+      // If we got a successful response or a legitimate error (not connection issue), return it
+      if (result.status && result.status < 500) {
+        return result;
+      }
+      
+      // If no error and we have data, return success
+      if (!result.error || result.data !== null) {
+        return result;
+      }
+      
+      // Check for connection-related errors
+      const errorMessage = result.error?.message?.toLowerCase() || "";
+      const isConnectionError = 
+        errorMessage.includes("fetch") ||
+        errorMessage.includes("network") ||
+        errorMessage.includes("timeout") ||
+        errorMessage.includes("econnrefused") ||
+        errorMessage.includes("econnreset") ||
+        result.status === 0 ||
+        result.status === undefined;
+      
+      if (!isConnectionError) {
+        // Not a connection error, return immediately
+        return result;
+      }
+      
+      lastError = result;
+      
+      // If this isn't the last attempt, wait before retrying
+      if (attempt < maxRetries) {
+        console.warn(`[DB] Connection error detected, retrying (${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
+      }
+    } catch (error) {
+      lastError = { data: null, error };
+      
+      if (attempt < maxRetries) {
+        console.warn(`[DB] Query exception, retrying (${attempt + 1}/${maxRetries})...`, error);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
+      }
+    }
+  }
+  
+  console.error(`[DB] Query failed after ${maxRetries + 1} attempts`);
+  return lastError || { data: null, error: new Error("Query failed after retries") };
+}

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { db } from "../db";
+import { db, executeWithRetry } from "../db";
 import {
   createEventRequestSchema,
   getEventsRequestSchema,
@@ -19,13 +19,15 @@ events.post("/", zValidator("json", createEventRequestSchema), async (c) => {
     const { chatId, creatorId, title, description, eventType, eventDate, options } = c.req.valid("json");
     console.log("[POST /api/events] Received request:", { chatId, creatorId, title, description, eventType, eventDate, options });
 
-    // Verify user is a member of the chat
-    const { data: membership, error: membershipError } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", creatorId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership, error: membershipError } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", creatorId)
+        .single();
+    });
 
     if (membershipError || !membership) {
       console.log("[POST /api/events] User not authorized:", { chatId, creatorId });
@@ -178,13 +180,15 @@ events.get("/:chatId", zValidator("query", getEventsRequestSchema), async (c) =>
     const { userId } = c.req.valid("query");
     console.log("[GET /api/events/:chatId] Received request:", { chatId, userId });
 
-    // Verify user is a member of the chat
-    const { data: membership, error: membershipError } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership, error: membershipError } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (membershipError || !membership) {
       console.log("[GET /api/events/:chatId] User not authorized:", { chatId, userId });
@@ -292,13 +296,15 @@ events.post("/:eventId/vote", zValidator("json", voteEventOptionRequestSchema), 
       return c.json({ error: "Event not found" }, 404);
     }
 
-    // Verify user has access (is member of chat)
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", event.chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user has access (is member of chat, with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", event.chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "User not authorized" }, 403);
@@ -411,13 +417,15 @@ events.post("/:eventId/rsvp", zValidator("json", rsvpEventRequestSchema), async 
       return c.json({ error: "Event not found" }, 404);
     }
 
-    // Verify user has access
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", event.chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user has access (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", event.chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "User not authorized" }, 403);
@@ -592,13 +600,15 @@ events.get("/:eventId/export", zValidator("query", exportEventRequestSchema), as
       return c.json({ error: "Event not found" }, 404);
     }
 
-    // Verify user has access
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", event.chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user has access (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", event.chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       console.log("[Export Event] Access denied");

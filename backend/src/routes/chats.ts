@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db, createUserClient } from "../db";
+import { db, createUserClient, executeWithRetry } from "../db";
 import type { AppType } from "../index";
 import {
   createChatRequestSchema,
@@ -675,6 +675,10 @@ chats.get("/:id/messages", async (c) => {
   const userId = c.req.query("userId");
 
   console.log(`[Chats] Fetching messages for chat ${chatId}, user ${userId}`);
+  console.log(`[Chats] Connected to Supabase:`, {
+    url: db["supabaseUrl"] || "unknown",
+    hasServiceKey: !!db["supabaseKey"],
+  });
 
   if (!userId) {
     return c.json({ error: "userId is required" }, 400);
@@ -686,14 +690,40 @@ chats.get("/:id/messages", async (c) => {
     .select("*", { count: "exact", head: true });
   console.log(`[Chats] Debug - Service role test: totalChats=${totalChats}, error=${debugError?.message}`);
 
+  // Debug: Check if this specific chat exists at all
+  const { data: chatTest, error: chatTestError } = await db
+    .from("chat")
+    .select("id, name, createdAt")
+    .eq("id", chatId)
+    .maybeSingle();
+  console.log(`[Chats] Chat existence test:`, { 
+    found: !!chatTest, 
+    chat: chatTest,
+    error: chatTestError?.message 
+  });
+
+  // Debug: Check if ANY membership exists for this chat
+  const { data: allMembers, error: allMembersError } = await db
+    .from("chat_member")
+    .select("userId, chatId")
+    .eq("chatId", chatId);
+  console.log(`[Chats] All members for chat ${chatId}:`, { 
+    count: allMembers?.length || 0,
+    members: allMembers,
+    error: allMembersError?.message 
+  });
+
   try {
-    // Check if user is a member
-    const { data: membership, error: membershipError, status, statusText } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows found
+    // Check if user is a member (with retry logic for connection issues)
+    console.log(`[Chats] Checking membership for chatId=${chatId}, userId=${userId}`);
+    const { data: membership, error: membershipError, status, statusText } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .maybeSingle();
+    });
 
     console.log(`[Chats] Membership check result:`, { 
       membership: !!membership, 
@@ -709,13 +739,15 @@ chats.get("/:id/messages", async (c) => {
 
     // If not a member, auto-add them and create a join message
     if (!membership) {
-      // First check if the chat exists
+      // First check if the chat exists (with retry logic)
       console.log(`[Chats] User not a member, checking if chat exists: ${chatId}`);
-      const { data: chatExists, error: chatCheckError, status: chatStatus, statusText: chatStatusText } = await db
-        .from("chat")
-        .select("id")
-        .eq("id", chatId)
-        .maybeSingle(); // Use maybeSingle() to avoid error when no rows found
+      const { data: chatExists, error: chatCheckError, status: chatStatus, statusText: chatStatusText } = await executeWithRetry(async () => {
+        return await db
+          .from("chat")
+          .select("id")
+          .eq("id", chatId)
+          .maybeSingle();
+      });
 
       console.log(`[Chats] Chat exists check:`, { 
         chatExists: !!chatExists, 

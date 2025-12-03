@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { db } from "../db";
+import { db, executeWithRetry } from "../db";
 import {
   createThreadRequestSchema,
   getThreadsRequestSchema,
@@ -74,13 +74,15 @@ threads.post("/", zValidator("json", createThreadRequestSchema), async (c) => {
       return c.json({ error: "Chat not found" }, 404);
     }
 
-    // Verify user is a member
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", creatorId)
-      .single();
+    // Verify user is a member (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", creatorId)
+        .single();
+    });
 
     if (!membership) {
       console.log("[POST /api/threads] User not authorized:", { chatId, creatorId });
@@ -149,13 +151,15 @@ threads.get("/:chatId", zValidator("query", getThreadsRequestSchema), async (c) 
     const { userId } = c.req.valid("query");
     console.log("[GET /api/threads/:chatId] Received request:", { chatId, userId });
 
-    // Verify user is a member of the chat
-    const { data: membership, error: membershipError } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership, error: membershipError } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (membershipError || !membership) {
       console.log("[GET /api/threads/:chatId] User not authorized:", { chatId, userId });

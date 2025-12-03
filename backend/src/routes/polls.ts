@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { db } from "../db";
+import { db, executeWithRetry } from "../db";
 import {
   createPollRequestSchema,
   getPollsRequestSchema,
@@ -204,13 +204,15 @@ polls.get("/:chatId", zValidator("query", getPollsRequestSchema), async (c) => {
     const chatId = c.req.param("chatId");
     const { userId } = c.req.valid("query");
 
-    // Verify user is a member of the chat
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "User not authorized" }, 403);
@@ -241,13 +243,15 @@ polls.get("/:chatId/:pollId", zValidator("query", getPollRequestSchema), async (
     const { chatId, pollId } = c.req.param();
     const { userId } = c.req.valid("query");
 
-    // Verify user is a member of the chat
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "User not authorized" }, 403);
@@ -286,13 +290,15 @@ polls.post("/:pollId/vote", zValidator("json", votePollRequestSchema), async (c)
       return c.json({ error: "Poll is closed" }, 400);
     }
 
-    // Verify user is a member of the chat
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", poll.chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", poll.chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "User not authorized" }, 403);

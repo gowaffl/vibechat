@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { db } from "../db";
+import { db, executeWithRetry } from "../db";
 import { generateCatchUpRequestSchema, getCatchUpRequestSchema } from "@shared/contracts";
 import { openai } from "../env";
 
@@ -16,13 +16,15 @@ catchup.post("/generate", zValidator("json", generateCatchUpRequestSchema), asyn
 
   try {
 
-    // Verify user is a member of the chat
-    const { data: membership, error: membershipError } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership, error: membershipError } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (membershipError || !membership) {
       return c.json({ error: "User not authorized" }, 403);
@@ -409,13 +411,15 @@ catchup.get("/:chatId", zValidator("query", getCatchUpRequestSchema.omit({ chatI
     const { chatId } = c.req.param();
     const { userId } = c.req.valid("query");
 
-    // Verify user is a member of the chat
-    const { data: membership, error: membershipError } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of the chat (with retry logic)
+    const { data: membership, error: membershipError } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (membershipError || !membership) {
       return c.json({ error: "User not authorized" }, 403);

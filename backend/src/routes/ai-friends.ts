@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { db } from "../db";
+import { db, executeWithRetry } from "../db";
 import { formatTimestamp, buildUpdateObject } from "../utils/supabase-helpers";
 import {
   getAIFriendsRequestSchema,
@@ -30,13 +30,15 @@ aiFriends.get("/:chatId", zValidator("query", getAIFriendsRequestSchema), async 
   const { userId } = c.req.valid("query");
 
   try {
-    // Verify user is a member of this chat
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // Verify user is a member of this chat (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
@@ -80,13 +82,15 @@ aiFriends.post("/", zValidator("json", createAIFriendRequestSchema), async (c) =
   const data = c.req.valid("json");
 
   try {
-    // Verify user is a member of this chat
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", data.chatId)
-      .eq("userId", data.userId)
-      .single();
+    // Verify user is a member of this chat (with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", data.chatId)
+        .eq("userId", data.userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
@@ -178,13 +182,15 @@ aiFriends.patch("/:id", zValidator("json", updateAIFriendRequestSchema), async (
       return c.json({ error: "AI friend not found" }, 404);
     }
 
-    // HIGH-A: Verify user is a member of this chat (any member can now edit AI friends)
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", aiFriend.chatId)
-      .eq("userId", data.userId)
-      .single();
+    // HIGH-A: Verify user is a member of this chat (any member can now edit AI friends, with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", aiFriend.chatId)
+        .eq("userId", data.userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
@@ -264,13 +270,15 @@ aiFriends.delete("/:id", zValidator("json", deleteAIFriendRequestSchema), async 
       return c.json({ error: "AI friend not found" }, 404);
     }
 
-    // HIGH-A: Verify user is a member of this chat (any member can now delete AI friends)
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", aiFriend.chatId)
-      .eq("userId", userId)
-      .single();
+    // HIGH-A: Verify user is a member of this chat (any member can now delete AI friends, with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", aiFriend.chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
@@ -319,13 +327,15 @@ aiFriends.patch("/reorder", zValidator("json", reorderAIFriendsRequestSchema), a
   const { chatId, userId, items } = c.req.valid("json");
 
   try {
-    // HIGH-A: Verify user is a member of this chat (any member can now reorder AI friends)
-    const { data: membership } = await db
-      .from("chat_member")
-      .select("*")
-      .eq("chatId", chatId)
-      .eq("userId", userId)
-      .single();
+    // HIGH-A: Verify user is a member of this chat (any member can now reorder AI friends, with retry logic)
+    const { data: membership } = await executeWithRetry(async () => {
+      return await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+    });
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
