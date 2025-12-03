@@ -26,15 +26,8 @@ export async function acquireAIResponseLock(chatId: string): Promise<boolean> {
     
     // Try to insert a lock or take over an expired one
     // We use raw SQL for atomic upsert with condition
-    const { error } = await db.rpc('acquire_engagement_lock', {
-      p_chat_id: chatId,
-      p_locked_by: SERVER_ID,
-      p_expires_at: expiresAt
-    });
-
-    // Since we can't easily add a new RPC function without a migration file and we already ran one,
-    // let's use a standard query approach that is safe enough.
-    // We'll try to insert, if conflict, check expiry.
+    // Note: We use a standard query approach instead of RPC to avoid migration complexity
+    // for a simple lock mechanism.
     
     // First, try to clean up expired locks for this chat
     await db
@@ -109,7 +102,7 @@ export async function isInCooldown(chatId: string): Promise<boolean> {
       return false; // Fail open to allow response if DB check fails
     }
 
-    if (!aiFriends || aiFriends.length === 0 || !aiFriends[0].last_response_at) {
+    if (!aiFriends || aiFriends.length === 0 || !aiFriends[0]?.last_response_at) {
       return false;
     }
 
