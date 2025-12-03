@@ -946,6 +946,7 @@ chats.get("/:id/messages", async (c) => {
         userId: replyTo.userId,
         chatId: replyTo.chatId,
         replyToId: replyTo.replyToId,
+        aiFriendId: replyTo.aiFriendId, // Include AI friend ID for replied-to message
         editedAt: replyTo.editedAt ? new Date(replyTo.editedAt).toISOString() : null,
         isUnsent: replyTo.isUnsent,
         editHistory: replyTo.editHistory,
@@ -957,6 +958,20 @@ chats.get("/:id/messages", async (c) => {
           hasCompletedOnboarding: userMap.get(replyTo.userId).hasCompletedOnboarding,
           createdAt: new Date(userMap.get(replyTo.userId).createdAt).toISOString(),
           updatedAt: new Date(userMap.get(replyTo.userId).updatedAt).toISOString(),
+        } : null,
+        // Include AI friend data for replied-to message
+        aiFriend: replyTo.aiFriendId && aiFriendMap.get(replyTo.aiFriendId) ? {
+          id: aiFriendMap.get(replyTo.aiFriendId).id,
+          name: aiFriendMap.get(replyTo.aiFriendId).name,
+          color: aiFriendMap.get(replyTo.aiFriendId).color,
+          personality: aiFriendMap.get(replyTo.aiFriendId).personality,
+          tone: aiFriendMap.get(replyTo.aiFriendId).tone,
+          engagementMode: aiFriendMap.get(replyTo.aiFriendId).engagementMode,
+          engagementPercent: aiFriendMap.get(replyTo.aiFriendId).engagementPercent,
+          chatId: aiFriendMap.get(replyTo.aiFriendId).chatId,
+          sortOrder: aiFriendMap.get(replyTo.aiFriendId).sortOrder,
+          createdAt: new Date(aiFriendMap.get(replyTo.aiFriendId).createdAt).toISOString(),
+          updatedAt: new Date(aiFriendMap.get(replyTo.aiFriendId).updatedAt).toISOString(),
         } : null,
         createdAt: new Date(replyTo.createdAt).toISOString(),
       } : null,

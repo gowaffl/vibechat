@@ -494,7 +494,7 @@ const EventCard: React.FC<EventCardProps> = ({
                           color: "#FFFFFF",
                         }}
                       >
-                        {new Date(event.eventDate).toLocaleDateString("en-US", {
+                        {new Date(event.eventDate).toLocaleString("en-US", {
                           weekday: "short",
                           month: "short",
                           day: "numeric",
@@ -1020,7 +1020,7 @@ const EventCard: React.FC<EventCardProps> = ({
                           fontWeight: "500",
                         }}
                       >
-                        {new Date(event.eventDate).toLocaleDateString("en-US", {
+                        {new Date(event.eventDate).toLocaleString("en-US", {
                           weekday: "short",
                           month: "short",
                           day: "numeric",

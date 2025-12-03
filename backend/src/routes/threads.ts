@@ -329,6 +329,7 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
     const messageIds = messages.map((m: any) => m.id);
     const userIds = [...new Set(messages.map((m: any) => m.userId).filter((id: any) => id !== null))];
     const replyToIds = [...new Set(messages.filter((m: any) => m.replyToId).map((m: any) => m.replyToId))];
+    const aiFriendIds = [...new Set(messages.map((m: any) => m.aiFriendId).filter((id: any) => id !== null))];
 
     // Fetch users
     const { data: users = [] } = userIds.length > 0 ? await db
@@ -336,6 +337,13 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       .select("*")
       .in("id", userIds) : { data: [] };
     const userMap = new Map(users.map((u: any) => [u.id, u]));
+
+    // Fetch AI friends
+    const { data: aiFriends = [] } = aiFriendIds.length > 0 ? await db
+      .from("ai_friend")
+      .select("*")
+      .in("id", aiFriendIds) : { data: [] };
+    const aiFriendMap = new Map(aiFriends.map((af: any) => [af.id, af]));
 
     // Fetch reactions
     const { data: reactions = [] } = messageIds.length > 0 ? await db
@@ -358,13 +366,29 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       .in("id", replyToIds) : { data: [] };
     const replyToMap = new Map(replyToMessages.map((m: any) => [m.id, m]));
 
+    // Fetch AI friends for replyTo messages as well
+    const replyToAiFriendIds = [...new Set(replyToMessages.map((m: any) => m.aiFriendId).filter((id: any) => id !== null))];
+    if (replyToAiFriendIds.length > 0) {
+      const { data: replyToAiFriends = [] } = await db
+        .from("ai_friend")
+        .select("*")
+        .in("id", replyToAiFriendIds);
+      replyToAiFriends.forEach((af: any) => {
+        if (!aiFriendMap.has(af.id)) {
+          aiFriendMap.set(af.id, af);
+        }
+      });
+    }
+
     // Attach related data to messages
     messages = messages.map((msg: any) => ({
       ...msg,
       user: userMap.get(msg.userId),
+      aiFriend: msg.aiFriendId ? aiFriendMap.get(msg.aiFriendId) : null,
       replyTo: msg.replyToId && replyToMap.get(msg.replyToId) ? {
         ...replyToMap.get(msg.replyToId),
         user: userMap.get(replyToMap.get(msg.replyToId).userId),
+        aiFriend: replyToMap.get(msg.replyToId).aiFriendId ? aiFriendMap.get(replyToMap.get(msg.replyToId).aiFriendId) : null,
       } : null,
       reactions: reactions.filter((r: any) => r.messageId === msg.id).map((r: any) => ({
         ...r,
@@ -476,6 +500,7 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       userId: msg.userId,
       chatId: msg.chatId,
       replyToId: msg.replyToId,
+      aiFriendId: msg.aiFriendId,
       editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
       isUnsent: msg.isUnsent,
       editHistory: msg.editHistory,
@@ -500,6 +525,19 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
         createdAt: typeof msg.user.createdAt === 'string' ? msg.user.createdAt : msg.user.createdAt.toISOString(),
         updatedAt: typeof msg.user.updatedAt === 'string' ? msg.user.updatedAt : msg.user.updatedAt.toISOString(),
       } : null,
+      aiFriend: msg.aiFriend ? {
+        id: msg.aiFriend.id,
+        name: msg.aiFriend.name,
+        color: msg.aiFriend.color,
+        personality: msg.aiFriend.personality,
+        tone: msg.aiFriend.tone,
+        engagementMode: msg.aiFriend.engagementMode,
+        engagementPercent: msg.aiFriend.engagementPercent,
+        chatId: msg.aiFriend.chatId,
+        sortOrder: msg.aiFriend.sortOrder,
+        createdAt: typeof msg.aiFriend.createdAt === 'string' ? msg.aiFriend.createdAt : msg.aiFriend.createdAt.toISOString(),
+        updatedAt: typeof msg.aiFriend.updatedAt === 'string' ? msg.aiFriend.updatedAt : msg.aiFriend.updatedAt.toISOString(),
+      } : null,
       replyTo: msg.replyTo
         ? {
             id: msg.replyTo.id,
@@ -510,6 +548,7 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
             userId: msg.replyTo.userId,
             chatId: msg.replyTo.chatId,
             replyToId: msg.replyTo.replyToId,
+            aiFriendId: msg.replyTo.aiFriendId,
             editedAt: msg.replyTo.editedAt ? (typeof msg.replyTo.editedAt === 'string' ? msg.replyTo.editedAt : msg.replyTo.editedAt.toISOString()) : null,
             isUnsent: msg.replyTo.isUnsent,
             editHistory: msg.replyTo.editHistory,
@@ -527,6 +566,19 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
               hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
               createdAt: typeof msg.replyTo.user.createdAt === 'string' ? msg.replyTo.user.createdAt : msg.replyTo.user.createdAt.toISOString(),
               updatedAt: typeof msg.replyTo.user.updatedAt === 'string' ? msg.replyTo.user.updatedAt : msg.replyTo.user.updatedAt.toISOString(),
+            } : null,
+            aiFriend: msg.replyTo.aiFriend ? {
+              id: msg.replyTo.aiFriend.id,
+              name: msg.replyTo.aiFriend.name,
+              color: msg.replyTo.aiFriend.color,
+              personality: msg.replyTo.aiFriend.personality,
+              tone: msg.replyTo.aiFriend.tone,
+              engagementMode: msg.replyTo.aiFriend.engagementMode,
+              engagementPercent: msg.replyTo.aiFriend.engagementPercent,
+              chatId: msg.replyTo.aiFriend.chatId,
+              sortOrder: msg.replyTo.aiFriend.sortOrder,
+              createdAt: typeof msg.replyTo.aiFriend.createdAt === 'string' ? msg.replyTo.aiFriend.createdAt : msg.replyTo.aiFriend.createdAt.toISOString(),
+              updatedAt: typeof msg.replyTo.aiFriend.updatedAt === 'string' ? msg.replyTo.aiFriend.updatedAt : msg.replyTo.aiFriend.updatedAt.toISOString(),
             } : null,
           }
         : null,

@@ -5272,8 +5272,8 @@ const ChatScreen = () => {
             >
               <Text style={{ fontSize: 11, color: "#8E8E93", fontWeight: "600" }} numberOfLines={1}>
                 {message.replyTo?.aiFriendId
-                  ? (aiFriends.find(f => f.id === message.replyTo?.aiFriendId)?.name || "AI Friend")
-                  : (message.replyTo?.user?.name || "Unknown")}:
+                  ? (message.replyTo?.aiFriend?.name || aiFriends.find(f => f.id === message.replyTo?.aiFriendId)?.name || "AI Friend")
+                  : (message.replyTo?.user?.name || "Unknown User")}:
               </Text>
               <Text
                 style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.7)", flex: 1 }}
@@ -5609,144 +5609,152 @@ const ChatScreen = () => {
                 transform: [{ scaleY: -1 }] // Flip to counteract inverted list
               }}
             >
-              {/* Premium Empty State Card */}
-              <View style={{ 
-                width: '100%', 
-                maxWidth: 300,
-                borderRadius: 20,
-                overflow: 'hidden',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.12,
-                shadowRadius: 16,
-                elevation: 6,
-              }}>
-                <BlurView intensity={35} tint="dark" style={{ overflow: 'hidden', borderRadius: 20 }}>
-                  <LinearGradient
-                    colors={[
-                      'rgba(255, 255, 255, 0.04)',
-                      'rgba(255, 255, 255, 0.02)',
-                      'rgba(0, 0, 0, 0.02)',
-                    ]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{
-                      padding: 28,
-                      borderWidth: 1,
-                      borderColor: 'rgba(255, 255, 255, 0.08)',
-                      borderRadius: 20,
-                    }}
-                  >
-                    {/* Logo Icon Container */}
-                    <View style={{
-                      alignSelf: 'center',
-                      width: 80,
-                      height: 80,
-                      borderRadius: 40,
-                      marginBottom: 20,
-                      overflow: 'hidden',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255, 255, 255, 0.1)',
-                      shadowColor: '#4FC3F7',
-                      shadowOffset: { width: 0, height: 3 },
-                      shadowOpacity: 0.2,
-                      shadowRadius: 10,
-                      elevation: 3,
-                    }}>
-                      <RNImage
-                        source={require("../../assets/vibechat icon main.png")}
-                        style={{ width: 80, height: 80 }}
-                        resizeMode="cover"
-                      />
-                    </View>
+              {isLoading ? (
+                /* Show loading animation while fetching messages */
+                <LuxeLogoLoader size="large" />
+              ) : (
+                /* Show empty state only after loading is complete */
+                <>
+                  {/* Premium Empty State Card */}
+                  <View style={{ 
+                    width: '100%', 
+                    maxWidth: 300,
+                    borderRadius: 20,
+                    overflow: 'hidden',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 16,
+                    elevation: 6,
+                  }}>
+                    <BlurView intensity={35} tint="dark" style={{ overflow: 'hidden', borderRadius: 20 }}>
+                      <LinearGradient
+                        colors={[
+                          'rgba(255, 255, 255, 0.04)',
+                          'rgba(255, 255, 255, 0.02)',
+                          'rgba(0, 0, 0, 0.02)',
+                        ]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={{
+                          padding: 28,
+                          borderWidth: 1,
+                          borderColor: 'rgba(255, 255, 255, 0.08)',
+                          borderRadius: 20,
+                        }}
+                      >
+                        {/* Logo Icon Container */}
+                        <View style={{
+                          alignSelf: 'center',
+                          width: 80,
+                          height: 80,
+                          borderRadius: 40,
+                          marginBottom: 20,
+                          overflow: 'hidden',
+                          borderWidth: 1,
+                          borderColor: 'rgba(255, 255, 255, 0.1)',
+                          shadowColor: '#4FC3F7',
+                          shadowOffset: { width: 0, height: 3 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 10,
+                          elevation: 3,
+                        }}>
+                          <RNImage
+                            source={require("../../assets/vibechat icon main.png")}
+                            style={{ width: 80, height: 80 }}
+                            resizeMode="cover"
+                          />
+                        </View>
 
-                    {/* Heading */}
-                    <Text style={{
-                      fontSize: 20,
-                      fontWeight: '700',
-                      color: '#FFFFFF',
-                      textAlign: 'center',
-                      marginBottom: 6,
-                      letterSpacing: -0.4,
-                    }}>
-                      No messages yet
-                    </Text>
+                        {/* Heading */}
+                        <Text style={{
+                          fontSize: 20,
+                          fontWeight: '700',
+                          color: '#FFFFFF',
+                          textAlign: 'center',
+                          marginBottom: 6,
+                          letterSpacing: -0.4,
+                        }}>
+                          No messages yet
+                        </Text>
 
-                    {/* Subheading */}
-                    <Text style={{
-                      fontSize: 14,
-                      fontWeight: '500',
-                      color: 'rgba(255, 255, 255, 0.65)',
-                      textAlign: 'center',
-                      lineHeight: 20,
-                      marginBottom: 22,
-                    }}>
-                      Be the first to say hi, or create{'\n'}an AI friend to start chatting
-                    </Text>
+                        {/* Subheading */}
+                        <Text style={{
+                          fontSize: 14,
+                          fontWeight: '500',
+                          color: 'rgba(255, 255, 255, 0.65)',
+                          textAlign: 'center',
+                          lineHeight: 20,
+                          marginBottom: 22,
+                        }}>
+                          Be the first to say hi, or create{'\n'}an AI friend to start chatting
+                        </Text>
 
-                    {/* CTA Button */}
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        setShowCreateAIFriend(true);
-                      }}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.88 : 1,
-                        transform: [{ scale: pressed ? 0.98 : 1 }],
-                      })}
-                    >
-                      <View style={{
-                        borderRadius: 14,
-                        overflow: 'hidden',
-                        shadowColor: '#34C759',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 12,
-                        elevation: 4,
-                      }}>
-                        <LinearGradient
-                          colors={[
-                            '#0061FF', // Deep Blue
-                            '#00C6FF', // Bright Cyan
-                            '#00E676', // Neon Green
-                          ]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={{
-                            paddingVertical: 13,
-                            paddingHorizontal: 20,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
+                        {/* CTA Button */}
+                        <Pressable
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            setShowCreateAIFriend(true);
                           }}
+                          style={({ pressed }) => ({
+                            opacity: pressed ? 0.88 : 1,
+                            transform: [{ scale: pressed ? 0.98 : 1 }],
+                          })}
                         >
-                          <Sparkles size={17} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 8 }} />
-                          <Text style={{
-                            fontSize: 15,
-                            fontWeight: '700',
-                            color: '#FFFFFF',
-                            letterSpacing: 0.2,
+                          <View style={{
+                            borderRadius: 14,
+                            overflow: 'hidden',
+                            shadowColor: '#34C759',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 12,
+                            elevation: 4,
                           }}>
-                            Create AI Friend
-                          </Text>
-                        </LinearGradient>
-                      </View>
-                    </Pressable>
+                            <LinearGradient
+                              colors={[
+                                '#0061FF', // Deep Blue
+                                '#00C6FF', // Bright Cyan
+                                '#00E676', // Neon Green
+                              ]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={{
+                                paddingVertical: 13,
+                                paddingHorizontal: 20,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Sparkles size={17} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 8 }} />
+                              <Text style={{
+                                fontSize: 15,
+                                fontWeight: '700',
+                                color: '#FFFFFF',
+                                letterSpacing: 0.2,
+                              }}>
+                                Create AI Friend
+                              </Text>
+                            </LinearGradient>
+                          </View>
+                        </Pressable>
 
-                    {/* Helper Text */}
-                    <Text style={{
-                      fontSize: 12,
-                      fontWeight: '500',
-                      color: 'rgba(255, 255, 255, 0.45)',
-                      textAlign: 'center',
-                      marginTop: 16,
-                      lineHeight: 17,
-                    }}>
-                      Always ready to chat and help
-                    </Text>
-                  </LinearGradient>
-                </BlurView>
-              </View>
+                        {/* Helper Text */}
+                        <Text style={{
+                          fontSize: 12,
+                          fontWeight: '500',
+                          color: 'rgba(255, 255, 255, 0.45)',
+                          textAlign: 'center',
+                          marginTop: 16,
+                          lineHeight: 17,
+                        }}>
+                          Always ready to chat and help
+                        </Text>
+                      </LinearGradient>
+                    </BlurView>
+                  </View>
+                </>
+              )}
             </View>
           }
         />
@@ -5890,7 +5898,7 @@ const ChatScreen = () => {
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 12, color: "#007AFF", fontWeight: "600" }}>
                     Replying to {replyToMessage.aiFriendId 
-                      ? (aiFriends.find(f => f.id === replyToMessage.aiFriendId)?.name || "AI Friend")
+                      ? (replyToMessage.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage.aiFriendId)?.name || "AI Friend")
                       : (replyToMessage.user?.name || "Unknown User")}
                   </Text>
                   <Text

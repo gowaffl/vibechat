@@ -315,7 +315,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       hour: "numeric",
       minute: "2-digit",
     };
-    return date.toLocaleDateString("en-US", options);
+    return date.toLocaleString("en-US", options);
   };
 
   const addOption = () => {

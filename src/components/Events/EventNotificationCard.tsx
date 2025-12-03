@@ -136,7 +136,7 @@ const EventNotificationCard: React.FC<EventNotificationCardProps> = ({
                         color: "#FFFFFF",
                       }}
                     >
-                      {new Date(event.eventDate).toLocaleDateString("en-US", {
+                      {new Date(event.eventDate).toLocaleString("en-US", {
                         weekday: "short",
                         month: "short",
                         day: "numeric",

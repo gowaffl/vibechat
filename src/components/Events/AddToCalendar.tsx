@@ -58,13 +58,12 @@ const AddToCalendar: React.FC<AddToCalendarProps> = ({
       const endDate = new Date(eventDate);
       endDate.setHours(endDate.getHours() + 1);
 
-      // Create the calendar event
+      // Create the calendar event (timeZone omitted to use device's local timezone)
       const eventId = await Calendar.createEventAsync(defaultCalendar.id, {
         title: eventTitle,
         notes: eventDescription || undefined,
         startDate: eventDate,
         endDate: endDate,
-        timeZone: "GMT",
       });
 
       console.log("[AddToCalendar] Event created with ID:", eventId);

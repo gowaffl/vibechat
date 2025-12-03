@@ -133,6 +133,7 @@ export const messageSchema: z.ZodType<{
   chatId: string;
   replyToId?: string | null;
   aiFriendId?: string | null;
+  aiFriend?: any | null; // AIFriend type, but using any to avoid circular dependency
   editedAt?: string | null;
   isUnsent?: boolean;
   editHistory?: string | null;
@@ -159,6 +160,7 @@ export const messageSchema: z.ZodType<{
     chatId: z.string(),
     replyToId: z.string().nullable().optional(),
     aiFriendId: z.string().nullable().optional(),
+    aiFriend: z.any().nullable().optional(), // Will be validated as AIFriend at runtime
     editedAt: z.string().nullable().optional(),
     isUnsent: z.boolean().optional(),
     editHistory: z.string().nullable().optional(),
