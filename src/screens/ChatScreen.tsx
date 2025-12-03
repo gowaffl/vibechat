@@ -5563,10 +5563,10 @@ const ChatScreen = () => {
             paddingBottom: insets.top + 63 + (threads ? 56 : 0) + 20, // Reduced base to 63 (header height is 68)
             paddingHorizontal: 16,
             // Visual bottom - small padding to push recent messages up slightly
-            paddingTop: 16, 
+            paddingTop: 10, 
           }}
           // Spacer for Input Bar (Glassmorphism effect)
-          ListHeaderComponent={<View style={{ height: 100 }} />}
+          ListHeaderComponent={<View style={{ height: 90 }} />}
           // HIGH-8: Load earlier messages button (appears at top in inverted list)
           ListFooterComponent={
             hasMoreMessages ? (

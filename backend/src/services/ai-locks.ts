@@ -22,35 +22,25 @@ export const LOCK_EXPIRY_SECONDS = 60;
  */
 export async function acquireAIResponseLock(chatId: string): Promise<boolean> {
   try {
-    const expiresAt = new Date(Date.now() + LOCK_EXPIRY_SECONDS * 1000).toISOString();
-    
-    // Try to insert a lock or take over an expired one
-    // We use raw SQL for atomic upsert with condition
-    // Note: We use a standard query approach instead of RPC to avoid migration complexity
-    // for a simple lock mechanism.
-    
-    // First, try to clean up expired locks for this chat
-    await db
-      .from('ai_engagement_lock')
-      .delete()
-      .eq('chat_id', chatId)
-      .lt('expires_at', new Date().toISOString());
+    // Try to acquire lock using atomic RPC function
+    // This handles cleanup of expired locks and insertion in a single transaction
+    const { data, error } = await db.rpc('acquire_ai_lock', {
+      p_chat_id: chatId,
+      p_locked_by: SERVER_ID,
+      p_expiry_seconds: LOCK_EXPIRY_SECONDS
+    });
 
-    // Now try to insert
-    const { error: insertError } = await db
-      .from('ai_engagement_lock')
-      .insert({
-        chat_id: chatId,
-        locked_by: SERVER_ID,
-        expires_at: expiresAt
-      });
+    if (error) {
+      console.error(`[AI Locks] Error calling acquire_ai_lock RPC for chat ${chatId}:`, error);
+      return false;
+    }
 
-    if (!insertError) {
+    if (data === true) {
       console.log(`[AI Locks] Distributed lock acquired for chat ${chatId}`);
       return true;
     }
 
-    // If insert failed, it's locked by someone else
+    // If data is false, it means lock is held by someone else
     console.log(`[AI Locks] Failed to acquire lock for chat ${chatId} - already locked`);
     return false;
 

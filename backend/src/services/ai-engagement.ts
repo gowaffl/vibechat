@@ -486,7 +486,9 @@ export function startAIEngagementService() {
         const newMsg = payload.new as any;
         
         if (newMsg && !newMsg.aiFriendId && newMsg.messageType !== 'system') {
-          handleNewMessage(payload);
+          handleNewMessage(payload).catch(error => {
+            console.error(`[AI Engagement] Error processing message ${newMsg.id}:`, error);
+          });
         }
       }
     )

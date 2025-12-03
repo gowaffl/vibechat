@@ -125,6 +125,8 @@ export default function App() {
         // Wait a bit for navigation to be ready
         setTimeout(() => handleNotification(response), 1000);
       }
+    }).catch((error) => {
+      console.error("[Notifications] Error getting last notification response:", error);
     });
 
     // Listen for notification responses (background/foreground)
