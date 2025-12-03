@@ -154,23 +154,25 @@ export async function sendChatPushNotifications(params: {
     // Get all members of the chat except the sender
     const { data: members } = await db
       .from('chat_member')
-      .select('userId')
+      .select('userId, isMuted')
       .eq('chatId', params.chatId)
       .neq('userId', params.senderId);
 
     if (!members) return;
 
-    // Send notification to each member
+    // Send notification to each member who hasn't muted the chat
     await Promise.all(
-      members.map((member: any) =>
-        sendPushNotification({
+      members.map((member: any) => {
+        if (member.isMuted) return Promise.resolve(); // Skip if muted
+
+        return sendPushNotification({
           userId: member.userId,
           chatId: params.chatId,
           chatName: params.chatName,
           senderName: params.senderName,
           messagePreview: params.messagePreview,
-        })
-      )
+        });
+      })
     );
   } catch (error) {
     console.error("[Push] Error sending chat push notifications:", error);

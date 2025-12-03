@@ -97,3 +97,5 @@ The server listens on `http://localhost:3000` and processes:
 
 Without the backend running, the mobile app can still read from Supabase directly, but cannot create new messages or trigger server-side processing.
 
+
+

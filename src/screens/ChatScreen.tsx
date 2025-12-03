@@ -1542,6 +1542,8 @@ const ChatScreen = () => {
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [viewerImage, setViewerImage] = useState<{
     url: string;
+    imageUrls?: string[];
+    initialIndex?: number;
     senderName: string;
     timestamp: string;
     messageId?: string;
@@ -1837,12 +1839,15 @@ const ChatScreen = () => {
       console.log("[ChatScreen] Remix completed, stopping AI typing animation");
       wasRemixingRef.current = false;
       setIsAITyping(false);
+      // Auto-scroll removed per user request
+      /*
       // Scroll to show the new remixed message
       requestAnimationFrame(() => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 300);
       });
+      */
     }
     
     if (wasCreatingMemeRef.current && !isCreatingMeme) {
@@ -4901,6 +4906,8 @@ const ChatScreen = () => {
                 onImagePress={(index, imageUrl) => {
                   setViewerImage({
                     url: imageUrl,
+                    imageUrls: mediaUrls.map(url => getFullImageUrl(url)),
+                    initialIndex: index,
                     senderName: message.user?.name || "Unknown",
                     timestamp: new Date(message.createdAt).toLocaleString(),
                     messageId: message.id,
@@ -6546,6 +6553,8 @@ const ChatScreen = () => {
           <ZoomableImageViewer
             visible={!!viewerImage}
             imageUrl={getFullImageUrl(viewerImage.url)}
+            imageUrls={viewerImage.imageUrls}
+            initialIndex={viewerImage.initialIndex}
             senderName={viewerImage.senderName}
             timestamp={viewerImage.timestamp}
             messageId={viewerImage.messageId}
@@ -7476,12 +7485,15 @@ const ChatScreen = () => {
               remix({ messageId: reactorMessageId, remixPrompt: prompt });
               setShowReactorMenu(false);
               setReactorMessageId(null);
+              // Auto-scroll removed per user request
+              /*
               // Scroll to show AI typing indicator
               requestAnimationFrame(() => {
                 setTimeout(() => {
                   flatListRef.current?.scrollToEnd({ animated: true });
                 }, 200);
               });
+              */
             }
           }}
           onMeme={(prompt) => {

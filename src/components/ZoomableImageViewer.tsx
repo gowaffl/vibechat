@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Modal,
@@ -9,6 +9,7 @@ import {
   Alert,
   Animated as RNAnimated,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
@@ -28,40 +29,17 @@ import {
   Gesture,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
+import PagerView from "react-native-pager-view";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-interface ZoomableImageViewerProps {
-  visible: boolean;
+interface ZoomableImagePageProps {
   imageUrl: string;
-  onClose: () => void;
-  senderName?: string;
-  timestamp?: string;
-  messageId?: string;
-  caption?: string;
-  isOwnMessage?: boolean;
-  onSelectImage?: (messageId: string) => void;
-  onEditCaption?: (message: any) => void;
-  showToolbar?: boolean;
+  onZoomChange: (isZoomed: boolean) => void;
+  onSingleTap: () => void;
 }
 
-export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
-  visible,
-  imageUrl,
-  onClose,
-  senderName,
-  timestamp,
-  messageId,
-  caption,
-  isOwnMessage,
-  onSelectImage,
-  onEditCaption,
-  showToolbar = true,
-}) => {
-  const [isSaving, setIsSaving] = useState(false);
-  const [toolbarVisible, setToolbarVisible] = useState(true);
-  const toolbarAnim = useRef(new RNAnimated.Value(1)).current;
-
+const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomChange, onSingleTap }) => {
   // Animated values for zoom and pan
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -70,26 +48,17 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
-  // Reset zoom and pan
-  const resetZoom = () => {
-    scale.value = withSpring(1);
-    translateX.value = withSpring(0);
-    translateY.value = withSpring(0);
-    savedScale.value = 1;
-    savedTranslateX.value = 0;
-    savedTranslateY.value = 0;
-  };
-
-  // Toggle toolbar visibility
-  const toggleToolbar = () => {
-    const toValue = toolbarVisible ? 0 : 1;
-    setToolbarVisible(!toolbarVisible);
-    RNAnimated.timing(toolbarAnim, {
-      toValue,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  };
+  // Reset zoom and pan on unmount or url change
+  useEffect(() => {
+    return () => {
+      scale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedScale.value = 1;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    };
+  }, [imageUrl]);
 
   // Pinch gesture
   const pinchGesture = Gesture.Pinch()
@@ -107,6 +76,9 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
         savedScale.value = 1;
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
+        runOnJS(onZoomChange)(false);
+      } else if (scale.value > 1) {
+        runOnJS(onZoomChange)(true);
       }
     });
 
@@ -149,10 +121,12 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
         savedScale.value = 1;
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
+        runOnJS(onZoomChange)(false);
       } else {
         // Zoom in to 2x
         scale.value = withSpring(2);
         savedScale.value = 2;
+        runOnJS(onZoomChange)(true);
       }
     });
 
@@ -160,7 +134,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
   const singleTapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      runOnJS(toggleToolbar)();
+      runOnJS(onSingleTap)();
     });
 
   // Compose gestures
@@ -180,7 +154,99 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
     };
   });
 
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Animated.View style={animatedStyle}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={{
+              width: SCREEN_WIDTH,
+              height: SCREEN_HEIGHT,
+            }}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </Animated.View>
+    </GestureDetector>
+  );
+};
+
+interface ZoomableImageViewerProps {
+  visible: boolean;
+  imageUrl?: string; // Keep for backward compatibility or single image
+  imageUrls?: string[]; // New prop for multiple images
+  initialIndex?: number; // New prop for starting index
+  onClose: () => void;
+  senderName?: string;
+  timestamp?: string;
+  messageId?: string;
+  caption?: string;
+  isOwnMessage?: boolean;
+  onSelectImage?: (messageId: string) => void;
+  onEditCaption?: (message: any) => void;
+  showToolbar?: boolean;
+}
+
+export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
+  visible,
+  imageUrl,
+  imageUrls,
+  initialIndex = 0,
+  onClose,
+  senderName,
+  timestamp,
+  messageId,
+  caption,
+  isOwnMessage,
+  onSelectImage,
+  onEditCaption,
+  showToolbar = true,
+}) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [toolbarVisible, setToolbarVisible] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const toolbarAnim = useRef(new RNAnimated.Value(1)).current;
+  const pagerRef = useRef<PagerView>(null);
+
+  // Normalize images list
+  const images = imageUrls && imageUrls.length > 0 
+    ? imageUrls 
+    : imageUrl ? [imageUrl] : [];
+
+  const currentImageUrl = images[currentIndex];
+
+  // Update currentIndex when initialIndex changes (e.g. when opening)
+  useEffect(() => {
+    if (visible) {
+      setCurrentIndex(initialIndex);
+      if (pagerRef.current && Platform.OS === 'android') {
+        pagerRef.current.setPageWithoutAnimation(initialIndex);
+      }
+    }
+  }, [visible, initialIndex]);
+
+  // Toggle toolbar visibility
+  const toggleToolbar = () => {
+    const toValue = toolbarVisible ? 0 : 1;
+    setToolbarVisible(!toolbarVisible);
+    RNAnimated.timing(toolbarAnim, {
+      toValue,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const handleSaveImage = async () => {
+    if (!currentImageUrl) return;
+
     try {
       setIsSaving(true);
       console.log("Attempting to save image...");
@@ -192,12 +258,12 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
       }
 
       // Get file extension from URL or default to jpg
-      const extension = imageUrl.split(".").pop()?.split("?")[0] || "jpg";
+      const extension = currentImageUrl.split(".").pop()?.split("?")[0] || "jpg";
       const fileName = `vibechat_${Date.now()}.${extension}`;
       const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
       
       console.log("Downloading to:", fileUri);
-      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      const downloadResult = await FileSystem.downloadAsync(currentImageUrl, fileUri);
       
       console.log("Saving to library...");
       await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
@@ -212,6 +278,8 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
   };
 
   const handleShareImage = async () => {
+    if (!currentImageUrl) return;
+
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
@@ -220,7 +288,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
       }
 
       const fileUri = `${FileSystem.cacheDirectory}share-image.jpg`;
-      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      const downloadResult = await FileSystem.downloadAsync(currentImageUrl, fileUri);
       await Sharing.shareAsync(downloadResult.uri);
     } catch (error) {
       console.error("Error sharing image:", error);
@@ -242,9 +310,15 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
     }
   };
 
+  const handlePageSelected = (e: any) => {
+    setCurrentIndex(e.nativeEvent.position);
+  };
+
   // Reset when modal closes
   const handleClose = () => {
-    resetZoom();
+    // Reset state handled by ZoomableImagePage components mostly
+    // but reset current index to initial just in case or keep it for next time? 
+    // Usually nice to reset if it's a different message.
     onClose();
   };
 
@@ -369,6 +443,12 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
                       {timestamp}
                     </Text>
                   )}
+                  {/* Show "1 of 3" if multiple images */}
+                  {images.length > 1 && (
+                    <Text style={{ color: "#A0A0A0", fontSize: 12, marginTop: 2 }}>
+                      Image {currentIndex + 1} of {images.length}
+                    </Text>
+                  )}
                   {caption && (
                     <Text style={{ color: "#E0E0E0", fontSize: 14, marginTop: 8, lineHeight: 18 }}>
                       {caption}
@@ -379,27 +459,31 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
             </RNAnimated.View>
           )}
 
-          {/* Zoomable Image */}
-          <GestureDetector gesture={composedGesture}>
-            <Animated.View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
+          {/* Pager View for Images */}
+          {images.length > 0 ? (
+             <PagerView
+              ref={pagerRef}
+              style={{ flex: 1 }}
+              initialPage={initialIndex}
+              onPageSelected={handlePageSelected}
+              scrollEnabled={scrollEnabled}
+              overdrag={true}
             >
-              <Animated.View style={animatedStyle}>
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={{
-                    width: SCREEN_WIDTH,
-                    height: SCREEN_HEIGHT,
-                  }}
-                  resizeMode="contain"
-                />
-              </Animated.View>
-            </Animated.View>
-          </GestureDetector>
+              {images.map((url, index) => (
+                <View key={`${url}-${index}`} style={{ flex: 1 }}>
+                  <ZoomableImagePage
+                    imageUrl={url}
+                    onZoomChange={(isZoomed) => setScrollEnabled(!isZoomed)}
+                    onSingleTap={toggleToolbar}
+                  />
+                </View>
+              ))}
+            </PagerView>
+          ) : (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="#FFF" />
+            </View>
+          )}
 
           {/* Action Buttons */}
           {showToolbar && (
@@ -567,4 +651,3 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
     </Modal>
   );
 };
-

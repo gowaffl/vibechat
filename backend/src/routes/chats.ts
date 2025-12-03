@@ -18,6 +18,7 @@ import { sendChatPushNotifications } from "../services/push-notifications";
 import { tagMessage } from "../services/message-tagger";
 import { extractFirstUrl } from "../utils/url-utils";
 import { fetchLinkPreview } from "../services/link-preview";
+import { z } from "zod";
 
 const chats = new Hono<AppType>();
 
@@ -40,10 +41,8 @@ chats.get("/", async (c) => {
     // Get all chats where user is a member
     const { data: chatMemberships, error } = await client
       .from("chat_member")
-      .select("*, chatId, isPinned, pinnedAt")
-      .eq("userId", userId)
-      .order("isPinned", { ascending: false })
-      .order("pinnedAt", { ascending: true });
+      .select("*, chatId, isPinned, pinnedAt, isMuted")
+      .eq("userId", userId);
 
     if (error) {
       console.error("[Chats] Error fetching user chats:", error);
@@ -115,8 +114,30 @@ chats.get("/", async (c) => {
         lastMessageAt: lastMessage?.createdAt ? new Date(lastMessage.createdAt).toISOString() : null,
         isPinned: membership.isPinned,
         pinnedAt: membership.pinnedAt ? new Date(membership.pinnedAt).toISOString() : null,
+        isMuted: membership.isMuted,
       };
     }).filter(Boolean);
+
+    // Sort chats:
+    // 1. Pinned chats first (sorted by pinnedAt if needed, but usually just grouped)
+    // 2. Then by last message date (descending)
+    // 3. If no last message, use createdAt (descending)
+    chatsWithMetadata.sort((a: any, b: any) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        
+        // If both are pinned or both are not pinned, sort by date
+        // Pinned items could be sorted by pinnedAt, but user wants "recent message" sorting generally.
+        // However, user said "Unless the chat has been pinned... keep that chat at the very top".
+        // This implies pinned chats stay top, but maybe sorted amongst themselves? 
+        // Let's sort pinned by pinnedAt (recently pinned first? or oldest pinned first? usually user controlled, but we don't have drag-drop yet).
+        // Let's stick to: Pinned -> Last Message Date
+        
+        const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+        const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+        
+        return dateB - dateA;
+    });
 
     return c.json(chatsWithMetadata);
   } catch (error) {
@@ -357,6 +378,7 @@ chats.get("/:id", async (c) => {
           chatId: m.chatId,
           userId: m.userId,
           joinedAt: new Date(m.joinedAt).toISOString(),
+          isMuted: m.isMuted,
           user: user ? {
             id: user.id,
             name: user.name,
@@ -669,6 +691,55 @@ chats.patch("/:id/pin", async (c) => {
   }
 });
 
+// PATCH /api/chats/:id/mute - Mute or unmute a chat for a user
+const muteChatRequestSchema = z.object({
+  userId: z.string(),
+  isMuted: z.boolean(),
+});
+
+chats.patch("/:id/mute", async (c) => {
+  const chatId = c.req.param("id");
+
+  try {
+    const body = await c.req.json();
+    const validated = muteChatRequestSchema.parse(body);
+
+    // Check if membership exists
+    const { data: membership, error: membershipError } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", validated.userId)
+      .single();
+
+    if (membershipError || !membership) {
+      return c.json({ error: "Not a member of this chat" }, 404);
+    }
+
+    // Update mute status
+    const { error: updateError } = await db
+      .from("chat_member")
+      .update({
+        isMuted: validated.isMuted,
+      })
+      .eq("chatId", chatId)
+      .eq("userId", validated.userId);
+
+    if (updateError) {
+      console.error("[Chats] Error muting/unmuting chat:", updateError);
+      return c.json({ error: "Failed to update mute status" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: validated.isMuted ? "Chat muted successfully" : "Chat unmuted successfully",
+    });
+  } catch (error) {
+    console.error("[Chats] Error muting/unmuting chat:", error);
+    return c.json({ error: "Failed to update mute status" }, 500);
+  }
+});
+
 // GET /api/chats/:id/messages - Get messages for a specific chat
 chats.get("/:id/messages", async (c) => {
   const chatId = c.req.param("id");
@@ -678,6 +749,7 @@ chats.get("/:id/messages", async (c) => {
   console.log(`[Chats] Connected to Supabase:`, {
     url: db["supabaseUrl"] || "unknown",
     hasServiceKey: !!db["supabaseKey"],
+    keyStart: (db["supabaseKey"] as string)?.substring(0, 20) + "..."
   });
 
   if (!userId) {

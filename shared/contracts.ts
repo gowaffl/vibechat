@@ -87,6 +87,7 @@ export const chatMemberSchema = z.object({
   chatId: z.string(),
   userId: z.string(),
   joinedAt: z.string(),
+  isMuted: z.boolean().optional().default(false),
   user: userSchema.optional(),
 });
 export type ChatMember = z.infer<typeof chatMemberSchema>;
@@ -99,6 +100,7 @@ export const chatWithMetadataSchema = chatSchema.extend({
   lastMessageAt: z.string().nullable().optional(),
   isPinned: z.boolean().optional(),
   pinnedAt: z.string().nullable().optional(),
+  isMuted: z.boolean().optional(),
 });
 export type ChatWithMetadata = z.infer<typeof chatWithMetadataSchema>;
 
@@ -631,6 +633,18 @@ export const pinChatResponseSchema = z.object({
   message: z.string(),
 });
 export type PinChatResponse = z.infer<typeof pinChatResponseSchema>;
+
+// PATCH /api/chats/:id/mute - Mute or unmute a chat
+export const muteChatRequestSchema = z.object({
+  userId: z.string(),
+  isMuted: z.boolean(),
+});
+export type MuteChatRequest = z.infer<typeof muteChatRequestSchema>;
+export const muteChatResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+export type MuteChatResponse = z.infer<typeof muteChatResponseSchema>;
 
 // GET /api/chats/:id/messages - Get messages for a specific chat
 export const getChatMessagesRequestSchema = z.object({

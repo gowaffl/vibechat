@@ -8,6 +8,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { UserProvider } from "@/contexts/UserContext";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 
@@ -96,6 +97,39 @@ export default function App() {
 
     handleInitialURL();
 
+    // Handle push notifications
+    const handleNotification = (response: Notifications.NotificationResponse) => {
+      try {
+        const data = response.notification.request.content.data;
+        const chatId = data?.chatId;
+        
+        if (chatId && navigationRef.current) {
+          console.log("[Notifications] 🚀 Navigating to chat:", chatId);
+          // Get chat name from notification title if available, or fallback to "Chat"
+          const chatName = response.notification.request.content.title || "Chat";
+          
+          navigationRef.current.navigate("Chat", { 
+            chatId,
+            chatName 
+          });
+        }
+      } catch (error) {
+        console.error("[Notifications] Error handling notification:", error);
+      }
+    };
+
+    // Check if app was opened from a notification (cold start)
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) {
+        console.log("[Notifications] App opened from notification (cold start)");
+        // Wait a bit for navigation to be ready
+        setTimeout(() => handleNotification(response), 1000);
+      }
+    });
+
+    // Listen for notification responses (background/foreground)
+    const notificationSubscription = Notifications.addNotificationResponseReceivedListener(handleNotification);
+
     // Handle URLs when app is already open
     const subscription = Linking.addEventListener('url', ({ url }) => {
       try {
@@ -115,6 +149,7 @@ export default function App() {
 
     return () => {
       subscription.remove();
+      notificationSubscription.remove();
     };
   }, []);
 

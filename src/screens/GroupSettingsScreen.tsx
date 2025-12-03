@@ -16,6 +16,7 @@ import {
   Keyboard,
   useColorScheme,
   Dimensions,
+  Switch,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -24,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, ChevronDown, ChevronUp } from "lucide-react-native";
+import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, ChevronDown, ChevronUp, Bell, BellOff } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -203,8 +204,6 @@ const GroupSettingsScreen = () => {
   // AI Friends state
   const [selectedAiFriendId, setSelectedAiFriendId] = useState<string | null>(null);
   const [isCreatingAiFriend, setIsCreatingAiFriend] = useState(false);
-  const [isEditingAiPersonality, setIsEditingAiPersonality] = useState(false);
-  const [isEditingAiName, setIsEditingAiName] = useState(false);
   const [aiPersonality, setAiPersonality] = useState("");
   const [aiTone, setAiTone] = useState("");
   const [aiName, setAiName] = useState("");
@@ -262,6 +261,26 @@ const GroupSettingsScreen = () => {
 
   // Check if current user is the creator
   const isCreator = chat?.creatorId === user?.id;
+
+  // Check if notifications are muted
+  const currentMember = chat?.members?.find(m => m.userId === user?.id);
+  const isMuted = currentMember?.isMuted || false;
+
+  // Mute chat mutation
+  const muteChatMutation = useMutation({
+    mutationFn: ({ chatId, isMuted }: { chatId: string; isMuted: boolean }) =>
+      api.patch(`/api/chats/${chatId}/mute`, { userId: user!.id, isMuted }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
+      queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: any) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const errorMessage = error?.message || "Failed to update mute status";
+      Alert.alert("Error", errorMessage);
+    },
+  });
 
   // Update local state when data changes
   React.useEffect(() => {
@@ -332,7 +351,7 @@ const GroupSettingsScreen = () => {
     if (route.params?.expandAIFriends) {
       setIsAiFriendSectionExpanded(true);
     }
-    if (route.params?.createAIFriend && isCreator) {
+    if (route.params?.createAIFriend) {
       setIsAiFriendSectionExpanded(true);
       // Delay setting create mode to ensure the section is expanded first
       setTimeout(() => {
@@ -796,24 +815,16 @@ const GroupSettingsScreen = () => {
     setIsEditingBio(false);
   };
 
-  const handleSaveAiPersonality = () => {
+  const handleSaveAiSettings = () => {
     if (selectedAiFriendId) {
       updateAIFriendMutation.mutate({
         aiFriendId: selectedAiFriendId,
-        data: { personality: aiPersonality.trim() || null },
+        data: {
+          name: aiName.trim() || "AI Friend",
+          personality: aiPersonality.trim() || null,
+        },
       });
     }
-    setIsEditingAiPersonality(false);
-  };
-
-  const handleSaveAiName = () => {
-    if (selectedAiFriendId) {
-      updateAIFriendMutation.mutate({
-        aiFriendId: selectedAiFriendId,
-        data: { name: aiName.trim() || "AI Friend" },
-      });
-    }
-    setIsEditingAiName(false);
   };
 
   const handleSelectTone = (tone: string) => {
@@ -1403,26 +1414,24 @@ const GroupSettingsScreen = () => {
                   </Text>
                 </Pressable>
                 <View className="flex-row items-center gap-2">
-                  {isCreator && (
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        handleCreateAIFriend();
-                      }}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: "rgba(52, 199, 89, 0.2)",
-                        borderWidth: 1,
-                        borderColor: "#34C759",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Plus size={16} color="#34C759" />
-                    </Pressable>
-                  )}
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      handleCreateAIFriend();
+                    }}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor: "rgba(52, 199, 89, 0.2)",
+                      borderWidth: 1,
+                      borderColor: "#34C759",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Plus size={16} color="#34C759" />
+                  </Pressable>
                   <Pressable
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1512,154 +1521,67 @@ const GroupSettingsScreen = () => {
                   <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
                     AI Friend Name
                   </Text>
-                  {isEditingAiName ? (
-                    <View>
-                      <TextInput
-                        value={aiName}
-                        onChangeText={setAiName}
-                        className="rounded-lg px-4 py-3 text-base mb-3"
-                        keyboardAppearance="dark"
-                        style={{
-                          backgroundColor: "rgba(255, 255, 255, 0.05)",
-                          color: "#FFFFFF",
-                          borderWidth: 1,
-                          borderColor: "rgba(52, 199, 89, 0.3)",
-                        }}
-                        placeholder="e.g., 'Jarvis', 'Buddy', 'Alex'..."
-                        placeholderTextColor="#666666"
-                        autoFocus
-                        maxLength={50}
-                      />
-                      <View className="flex-row gap-2">
-                        <Pressable
-                          onPress={handleSaveAiName}
-                          className="flex-1 rounded-lg py-3"
-                          style={{
-                            backgroundColor: "rgba(52, 199, 89, 0.2)",
-                            borderWidth: 1,
-                            borderColor: "rgba(52, 199, 89, 0.5)",
-                          }}
-                        >
-                          <Text className="text-center font-semibold" style={{ color: "#34C759" }}>
-                            Save
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => {
-                            const currentFriend = aiFriends.find(f => f.id === selectedAiFriendId);
-                            setAiName(currentFriend?.name || "AI Friend");
-                            setIsEditingAiName(false);
-                          }}
-                          className="flex-1 rounded-lg py-3"
-                          style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.05)",
-                            borderWidth: 1,
-                            borderColor: "rgba(255, 255, 255, 0.1)",
-                          }}
-                        >
-                          <Text className="text-center font-semibold" style={{ color: "#FFFFFF" }}>
-                            Cancel
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : (
-                    <Pressable
-                      onPress={() => setIsEditingAiName(true)}
-                      className="rounded-lg px-4 py-3 mb-4"
-                      style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.05)",
-                        borderWidth: 1,
-                        borderColor: "rgba(52, 199, 89, 0.2)",
-                      }}
-                    >
-                      <Text className="text-base" style={{ color: "#FFFFFF" }}>
-                        {aiName || "AI Friend"}
-                      </Text>
-                      <Text className="text-xs mt-1" style={{ color: "#34C759" }}>Tap to edit</Text>
-                    </Pressable>
-                  )}
+                  <TextInput
+                    value={aiName}
+                    onChangeText={setAiName}
+                    className="rounded-lg px-4 py-3 text-base mb-4"
+                    keyboardAppearance="dark"
+                    style={{
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      color: "#FFFFFF",
+                      borderWidth: 1,
+                      borderColor: "rgba(52, 199, 89, 0.3)",
+                    }}
+                    placeholder="e.g., 'Jarvis', 'Buddy', 'Alex'..."
+                    placeholderTextColor="#666666"
+                    maxLength={50}
+                  />
 
                   {/* Custom Instructions */}
                   <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
                     Custom Instructions
                   </Text>
-                  {isEditingAiPersonality ? (
-                    <View>
-                      <TextInput
-                        value={aiPersonality}
-                        onChangeText={setAiPersonality}
-                        className="rounded-lg px-4 py-3 text-base mb-3"
-                        keyboardAppearance="dark"
-                        style={{
-                          backgroundColor: "rgba(255, 255, 255, 0.05)",
-                          color: "#FFFFFF",
-                          borderWidth: 1,
-                          borderColor: "rgba(52, 199, 89, 0.3)",
-                        }}
-                        placeholder="e.g., 'You are a helpful friend who loves tech...'"
-                        placeholderTextColor="#666666"
-                        multiline
-                        numberOfLines={4}
-                        autoFocus
-                        maxLength={500}
-                      />
-                      <View className="flex-row gap-2">
-                        <Pressable
-                          onPress={handleSaveAiPersonality}
-                          className="flex-1"
-                          disabled={updateAIFriendMutation.isPending}
-                        >
-                          <View
-                            style={{
-                              borderRadius: 10,
-                              padding: 12,
-                              alignItems: "center",
-                              backgroundColor: "rgba(52, 199, 89, 0.15)",
-                              borderWidth: 1,
-                              borderColor: "#34C759",
-                            }}
-                          >
-                            {updateAIFriendMutation.isPending ? (
-                              <LuxeLogoLoader size="small" />
-                            ) : (
-                              <Text className="font-semibold" style={{ color: "#34C759" }}>Save</Text>
-                            )}
-                          </View>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => {
-                            const currentFriend = aiFriends.find(f => f.id === selectedAiFriendId);
-                            setAiPersonality(currentFriend?.personality || "");
-                            setIsEditingAiPersonality(false);
-                          }}
-                          className="px-6 py-3 rounded-lg"
-                          style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.1)",
-                            borderWidth: 1,
-                            borderColor: "rgba(255, 255, 255, 0.2)",
-                          }}
-                        >
-                          <Text className="font-semibold" style={{ color: "#FFFFFF" }}>Cancel</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : (
-                    <Pressable
-                      onPress={() => setIsEditingAiPersonality(true)}
-                      className="rounded-lg px-4 py-3 mb-4"
+                  <TextInput
+                    value={aiPersonality}
+                    onChangeText={setAiPersonality}
+                    className="rounded-lg px-4 py-3 text-base mb-4"
+                    keyboardAppearance="dark"
+                    style={{
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      color: "#FFFFFF",
+                      borderWidth: 1,
+                      borderColor: "rgba(52, 199, 89, 0.3)",
+                    }}
+                    placeholder="e.g., 'You are a helpful friend who loves tech...'"
+                    placeholderTextColor="#666666"
+                    multiline
+                    numberOfLines={4}
+                    maxLength={500}
+                  />
+
+                  {/* Unified Save Button */}
+                  <Pressable
+                    onPress={handleSaveAiSettings}
+                    disabled={updateAIFriendMutation.isPending}
+                    className="mb-6"
+                  >
+                    <View
                       style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.05)",
+                        borderRadius: 10,
+                        padding: 12,
+                        alignItems: "center",
+                        backgroundColor: "rgba(52, 199, 89, 0.15)",
                         borderWidth: 1,
-                        borderColor: "rgba(52, 199, 89, 0.2)",
+                        borderColor: "#34C759",
                       }}
                     >
-                      <Text className="text-base" style={{ color: "#FFFFFF" }}>
-                        {aiPersonality || "No custom instructions yet"}
-                      </Text>
-                      <Text className="text-xs mt-1" style={{ color: "#34C759" }}>Tap to edit</Text>
-                    </Pressable>
-                  )}
+                      {updateAIFriendMutation.isPending ? (
+                        <LuxeLogoLoader size="small" />
+                      ) : (
+                        <Text className="font-semibold" style={{ color: "#34C759" }}>Save Settings</Text>
+                      )}
+                    </View>
+                  </Pressable>
 
                   {/* Tone Chips */}
                   <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
@@ -1851,8 +1773,8 @@ const GroupSettingsScreen = () => {
                 </View>
               )}
 
-              {/* Delete AI Friend Button - Only show if 2+ friends and user is creator */}
-              {aiFriends.length > 1 && isCreator && (
+              {/* Delete AI Friend Button - Only show if 2+ friends */}
+              {aiFriends.length > 1 && (
                 <Pressable
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -2137,6 +2059,60 @@ const GroupSettingsScreen = () => {
                   No custom commands yet. Tap + to create one!
                 </Text>
               )}
+            </View>
+
+            {/* Notifications Section */}
+            <View
+              className="rounded-2xl p-5 mb-4"
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                borderWidth: 1,
+                borderColor: "rgba(255, 255, 255, 0.2)",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 2,
+              }}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-3">
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: "rgba(79, 195, 247, 0.15)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {isMuted ? (
+                      <BellOff size={20} color="#4FC3F7" />
+                    ) : (
+                      <Bell size={20} color="#4FC3F7" />
+                    )}
+                  </View>
+                  <View>
+                    <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                      Mute Notifications
+                    </Text>
+                    <Text className="text-xs text-gray-400">
+                      Disable push notifications for this chat
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isMuted}
+                  onValueChange={(value) => {
+                    Haptics.selectionAsync();
+                    muteChatMutation.mutate({ chatId, isMuted: value });
+                  }}
+                  trackColor={{ false: "#3A3A3C", true: "#34C759" }}
+                  thumbColor={"#FFFFFF"}
+                  ios_backgroundColor="#3A3A3C"
+                />
+              </View>
             </View>
 
             {/* Members List */}

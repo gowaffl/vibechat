@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { MessageCircle, Users, X, ChevronRight, Search, Pin, LogOut } from "lucide-react-native";
+import { MessageCircle, Users, X, ChevronRight, Search, Pin, LogOut, Bell, BellOff } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import { TapGestureHandler, State } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
@@ -348,11 +348,35 @@ const ChatListScreen = () => {
     },
   });
 
+  // Mute chat mutation
+  const muteChatMutation = useMutation({
+    mutationFn: ({ chatId, isMuted }: { chatId: string; isMuted: boolean }) =>
+      api.patch(`/api/chats/${chatId}/mute`, { userId: user!.id, isMuted }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: any) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const errorMessage = error?.message || "Failed to update mute status";
+      Alert.alert("Error", errorMessage);
+    },
+  });
+
   const handlePinChat = () => {
     if (!contextMenuChat) return;
     pinChatMutation.mutate({
       chatId: contextMenuChat.id,
       isPinned: !contextMenuChat.isPinned,
+    });
+    setShowContextMenu(false);
+  };
+
+  const handleMuteChat = () => {
+    if (!contextMenuChat) return;
+    muteChatMutation.mutate({
+      chatId: contextMenuChat.id,
+      isMuted: !contextMenuChat.isMuted,
     });
     setShowContextMenu(false);
   };
@@ -403,13 +427,25 @@ const ChatListScreen = () => {
     );
   }, [chats, searchQuery]);
 
-  // Split chats into pinned and unpinned
+  // Split chats into pinned and unpinned and sort them
   const pinnedChats = React.useMemo(() => {
-    return filteredChats.filter((chat) => chat.isPinned);
+    const pinned = filteredChats.filter((chat) => chat.isPinned);
+    // Sort by lastMessageAt or createdAt, descending
+    return pinned.sort((a, b) => {
+      const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+      const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    });
   }, [filteredChats]);
 
   const unpinnedChats = React.useMemo(() => {
-    return filteredChats.filter((chat) => !chat.isPinned);
+    const unpinned = filteredChats.filter((chat) => !chat.isPinned);
+    // Sort by lastMessageAt or createdAt, descending
+    return unpinned.sort((a, b) => {
+      const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+      const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    });
   }, [filteredChats]);
 
   const renderChatItem = ({ item }: { item: ChatWithMetadata }) => {
@@ -1038,6 +1074,53 @@ const ChatListScreen = () => {
                           }}
                         >
                           {contextMenuChat?.isPinned ? "Unpin Chat" : "Pin Chat"}
+                        </Text>
+                      </View>
+                    </Pressable>
+
+                    {/* Mute/Unmute Option */}
+                    <Pressable
+                      onPress={handleMuteChat}
+                      style={({ pressed }) => ({
+                        backgroundColor: pressed ? "rgba(79, 195, 247, 0.15)" : "transparent",
+                        marginHorizontal: 12,
+                        borderRadius: 16,
+                        marginVertical: 4,
+                      })}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 20,
+                          paddingVertical: 18,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 21,
+                            backgroundColor: "rgba(79, 195, 247, 0.15)",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginRight: 16,
+                          }}
+                        >
+                          <GradientIcon
+                            icon={contextMenuChat?.isMuted ? <Bell size={22} color="#000" strokeWidth={2.5} /> : <BellOff size={22} color="#000" strokeWidth={2.5} />}
+                            style={{ width: 22, height: 22 }}
+                          />
+                        </View>
+                        <Text 
+                          style={{ 
+                            color: "#FFFFFF", 
+                            fontSize: 18, 
+                            fontWeight: "600",
+                            flex: 1,
+                          }}
+                        >
+                          {contextMenuChat?.isMuted ? "Unmute Chat" : "Mute Chat"}
                         </Text>
                       </View>
                     </Pressable>
