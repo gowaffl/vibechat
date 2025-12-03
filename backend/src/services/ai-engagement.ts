@@ -1,20 +1,19 @@
 /**
  * AI Engagement Service
  *
- * This service handles automatic AI engagement in chat conversations based on
- * the configured engagement mode and percentage. It runs in the background
- * and periodically checks for new messages that the AI should respond to.
+ * This service handles automatic AI engagement in chat conversations.
+ * It uses Supabase Realtime to listen for new messages instantly,
+ * calculates engagement probability based on context, and
+ * uses distributed locks to ensure safe concurrent execution.
  */
 
 import { db } from "../db";
+import { RealtimeChannel } from "@supabase/supabase-js";
 import {
   acquireAIResponseLock,
   releaseAIResponseLock,
-  acquireChatProcessingLock,
-  releaseChatProcessingLock,
   isInCooldown,
   updateLastResponseTime,
-  lastProcessedMessageId,
 } from "./ai-locks";
 import { executeGPT51Response } from "./gpt-responses";
 import { saveResponseImages } from "./image-storage";
@@ -25,24 +24,49 @@ import {
   logSafetyEvent,
 } from "./content-safety";
 
+// Subscription reference to keep connection alive
+let engagementSubscription: RealtimeChannel | null = null;
+
 /**
- * Check if AI should engage based on engagement settings
+ * Calculate weighted engagement probability based on context
  */
-function shouldAIEngage(mode: string, percent: number | null): boolean {
-  if (mode === "off") return false;
-  if (mode === "on-call") return false; // Only respond to @ai mentions
-  if (mode === "percentage" && percent !== null) {
-    // Generate random number 0-100 and check if it's less than the percentage
-    const roll = Math.random() * 100;
-    return roll < percent;
+function calculateEngagementProbability(
+  basePercent: number,
+  recentMessageCount: number,
+  timeSinceLastAIResponse: number,
+  messageContent: string,
+  timeSinceLastActivity: number
+): number {
+  let probability = basePercent;
+  
+  // Activity boost: +10% for every 3 messages in the last batch (capped at 30%)
+  probability += Math.min(30, Math.floor(recentMessageCount / 3) * 10);
+  
+  // Recency penalty: -20% if AI responded very recently (within 5 mins)
+  if (timeSinceLastAIResponse < 5 * 60 * 1000 && timeSinceLastAIResponse > 0) {
+    probability -= 20;
   }
-  return false;
+  
+  // Direct question boost: +30% if message ends with a question mark
+  if (messageContent && messageContent.trim().endsWith('?')) {
+    probability += 30;
+  }
+  
+  // Staleness boost: +15% if this is the first message after 30+ mins of silence
+  // (Helping to revive dead conversations)
+  if (timeSinceLastActivity > 30 * 60 * 1000) {
+    probability += 15;
+  }
+  
+  // Clamp between 0 and 100
+  return Math.max(0, Math.min(100, probability));
 }
 
 /**
  * Check if message contains @ai mention
  */
 function containsAIMention(content: string, aiName: string): boolean {
+  if (!content) return false;
   const normalizedContent = content.toLowerCase();
   const normalizedAiName = aiName.toLowerCase();
 
@@ -60,9 +84,8 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
   const requestId = `auto-${chatId}-${Date.now()}`;
   console.log(`[AI Engagement] [${requestId}] Auto-engagement triggered for chat ${chatId}, triggered by message ${triggerMessageId}, AI friend ${aiFriendId}`);
   
-  // RACE CONDITION PREVENTION: Acquire lock using shared lock module
-  // If lock acquisition fails, another response is already in progress
-  if (!acquireAIResponseLock(chatId)) {
+  // RACE CONDITION PREVENTION: Acquire distributed lock
+  if (!await acquireAIResponseLock(chatId)) {
     console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Lock already held for chat ${chatId} - response already in progress`);
     return;
   }
@@ -70,31 +93,13 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
   try {
     console.log(`[AI Engagement] [${requestId}] ✅ Lock acquired successfully for chat ${chatId}`);
 
-    // CRITICAL: Check if last message is from AI BEFORE doing anything else
-    // This is the FIRST check after acquiring the lock
-    const { data: lastMessageCheck } = await db
-      .from("message")
-      .select("*")
-      .eq("chatId", chatId)
-      .order("createdAt", { ascending: false })
-      .limit(1)
-      .single();
-
-    // AI messages are identified by having an aiFriendId (not by userId)
-    if (lastMessageCheck && lastMessageCheck.aiFriendId) {
-      console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Last message in chat ${chatId} is already from AI (messageId: ${lastMessageCheck.id}, aiFriendId: ${lastMessageCheck.aiFriendId}). AI cannot send consecutive messages.`);
+    // Double check cooldown (DB based now)
+    if (await isInCooldown(chatId)) {
+      console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Chat is in cooldown`);
       return;
     }
 
-    console.log(`[AI Engagement] [${requestId}] ✅ Last message check passed. Last message from: userId=${lastMessageCheck?.userId || "none"}, aiFriendId=${lastMessageCheck?.aiFriendId || "none"}`);
-
-
-    // Check cooldown - prevent AI from responding too frequently
-    if (isInCooldown(chatId)) {
-      return;
-    }
-
-    // Get the specific AI friend with chat
+    // Get the specific AI friend with chat details
     const { data: aiFriend } = await db
       .from("ai_friend")
       .select(`
@@ -111,7 +116,7 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
 
     const chat = Array.isArray(aiFriend.chat) ? aiFriend.chat[0] : aiFriend.chat;
 
-    // Fetch last 100 messages from this chat
+    // Fetch last 50 messages for context
     const { data: allMessages } = await db
       .from("message")
       .select(`
@@ -120,7 +125,7 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       `)
       .eq("chatId", chatId)
       .order("createdAt", { ascending: false })
-      .limit(100);
+      .limit(50);
 
     // Reverse to get chronological order
     const messagesInOrder = (allMessages || []).reverse().map((msg: any) => ({
@@ -128,37 +133,39 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       user: Array.isArray(msg.user) ? msg.user[0] : msg.user,
     }));
 
-    // Get AI name from AI friend (not chat)
+    // Verify last message isn't from AI (check DB again to be safe)
+    const lastMsg = messagesInOrder[messagesInOrder.length - 1];
+    if (lastMsg && lastMsg.aiFriendId) {
+       console.log(`[AI Engagement] [${requestId}] ❌ BLOCKED: Last message is from AI. Aborting.`);
+       return;
+    }
+
+    // Get AI name
     const aiName = aiFriend.name || "AI Friend";
 
-    // Extract unique participant names (exclude AI name and check for null user)
+    // Extract unique participant names
     const uniqueParticipants = Array.from(
       new Set(messagesInOrder.map((msg) => msg.user?.name).filter((name) => name && name !== aiName && name !== "AI Friend"))
     );
     const participantList = uniqueParticipants.join(", ");
 
-    // Build custom personality instruction if provided (from AI friend, not chat)
+    // Build personality instructions
     let personalityInstruction = "";
     if (aiFriend.personality) {
       personalityInstruction = `\n\nYour personality traits: ${aiFriend.personality}`;
     }
 
-    // Build tone instruction if provided (from AI friend, not chat)
     let toneInstruction = "";
     if (aiFriend.tone) {
       toneInstruction = `\nYour conversational tone: ${aiFriend.tone}`;
     }
 
-    // Analyze conversation recency and flow
+    // Analyze conversation flow
     const currentTime = new Date();
-    const lastMessage = messagesInOrder[messagesInOrder.length - 1];
-    const timeSinceLastMessage = lastMessage ? (currentTime.getTime() - new Date(lastMessage.createdAt).getTime()) / 1000 : 0;
-
-    // Get last 10 messages with more weight on recent ones
     const recentMessages = messagesInOrder.slice(-10);
     const lastFiveMessages = messagesInOrder.slice(-5);
 
-    // Helper function to format link preview context
+    // Helper to format link context
     const formatLinkContext = (msg: any): string => {
       if (msg.linkPreviewTitle || msg.linkPreviewDescription) {
         const title = msg.linkPreviewTitle || msg.linkPreviewSiteName || "Link";
@@ -168,7 +175,7 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       return "";
     };
 
-    // Format recent conversation context
+    // Format context
     const recentContextText = lastFiveMessages
       .map((msg) => {
         const userName = msg.user?.name || "Unknown";
@@ -185,7 +192,6 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       })
       .join("\n");
 
-    // Format earlier context (messages 5-10 from the end) - include image/link context
     const earlierContext = recentMessages.slice(0, -5);
     const earlierContextText = earlierContext.length > 0
       ? earlierContext
@@ -203,10 +209,10 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
           .join("\n")
       : "";
 
-    // Get safety system prompt (CRIT-1)
-    const safetyInstructions = getSafetySystemPrompt(false); // Default to adult content restrictions for auto-engagement
+    // Safety instructions
+    const safetyInstructions = getSafetySystemPrompt(false);
 
-    // Create an enhanced, natural system prompt with safety instructions
+    // System Prompt
     const systemPrompt = `${safetyInstructions}
 
 You are ${aiName}, a friend in this group chat. You're part of the conversation naturally - think of yourself as another person in the group, not a formal AI friend.
@@ -246,6 +252,7 @@ Friends in chat: ${participantList}${personalityInstruction}${toneInstruction}
 - Start naturally: "oh yeah," "totally," "wait," "hmm," "nah"
 - Show personality, be authentic
 - Use the person's name casually if responding to them
+- NEVER announce what you're doing - don't say "I'll jump in" or "I'll stay quiet" or explain your participation. Just talk naturally in the flow of conversation.
 
 # Current Conversation
 
@@ -254,7 +261,6 @@ ${recentContextText}
 
 Should you jump in? If yes, what would you naturally say as a friend? Keep it brief and real.`;
 
-    // Construct a more natural user input
     const userInput = `Based on the conversation, should you respond? If yes, say something brief and natural. If not, stay quiet.`;
 
     const tools: any[] = [
@@ -273,19 +279,11 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
       maxTokens: 2048,
     });
 
-    console.log(
-      "[AI Engagement] Response received successfully with status:",
-      response.status,
-      "and",
-      response.images.length,
-      "image(s)"
-    );
-
     const savedImageUrls = await saveResponseImages(response.images, "ai-auto");
     const primaryImageUrl = savedImageUrls[0] ?? null;
     let aiResponseText = response.content?.trim() || "";
 
-    // CRIT-1: Filter AI output for safety before saving
+    // Filter AI output
     if (aiResponseText) {
       const outputFilter = filterAIOutput(aiResponseText);
       if (outputFilter.wasModified) {
@@ -299,10 +297,7 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
       return;
     }
 
-    // CRITICAL DOUBLE-CHECK: Verify AGAIN that last message isn't from AI
-    // This catches race conditions where an AI message was created between
-    // the initial check and now (after OpenAI API call completed)
-    console.log(`[AI Engagement] [${requestId}] Performing final check before saving AI message...`);
+    // Final check for race conditions
     const { data: finalCheck } = await db
       .from("message")
       .select("*")
@@ -311,16 +306,13 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
       .limit(1)
       .single();
 
-    // AI messages are identified by having an aiFriendId (not by userId)
     if (finalCheck && finalCheck.aiFriendId) {
-      console.log(`[AI Engagement] [${requestId}] ⚠️ RACE CONDITION DETECTED! Last message in chat ${chatId} is now from AI (messageId: ${finalCheck.id}, aiFriendId: ${finalCheck.aiFriendId}). Aborting to prevent duplicate.`);
+      console.log(`[AI Engagement] [${requestId}] ⚠️ RACE CONDITION: Last message is from AI. Aborting.`);
       return;
     }
 
-    console.log(`[AI Engagement] [${requestId}] ✅ Final check passed. Saving AI message to database...`);
+    console.log(`[AI Engagement] [${requestId}] ✅ Saving AI message...`);
 
-    // Create the AI's message in the database with aiFriendId
-    // NOTE: userId is set to null for AI messages - the aiFriendId identifies which AI sent it
     const { data: aiMessage, error: insertError } = await db
       .from("message")
       .insert({
@@ -339,219 +331,168 @@ Should you jump in? If yes, what would you naturally say as a friend? Keep it br
       return;
     }
 
-    // Auto-tag AI message for smart threads (fire-and-forget, immediate)
+    // Auto-tag
     if (aiResponseText && aiResponseText.trim().length > 0) {
       tagMessage(aiMessage.id, aiResponseText).catch(error => {
         console.error(`[AI Engagement] Failed to tag message ${aiMessage.id}:`, error);
       });
     }
 
-    // Update the last AI response time for this chat
-    updateLastResponseTime(chatId);
+    // Update last response time for this friend/chat
+    await updateLastResponseTime(chatId, aiFriendId);
 
-    console.log(`[AI Engagement] AI response saved to database for chat ${chatId}`);
+    console.log(`[AI Engagement] AI response saved for chat ${chatId}`);
   } catch (error) {
     console.error("[AI Engagement] Error generating AI response:", error);
   } finally {
-    // Always release the lock, even if there was an error
-    releaseAIResponseLock(chatId);
+    await releaseAIResponseLock(chatId);
   }
 }
 
 /**
- * Process new messages for a chat and determine if AI should engage
+ * Handle a new message event from Realtime
  */
-async function processNewMessages(chatId: string): Promise<void> {
-  // PREVENT CONCURRENT PROCESSING: If this chat is already being processed, skip it
-  if (!acquireChatProcessingLock(chatId)) {
-    console.log(`[AI Engagement] Chat ${chatId} is already being processed, skipping`);
+async function handleNewMessage(payload: any) {
+  const { chatId, id: messageId, content, userId, createdAt } = payload.new || payload;
+  
+  if (!chatId || !content) return;
+
+  // Skip if we can't verify parameters
+  if (!userId) {
+    // Sometimes payload structure varies, try to fetch if needed
+    // But usually payload.new has the row
+  }
+
+  console.log(`[AI Engagement] Processing new message ${messageId} in chat ${chatId}`);
+
+  // 1. Check Cooldown First
+  if (await isInCooldown(chatId)) {
+    console.log(`[AI Engagement] Chat ${chatId} is in cooldown, skipping`);
     return;
   }
 
-  try {
-    // Get all AI friends for this chat
-    const { data: aiFriends } = await db
-      .from("ai_friend")
-      .select("*")
-      .eq("chatId", chatId)
-      .order("sortOrder", { ascending: true });
+  // 2. Get AI Friends for this chat
+  const { data: aiFriends } = await db
+    .from("ai_friend")
+    .select("*")
+    .eq("chatId", chatId)
+    .order("sortOrder", { ascending: true });
 
-    if (!aiFriends || aiFriends.length === 0) {
-      console.log(`[AI Engagement] No AI friends found for chat ${chatId}`);
-      return;
+  if (!aiFriends || aiFriends.length === 0) return;
+
+  // 3. Check for Mentions (Skip if mentioned, frontend handles it)
+  let hasMention = false;
+  for (const friend of aiFriends) {
+    if (containsAIMention(content, friend.name)) {
+      hasMention = true;
+      break;
     }
+  }
 
-    // Check if ANY AI friend has engagement enabled
-    const hasEngagementEnabled = aiFriends.some(
-      (friend) => friend.engagementMode === "percentage"
-    );
+  if (hasMention) {
+    console.log(`[AI Engagement] Skipping mention in chat ${chatId} - handled by frontend`);
+    return;
+  }
 
-    if (!hasEngagementEnabled) {
-      return; // No AI friends have auto-engagement enabled
-    }
+  // 4. Check qualifying friends based on Smart Probability
+  const qualifyingFriends: any[] = [];
+  
+  // We need some stats for probability calculation
+  // Let's get recent message count and time since last activity
+  const { count: recentCount } = await db
+    .from("message")
+    .select("*", { count: "exact", head: true })
+    .eq("chatId", chatId)
+    .gt("createdAt", new Date(Date.now() - 10 * 60 * 1000).toISOString()); // Last 10 mins
 
-    // Check if the last message in the chat is from the AI
-    // If so, do NOT respond until a user sends a message
-    const { data: lastMessage } = await db
-      .from("message")
-      .select("*")
-      .eq("chatId", chatId)
-      .order("createdAt", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  // Calculate time since last activity (roughly, based on this message vs previous)
+  // We can assume "now" vs "createdAt" of this message is negligible for realtime
+  // But we might want to know the gap BEFORE this message.
+  // For simplicity, we'll use the timestamp of the message before this one.
+  const { data: prevMessage } = await db
+    .from("message")
+    .select("createdAt")
+    .eq("chatId", chatId)
+    .lt("createdAt", createdAt)
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .single();
 
-    // AI messages are identified by having an aiFriendId (not by userId)
-    if (lastMessage && lastMessage.aiFriendId) {
-      console.log(`[AI Engagement] Last message in chat ${chatId} is from AI (aiFriendId: ${lastMessage.aiFriendId}). Waiting for user interaction.`);
-      return;
-    }
+  const timeSinceLastActivity = prevMessage 
+    ? new Date(createdAt).getTime() - new Date(prevMessage.createdAt).getTime()
+    : 0;
 
-    // Get the last processed message ID for this chat
-    const lastProcessed = lastProcessedMessageId.get(chatId);
-
-    let query = db
-      .from("message")
-      .select("*")
-      .eq("chatId", chatId)
-      .is("aiFriendId", null) // Don't respond to AI messages (identified by aiFriendId being set)
-      .neq("messageType", "system") // Don't respond to system messages
-      .order("createdAt", { ascending: true })
-      .limit(10); // Process up to 10 new messages at a time
-
-    // If we have a lastProcessed message, only get messages after it
-    if (lastProcessed) {
-      const { data: lastProcessedMsg } = await db
-        .from("message")
-        .select("createdAt")
-        .eq("id", lastProcessed)
-        .single();
+  for (const friend of aiFriends) {
+    if (friend.engagementMode === "percentage" && friend.engagementPercent !== null) {
       
-      if (lastProcessedMsg?.createdAt) {
-        query = query.gt("createdAt", lastProcessedMsg.createdAt);
-      }
-    } else {
-      // INITIALIZATION CASE:
-      // If we haven't processed this chat yet (e.g. server restart),
-      // we only want to pick up messages from the last 2 minutes.
-      // This prevents replying to old messages while ensuring we catch
-      // "just sent" messages if the server just restarted.
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-      query = query.gt("createdAt", twoMinutesAgo);
-    }
+      const timeSinceLastAIResponse = friend.last_response_at 
+        ? Date.now() - new Date(friend.last_response_at).getTime()
+        : 1000000; // Long time ago
 
-    const { data: newMessages } = await query;
+      const probability = calculateEngagementProbability(
+        friend.engagementPercent,
+        recentCount || 0,
+        timeSinceLastAIResponse,
+        content,
+        timeSinceLastActivity
+      );
 
-    if (!newMessages || newMessages.length === 0) {
-      // If no new/recent messages found on init, we still need a cursor
-      // to avoid querying "last 2 mins" forever.
-      if (!lastProcessed) {
-        const { data: latestMsg } = await db
-          .from("message")
-          .select("id")
-          .eq("chatId", chatId)
-          .order("createdAt", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (latestMsg) {
-          console.log(`[AI Engagement] Initializing cursor for chat ${chatId} to latest message ${latestMsg.id}`);
-          lastProcessedMessageId.set(chatId, latestMsg.id);
-        }
-      }
-      return;
-    }
+      console.log(`[AI Engagement] Friend ${friend.name}: Probability calculated: ${probability}% (Base: ${friend.engagementPercent}%)`);
 
-    // Check each message for automatic engagement
-    // NOTE: We deliberately SKIP @mentions here because they are handled
-    // by the frontend's direct API call to /api/ai/chat. This prevents double responses.
-    for (const message of newMessages) {
-      // Update cursor as we process each message
-      // This ensures that if we exit early (e.g. after responding), 
-      // we resume from the correct spot next time
-      lastProcessedMessageId.set(chatId, message.id);
-
-      // Check if message contains any AI friend mentions
-      let hasMention = false;
-      for (const friend of aiFriends) {
-        if (containsAIMention(message.content, friend.name)) {
-          hasMention = true;
-          break;
-        }
-      }
-
-      // SKIP mentions - they're handled by the frontend to prevent double responses
-      if (hasMention) {
-        console.log(`[AI Engagement] Skipping AI friend mention in chat ${chatId} - handled by frontend`);
-        continue; // Skip this message, continue to next
-      }
-
-      // Collect AI friends that qualify for auto-engagement on this message
-      const qualifyingFriends: any[] = [];
-      
-      for (const friend of aiFriends) {
-        // Check for automatic engagement based on percentage
-        if (friend.engagementMode === "percentage" && friend.engagementPercent !== null) {
-          if (shouldAIEngage(friend.engagementMode, friend.engagementPercent)) {
-            qualifyingFriends.push(friend);
-          }
-        }
-      }
-
-      // If multiple AI friends qualify, select one randomly
-      // This ensures only ONE AI friend responds per message
-      if (qualifyingFriends.length > 0) {
-        const selectedFriend = qualifyingFriends[Math.floor(Math.random() * qualifyingFriends.length)];
-        console.log(`[AI Engagement] Automatic engagement triggered for chat ${chatId} with AI friend ${selectedFriend.name} (${selectedFriend.engagementPercent}% chance, ${qualifyingFriends.length} qualified)`);
-        await generateAIResponse(chatId, message.id, selectedFriend.id);
-        return; // Only respond once per polling cycle
+      // Roll the dice
+      const roll = Math.random() * 100;
+      if (roll < probability) {
+        qualifyingFriends.push(friend);
       }
     }
-  } catch (error) {
-    console.log(`[AI Engagement] Error processing messages for chat ${chatId}:`, error);
-  } finally {
-    // Always release the processing lock
-    releaseChatProcessingLock(chatId);
+  }
+
+  // 5. Select one and engage
+  if (qualifyingFriends.length > 0) {
+    const selectedFriend = qualifyingFriends[Math.floor(Math.random() * qualifyingFriends.length)];
+    console.log(`[AI Engagement] 🎲 Winner: ${selectedFriend.name} for chat ${chatId}`);
+    
+    // Fire and forget response generation (it handles locking)
+    generateAIResponse(chatId, messageId, selectedFriend.id).catch(err => {
+      console.error("[AI Engagement] Background generation failed:", err);
+    });
   }
 }
 
 /**
- * Main polling loop - checks all active chats for new messages
- */
-export async function pollForEngagement() {
-  try {
-    // Get all chats that have at least one AI friend with engagement enabled
-    const { data: aiFriendsWithEngagement } = await db
-      .from("ai_friend")
-      .select("chatId")
-      .eq("engagementMode", "percentage");
-
-    if (!aiFriendsWithEngagement || aiFriendsWithEngagement.length === 0) {
-      return;
-    }
-
-    // Get unique chat IDs
-    const uniqueChatIds = [...new Set(aiFriendsWithEngagement.map((af: any) => af.chatId))];
-
-    // Process each chat
-    for (const chatId of uniqueChatIds) {
-      await processNewMessages(chatId);
-    }
-  } catch (error) {
-    console.error("[AI Engagement] Error in polling loop:", error);
-  }
-}
-
-/**
- * Start the AI engagement polling service
- * Polls every 5 seconds for new messages to engage with
+ * Start the AI engagement service (Realtime Listener)
  */
 export function startAIEngagementService() {
-  console.log("[AI Engagement] Starting AI engagement service...");
+  console.log("[AI Engagement] Starting Realtime engagement service...");
 
-  // Poll every 5 seconds
-  setInterval(pollForEngagement, 5000);
+  // Unsubscribe if existing
+  if (engagementSubscription) {
+    engagementSubscription.unsubscribe();
+  }
 
-  // Run immediately on start
-  pollForEngagement();
+  // Subscribe to INSERT events on the message table
+  engagementSubscription = db
+    .channel('ai-engagement-service')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'message',
+      },
+      (payload) => {
+        // Only process user messages, not AI messages or system messages
+        // payload.new contains the new record
+        const newMsg = payload.new as any;
+        
+        if (newMsg && !newMsg.aiFriendId && newMsg.messageType !== 'system') {
+          handleNewMessage(payload);
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log(`[AI Engagement] Subscription status: ${status}`);
+    });
+    
+  console.log("[AI Engagement] Listening for new messages...");
 }
-

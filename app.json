@@ -20,7 +20,9 @@
         "NSRemindersUsageDescription": "VibeChat needs access to reminders to help you keep track of important group events.",
         "NSRemindersFullAccessUsageDescription": "VibeChat needs full reminders access to create and manage tasks for your group chats.",
         "NSPhotoLibraryUsageDescription": "VibeChat needs access to your photos to let you save and share them.",
-        "NSPhotoLibraryAddUsageDescription": "VibeChat needs permission to save images to your gallery."
+        "NSPhotoLibraryAddUsageDescription": "VibeChat needs permission to save images to your gallery.",
+        "NSCameraUsageDescription": "VibeChat needs access to your camera to let you take photos and videos to share in chats.",
+        "NSMicrophoneUsageDescription": "VibeChat needs access to your microphone to record audio for videos and voice messages."
       },
       "entitlements": {
         "aps-environment": "development"

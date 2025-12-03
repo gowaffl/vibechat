@@ -1929,7 +1929,7 @@ const ChatScreen = () => {
     const query = searchQuery.toLowerCase();
     return messages.filter(msg => 
       msg.content?.toLowerCase().includes(query) ||
-      msg.user.name.toLowerCase().includes(query)
+      msg.user?.name?.toLowerCase().includes(query)
     );
   }, [messages, searchQuery]);
 
@@ -5297,85 +5297,93 @@ const ChatScreen = () => {
             timestamp={messageTime}
             isCurrentUser={isCurrentUser}
           >
-            <Pressable
-              onLongPress={() => !selectionMode && handleLongPress(message)}
-              onPress={() => selectionMode && toggleMessageSelection(message.id)}
-            >
-              {renderMessageContent()}
-            </Pressable>
-          </SwipeableMessage>
-          {/* Reactions */}
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              marginTop: 4,
-              gap: 4,
-              marginLeft: 8,
-            }}
-          >
-            {message.reactions && message.reactions.length > 0 && (
-              <>
-                {Object.entries(
-                  message.reactions.reduce((acc, reaction) => {
-                    if (!acc[reaction.emoji]) {
-                      acc[reaction.emoji] = {
-                        count: 0,
-                        userReacted: false,
-                      };
-                    }
-                    acc[reaction.emoji].count++;
-                    if (reaction.userId === user?.id) {
-                      acc[reaction.emoji].userReacted = true;
-                    }
-                    return acc;
-                  }, {} as Record<string, { count: number; userReacted: boolean }>)
-                ).map(([emoji, { count, userReacted }]) => {
-                  const reactionsForEmoji = message.reactions!.filter(r => r.emoji === emoji);
-                  return (
-                    <Pressable
-                      key={emoji}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        handleSelectEmoji(emoji, message);
-                      }}
-                      onLongPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        setReactionDetailsModal({ emoji, reactions: reactionsForEmoji });
-                      }}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                        borderRadius: 12,
-                        backgroundColor: userReacted
-                          ? "rgba(0, 122, 255, 0.2)"
-                          : "rgba(255, 255, 255, 0.1)",
-                        borderWidth: 1,
-                        borderColor: userReacted
-                          ? "#007AFF"
-                          : "rgba(255, 255, 255, 0.2)",
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 4,
-                        transform: [{ scale: pressed ? 1.15 : 1 }],
-                      })}
-                    >
-                      <Text style={{ fontSize: 14 }}>{emoji}</Text>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: userReacted ? "#007AFF" : "#FFFFFF",
-                          fontWeight: userReacted ? "600" : "400",
+            <View>
+              <Pressable
+                onLongPress={() => !selectionMode && handleLongPress(message)}
+                onPress={() => selectionMode && toggleMessageSelection(message.id)}
+              >
+                {renderMessageContent()}
+              </Pressable>
+              {/* Reactions */}
+              {message.reactions && message.reactions.length > 0 && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    marginTop: -10, // Slight overlap with message bubble
+                    gap: 4,
+                    marginLeft: isCurrentUser ? 0 : 12, // Indent slightly from left for others
+                    marginRight: isCurrentUser ? 12 : 0, // Indent slightly from right for me
+                    justifyContent: isCurrentUser ? "flex-end" : "flex-start",
+                    zIndex: 10, // Ensure it sits on top of the bubble
+                  }}
+                >
+                  {Object.entries(
+                    message.reactions.reduce((acc, reaction) => {
+                      if (!acc[reaction.emoji]) {
+                        acc[reaction.emoji] = {
+                          count: 0,
+                          userReacted: false,
+                        };
+                      }
+                      acc[reaction.emoji].count++;
+                      if (reaction.userId === user?.id) {
+                        acc[reaction.emoji].userReacted = true;
+                      }
+                      return acc;
+                    }, {} as Record<string, { count: number; userReacted: boolean }>)
+                  ).map(([emoji, { count, userReacted }]) => {
+                    const reactionsForEmoji = message.reactions!.filter(r => r.emoji === emoji);
+                    return (
+                      <Pressable
+                        key={emoji}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          handleSelectEmoji(emoji, message);
                         }}
+                        onLongPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          setReactionDetailsModal({ emoji, reactions: reactionsForEmoji });
+                        }}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 6,
+                          paddingVertical: 3,
+                          borderRadius: 16, // Pill shape
+                          backgroundColor: "rgba(36, 36, 36, 0.95)", // Dark opaque background to hide bubble border underneath
+                          borderWidth: 1,
+                          borderColor: userReacted
+                            ? "#007AFF"
+                            : "rgba(255, 255, 255, 0.1)",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                          transform: [{ scale: pressed ? 1.15 : 1 }],
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 2,
+                          elevation: 2,
+                        })}
                       >
-                        {count}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </>
-            )}
-          </View>
+                        <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                        {count > 1 && (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: userReacted ? "#007AFF" : "#AAAAAA",
+                              fontWeight: userReacted ? "600" : "500",
+                            }}
+                          >
+                            {count}
+                          </Text>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          </SwipeableMessage>
         </View>
       </Reanimated.View>
     );
