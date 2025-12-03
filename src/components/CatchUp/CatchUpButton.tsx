@@ -64,6 +64,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
         // Only respond to horizontal swipes
         return Math.abs(gestureState.dx) > 5;
       },
+      onPanResponderTerminationRequest: () => false, // Prevent other responders from stealing the gesture
       onPanResponderGrant: () => {
         Haptics.selectionAsync();
       },

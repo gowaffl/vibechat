@@ -1799,6 +1799,32 @@ const ChatScreen = () => {
 
   // AI Super Features hooks
   const { cachedSummary, generateCatchUp, clearCachedSummary, isGenerating: isGeneratingCatchUp, error: catchUpError } = useCatchUp(chatId || "", user?.id || "");
+  
+  // Handle Catch Up Dismissal
+  const handleCatchUpDismiss = useCallback(async () => {
+    setCatchUpDismissed(true);
+    try {
+      if (chatId) {
+        await AsyncStorage.setItem(`catchup_dismissed_${chatId}`, "true");
+        await AsyncStorage.setItem(`catchup_last_count_${chatId}`, currentChatUnreadCount.toString());
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } catch (error) {
+      console.error("[ChatScreen] Failed to save catch-up dismiss state:", error);
+    }
+  }, [chatId, currentChatUnreadCount]);
+
+  // Handle Catch Up Errors
+  useEffect(() => {
+    if (catchUpError) {
+      Alert.alert(
+        "Catch Up Failed",
+        "We couldn't generate your summary at this time. Please try again later.",
+        [{ text: "OK" }]
+      );
+    }
+  }, [catchUpError]);
+
   const { events, createEvent, vote, rsvp, exportEvent, deleteEvent, updateEvent, isLoading: isLoadingEvents, isCreating: isCreatingEvent } = useEvents(chatId || "", user?.id || "");
   const { polls, createPoll, vote: votePoll, isCreating: isCreatingPoll, isVoting: isVotingPoll } = usePolls(chatId || "", user?.id || "");
   const { 
@@ -7053,6 +7079,10 @@ const ChatScreen = () => {
           visible={showCatchUpModal}
           onClose={() => {
             setShowCatchUpModal(false);
+            // If we have a summary, dismiss the badge since user has viewed/generated one
+            if (cachedSummary) {
+              handleCatchUpDismiss();
+            }
             // Clear the cached summary so user sees selection screen next time
             clearCachedSummary();
           }}
@@ -7135,16 +7165,7 @@ const ChatScreen = () => {
             // Just open the modal - user will select summary type inside
             setShowCatchUpModal(true);
           }}
-          onDismiss={async () => {
-            setCatchUpDismissed(true);
-            try {
-              await AsyncStorage.setItem(`catchup_dismissed_${chatId}`, "true");
-              await AsyncStorage.setItem(`catchup_last_count_${chatId}`, currentChatUnreadCount.toString());
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            } catch (error) {
-              console.error("[ChatScreen] Failed to save catch-up dismiss state:", error);
-            }
-          }}
+          onDismiss={handleCatchUpDismiss}
         />
 
         {/* Events Modal */}
