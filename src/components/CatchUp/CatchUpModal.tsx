@@ -118,6 +118,12 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   };
 
   // PanResponder for swipe-down gesture
+  // We use a ref to hold the latest onClose callback to avoid stale closures in PanResponder
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -133,7 +139,10 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
         if (gestureState.dy > 100 || gestureState.vy > 0.5) {
           // Light feedback on dismiss
           Haptics.selectionAsync();
-          onClose();
+          // Use the ref to ensure we call the latest callback
+          if (onCloseRef.current) {
+            onCloseRef.current();
+          }
           Animated.spring(dragY, {
             toValue: 0,
             stiffness: 800,
