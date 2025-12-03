@@ -158,41 +158,65 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
 
     console.log("[Reactor] Original message found:", originalMessage.id);
 
-    // Read the original image from disk and convert to base64
-    const imagePath = originalMessage.imageUrl.startsWith('http') 
-      ? null 
-      : `./uploads/${originalMessage.imageUrl.split('/uploads/')[1]}`;
-    
-    if (!imagePath) {
-      console.error("[Reactor] Cannot remix external images");
-      return c.json({ error: "Can only remix uploaded images" }, 400);
-    }
-
-    console.log("[Reactor] Reading original image from:", imagePath);
-    
+    // Read the original image (from Supabase Storage URL or local disk) and convert to base64
     let originalImageBase64: string;
     let mimeType: string;
     
     try {
-      const fs = await import("fs/promises");
-      const imageBuffer = await fs.readFile(imagePath);
-      originalImageBase64 = imageBuffer.toString('base64');
+      let imageBuffer: Buffer;
       
-      // Determine mime type from file extension
-      if (imagePath.endsWith('.png')) {
-        mimeType = 'image/png';
-      } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
-        mimeType = 'image/jpeg';
-      } else if (imagePath.endsWith('.webp')) {
-        mimeType = 'image/webp';
+      // Check if image is from Supabase Storage (starts with http/https)
+      if (originalMessage.imageUrl.startsWith('http')) {
+        console.log("[Reactor] Fetching image from Supabase Storage:", originalMessage.imageUrl);
+        
+        // Fetch the image from Supabase Storage
+        const imageResponse = await fetch(originalMessage.imageUrl);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
+        }
+        
+        // Convert response to buffer
+        const arrayBuffer = await imageResponse.arrayBuffer();
+        imageBuffer = Buffer.from(arrayBuffer);
+        
+        // Determine mime type from Content-Type header or URL
+        const contentType = imageResponse.headers.get('content-type');
+        if (contentType) {
+          mimeType = contentType;
+        } else if (originalMessage.imageUrl.includes('.png')) {
+          mimeType = 'image/png';
+        } else if (originalMessage.imageUrl.includes('.jpg') || originalMessage.imageUrl.includes('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (originalMessage.imageUrl.includes('.webp')) {
+          mimeType = 'image/webp';
+        } else {
+          mimeType = 'image/png'; // default
+        }
       } else {
-        mimeType = 'image/png'; // default
+        // Local file path (legacy support)
+        const imagePath = `./uploads/${originalMessage.imageUrl.split('/uploads/')[1]}`;
+        console.log("[Reactor] Reading local image from:", imagePath);
+        
+        const fs = await import("fs/promises");
+        imageBuffer = await fs.readFile(imagePath);
+        
+        // Determine mime type from file extension
+        if (imagePath.endsWith('.png')) {
+          mimeType = 'image/png';
+        } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (imagePath.endsWith('.webp')) {
+          mimeType = 'image/webp';
+        } else {
+          mimeType = 'image/png'; // default
+        }
       }
       
+      originalImageBase64 = imageBuffer.toString('base64');
       console.log("[Reactor] Original image loaded, size:", imageBuffer.length, "bytes, type:", mimeType);
     } catch (readError) {
-      console.error("[Reactor] Failed to read original image:", readError);
-      return c.json({ error: "Failed to read original image" }, 500);
+      console.error("[Reactor] Failed to load original image:", readError);
+      return c.json({ error: "Failed to load original image" }, 500);
     }
 
     // Use Gemini 3 Pro Image Preview to EDIT the original image based on the remix prompt
@@ -395,41 +419,65 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
 
     console.log("[Reactor] Original message found:", originalMessage.id);
 
-    // Read the original image from disk and convert to base64
-    const imagePath = originalMessage.imageUrl.startsWith('http') 
-      ? null 
-      : `./uploads/${originalMessage.imageUrl.split('/uploads/')[1]}`;
-    
-    if (!imagePath) {
-      console.error("[Reactor] Cannot create meme from external images");
-      return c.json({ error: "Can only create memes from uploaded images" }, 400);
-    }
-
-    console.log("[Reactor] Reading original image from:", imagePath);
-    
+    // Read the original image (from Supabase Storage URL or local disk) and convert to base64
     let originalImageBase64: string;
     let mimeType: string;
     
     try {
-      const fs = await import("fs/promises");
-      const imageBuffer = await fs.readFile(imagePath);
-      originalImageBase64 = imageBuffer.toString('base64');
+      let imageBuffer: Buffer;
       
-      // Determine mime type from file extension
-      if (imagePath.endsWith('.png')) {
-        mimeType = 'image/png';
-      } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
-        mimeType = 'image/jpeg';
-      } else if (imagePath.endsWith('.webp')) {
-        mimeType = 'image/webp';
+      // Check if image is from Supabase Storage (starts with http/https)
+      if (originalMessage.imageUrl.startsWith('http')) {
+        console.log("[Reactor] Fetching image from Supabase Storage:", originalMessage.imageUrl);
+        
+        // Fetch the image from Supabase Storage
+        const imageResponse = await fetch(originalMessage.imageUrl);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
+        }
+        
+        // Convert response to buffer
+        const arrayBuffer = await imageResponse.arrayBuffer();
+        imageBuffer = Buffer.from(arrayBuffer);
+        
+        // Determine mime type from Content-Type header or URL
+        const contentType = imageResponse.headers.get('content-type');
+        if (contentType) {
+          mimeType = contentType;
+        } else if (originalMessage.imageUrl.includes('.png')) {
+          mimeType = 'image/png';
+        } else if (originalMessage.imageUrl.includes('.jpg') || originalMessage.imageUrl.includes('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (originalMessage.imageUrl.includes('.webp')) {
+          mimeType = 'image/webp';
+        } else {
+          mimeType = 'image/png'; // default
+        }
       } else {
-        mimeType = 'image/png'; // default
+        // Local file path (legacy support)
+        const imagePath = `./uploads/${originalMessage.imageUrl.split('/uploads/')[1]}`;
+        console.log("[Reactor] Reading local image from:", imagePath);
+        
+        const fs = await import("fs/promises");
+        imageBuffer = await fs.readFile(imagePath);
+        
+        // Determine mime type from file extension
+        if (imagePath.endsWith('.png')) {
+          mimeType = 'image/png';
+        } else if (imagePath.endsWith('.jpg') || imagePath.endsWith('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (imagePath.endsWith('.webp')) {
+          mimeType = 'image/webp';
+        } else {
+          mimeType = 'image/png'; // default
+        }
       }
       
+      originalImageBase64 = imageBuffer.toString('base64');
       console.log("[Reactor] Original image loaded for meme, size:", imageBuffer.length, "bytes, type:", mimeType);
     } catch (readError) {
-      console.error("[Reactor] Failed to read original image:", readError);
-      return c.json({ error: "Failed to read original image" }, 500);
+      console.error("[Reactor] Failed to load original image:", readError);
+      return c.json({ error: "Failed to load original image" }, 500);
     }
 
     // Generate meme using Gemini 3 Pro Image Preview - transform the original image into a meme

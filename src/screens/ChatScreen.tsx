@@ -126,7 +126,7 @@ const ChatHeader = ({
         top: 0,
         left: 0,
         right: 0,
-        height: 85 + insets.top,
+        height: 70 + insets.top,
         zIndex: 100,
       }}
     >
@@ -171,7 +171,7 @@ const ChatHeader = ({
           justifyContent: 'space-between',
           paddingTop: insets.top + 2,
           paddingHorizontal: 14,
-          paddingBottom: 4,
+          paddingBottom: 2,
         }}
       >
         {/* Left Button - Back to Chat List */}
@@ -193,7 +193,7 @@ const ChatHeader = ({
           }}
         >
           <View
-            className="w-8 h-8 rounded-full items-center justify-center"
+            className="w-9 h-9 rounded-full items-center justify-center"
             style={{
               backgroundColor: "rgba(255, 255, 255, 0.15)",
               shadowColor: "#000",
@@ -202,7 +202,7 @@ const ChatHeader = ({
               shadowRadius: 2,
             }}
           >
-            <ChevronLeft size={20} color="#FFFFFF" strokeWidth={2.5} />
+            <ChevronLeft size={22} color="#FFFFFF" strokeWidth={2.5} />
           </View>
         </Pressable>
 
@@ -221,9 +221,9 @@ const ChatHeader = ({
               <Image
                 source={{ uri: groupImageUrl }}
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
                   marginBottom: 2,
                 }}
                 contentFit="cover"
@@ -231,21 +231,21 @@ const ChatHeader = ({
             ) : (
               <View
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
                   backgroundColor: "rgba(255, 255, 255, 0.15)",
                   alignItems: "center",
                   justifyContent: "center",
                   marginBottom: 2,
                 }}
               >
-                <Users size={20} color="#FFFFFF" />
+                <Users size={24} color="#FFFFFF" />
               </View>
             )}
             {/* Group Name */}
             <Text
-              className="text-xs font-semibold"
+              className="text-sm font-semibold"
               style={{ color: "#FFFFFF" }}
               numberOfLines={1}
             >
@@ -262,7 +262,7 @@ const ChatHeader = ({
           }}
         >
           <View
-            className="w-8 h-8 rounded-full items-center justify-center"
+            className="w-9 h-9 rounded-full items-center justify-center"
             style={{
               backgroundColor: "rgba(255, 255, 255, 0.15)",
               shadowColor: "#000",
@@ -271,7 +271,7 @@ const ChatHeader = ({
               shadowRadius: 2,
             }}
           >
-            <MoreVertical size={18} color="#FFFFFF" />
+            <MoreVertical size={20} color="#FFFFFF" />
           </View>
         </Pressable>
       </View>
@@ -289,7 +289,7 @@ const ChatHeader = ({
             backgroundColor: "rgba(0, 0, 0, 0.5)",
             justifyContent: "flex-start",
             alignItems: "flex-end",
-            paddingTop: insets.top + 50,
+            paddingTop: insets.top + 43,
             paddingRight: 16,
           }}
           onPress={() => setShowOptionsMenu(false)}
@@ -506,10 +506,10 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
   // AI always uses the VibeChat icon
   if (isAI) {
     return (
-      <View className="mr-2" style={{ width: 32, height: 32 }}>
+      <View className="mr-2" style={{ width: 34, height: 34 }}>
         <Image
           source={require("../../assets/vibechat icon main.png")}
-          style={{ width: 32, height: 32, borderRadius: 16 }}
+          style={{ width: 34, height: 34, borderRadius: 17 }}
           resizeMode="cover"
         />
       </View>
@@ -517,9 +517,9 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
   }
 
   return (
-    <View className="mr-2" style={{ width: 32, height: 32 }}>
+    <View className="mr-2" style={{ width: 34, height: 34 }}>
       {fullImageUrl && !hasError ? (
-        <View style={{ position: "relative", width: 32, height: 32 }}>
+        <View style={{ position: "relative", width: 34, height: 34 }}>
           {/* Placeholder shown while loading */}
           {isLoading && (
             <View
@@ -527,9 +527,9 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
                 position: "absolute",
                 top: 0,
                 left: 0,
-                width: 32,
-                height: 32,
-                borderRadius: 16,
+                width: 34,
+                height: 34,
+                borderRadius: 17,
                 backgroundColor: backgroundColor,
                 alignItems: "center",
                 justifyContent: "center",
@@ -539,7 +539,7 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
               <Text
                 style={{
                   color: "#FFFFFF",
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: "600",
                   textAlign: "center",
                 }}
@@ -551,7 +551,7 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
           {/* Actual image */}
           <Image
             source={{ uri: fullImageUrl }}
-            style={{ width: 32, height: 32, borderRadius: 16 }}
+            style={{ width: 34, height: 34, borderRadius: 17 }}
             resizeMode="cover"
             onLoadStart={() => setIsLoading(true)}
             onLoadEnd={() => setIsLoading(false)}
@@ -565,9 +565,9 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
         // Fallback when no image or error - show initials
         <View
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
+            width: 34,
+            height: 34,
+            borderRadius: 17,
             backgroundColor: backgroundColor,
             alignItems: "center",
             justifyContent: "center",
@@ -576,7 +576,7 @@ const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; 
           <Text
             style={{
               color: "#FFFFFF",
-              fontSize: 13,
+              fontSize: 14,
               fontWeight: "600",
               textAlign: "center",
             }}
@@ -671,10 +671,10 @@ const AITypingIndicator = ({ aiName = "AI Friend", aiColor = "#14B8A6" }: { aiNa
       style={{ paddingHorizontal: 4 }}
     >
       {/* AI Profile Photo - VibeChat Icon */}
-      <View className="mr-2" style={{ width: 32, height: 32 }}>
+      <View className="mr-2" style={{ width: 34, height: 34 }}>
         <Image
           source={require("../../assets/vibechat logo main.png")}
-          style={{ width: 32, height: 32, borderRadius: 16 }}
+          style={{ width: 34, height: 34, borderRadius: 17 }}
           resizeMode="cover"
         />
       </View>
@@ -1511,8 +1511,8 @@ const ReactionDetailsModal = ({
   );
 };
 
-const MIN_INPUT_HEIGHT = 36;
-const MAX_INPUT_HEIGHT = 100;
+const MIN_INPUT_HEIGHT = 38;
+const MAX_INPUT_HEIGHT = 110;
 
 const ChatScreen = () => {
   const insets = useSafeAreaInsets();
@@ -4873,12 +4873,18 @@ const ChatScreen = () => {
               {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
                 <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
-                  <MessageText
-                    content={message.content}
-                    mentions={message.mentions}
-                    style={{ fontSize: 14, color: "#FFFFFF", lineHeight: 18 }}
-                    isOwnMessage={isCurrentUser}
-                  />
+                  <TruncatedText
+                    maxLines={20}
+                    lineHeight={20}
+                    expandButtonColor={isCurrentUser ? "#007AFF" : "#FFFFFF"}
+                  >
+                    <MessageText
+                      content={message.content}
+                      mentions={message.mentions}
+                      style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                      isOwnMessage={isCurrentUser}
+                    />
+                  </TruncatedText>
                 </View>
               )}
             </View>
@@ -4902,12 +4908,18 @@ const ChatScreen = () => {
               {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
                 <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
-                  <MessageText
-                    content={message.content}
-                    mentions={message.mentions}
-                    style={{ fontSize: 14, color: "#FFFFFF", lineHeight: 18 }}
-                    isOwnMessage={isCurrentUser}
-                  />
+                  <TruncatedText
+                    maxLines={20}
+                    lineHeight={20}
+                    expandButtonColor={isCurrentUser ? "#007AFF" : "#FFFFFF"}
+                  >
+                    <MessageText
+                      content={message.content}
+                      mentions={message.mentions}
+                      style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                      isOwnMessage={isCurrentUser}
+                    />
+                  </TruncatedText>
                 </View>
               )}
             </View>
@@ -5036,12 +5048,18 @@ const ChatScreen = () => {
               {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
                 <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
-                  <MessageText
-                    content={message.content}
-                    mentions={message.mentions}
-                    style={{ fontSize: 14, color: "#FFFFFF", lineHeight: 18 }}
-                    isOwnMessage={isCurrentUser}
-                  />
+                  <TruncatedText
+                    maxLines={20}
+                    lineHeight={20}
+                    expandButtonColor={isCurrentUser ? "#007AFF" : "#FFFFFF"}
+                  >
+                    <MessageText
+                      content={message.content}
+                      mentions={message.mentions}
+                      style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
+                      isOwnMessage={isCurrentUser}
+                    />
+                  </TruncatedText>
                 </View>
               )}
             </View>
@@ -5054,23 +5072,24 @@ const ChatScreen = () => {
                 <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
                   {isAI ? (
                     <>
-                      {/* HIGH-12: Lower maxLines for AI messages to improve density */}
+                      {/* Truncate AI messages at 20 lines with show more/less button */}
                       {/* LOW-21: Bypass truncation for crisis/safety messages */}
                       <TruncatedText
-                        maxLines={10}
+                        maxLines={20}
+                        lineHeight={20}
                         expandButtonColor="#14B8A6"
                         bypassTruncation={isCrisisMessage(message.content)}
                       >
-                        {/* HIGH-14: Reduced font sizes for density */}
+                        {/* HIGH-14: Adjusted font sizes for density */}
                         <Markdown
                           style={{
-                            body: { color: "#FFFFFF", fontSize: 15, lineHeight: 19 },
+                            body: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20 },
                             heading1: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
                             heading2: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
                             heading3: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
                             heading4: { color: "#FFFFFF", fontSize: 17, fontWeight: "bold", marginBottom: 3 },
                             heading5: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
-                            heading6: { color: "#FFFFFF", fontSize: 15, fontWeight: "bold", marginBottom: 2 },
+                            heading6: { color: "#FFFFFF", fontSize: 15.5, fontWeight: "bold", marginBottom: 2 },
                             strong: { fontWeight: "bold", color: "#FFFFFF" },
                             em: { fontStyle: "italic", color: "#FFFFFF" },
                             link: { color: "#14B8A6", textDecorationLine: "underline" },
@@ -5108,9 +5127,9 @@ const ChatScreen = () => {
                             },
                             bullet_list: { marginVertical: 4 },
                             ordered_list: { marginVertical: 4 },
-                            list_item: { color: "#FFFFFF", fontSize: 15, marginVertical: 2 },
-                            paragraph: { color: "#FFFFFF", fontSize: 15, lineHeight: 19, marginVertical: 3 },
-                            text: { color: "#FFFFFF", fontSize: 15 },
+                            list_item: { color: "#FFFFFF", fontSize: 15.5, marginVertical: 2 },
+                            paragraph: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20, marginVertical: 3 },
+                            text: { color: "#FFFFFF", fontSize: 15.5 },
                             hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
                           }}
                         >
@@ -5125,8 +5144,10 @@ const ChatScreen = () => {
                     </>
                   ) : (
                     <>
+                      {/* Truncate user messages at 20 lines with show more/less button */}
                       <TruncatedText
-                        maxLines={25}
+                        maxLines={20}
+                        lineHeight={20}
                         expandButtonColor="#007AFF"
                       >
                         {/* HIGH-14: Reduced font size for message density */}
@@ -5244,15 +5265,17 @@ const ChatScreen = () => {
               }}
             >
               <Text style={{ fontSize: 11, color: "#8E8E93", fontWeight: "600" }} numberOfLines={1}>
-                {message.replyTo.user?.name || "Unknown"}:
+                {message.replyTo?.aiFriendId
+                  ? (aiFriends.find(f => f.id === message.replyTo?.aiFriendId)?.name || "AI Friend")
+                  : (message.replyTo?.user?.name || "Unknown")}:
               </Text>
               <Text
                 style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.7)", flex: 1 }}
                 numberOfLines={1}
               >
-                {message.replyTo.messageType === "image"
+                {message.replyTo?.messageType === "image"
                   ? "📷 Image"
-                  : message.replyTo.content}
+                  : message.replyTo?.content}
               </Text>
             </View>
           )}
@@ -5516,7 +5539,7 @@ const ChatScreen = () => {
           contentContainerStyle={{
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
             // Padding bottom creates space for header/threads
-            paddingBottom: insets.top + 80 + (threads ? 56 : 0) + 20, // Reduced base from 95 to 80
+            paddingBottom: insets.top + 63 + (threads ? 56 : 0) + 20, // Reduced base to 63 (header height is 68)
             paddingHorizontal: 16,
             // Visual bottom - small padding to push recent messages up slightly
             paddingTop: 16, 
@@ -5779,7 +5802,7 @@ const ChatScreen = () => {
           style={{ width: "100%", backgroundColor: 'transparent' }}
           contentContainerStyle={[
             {
-              paddingTop: 0,
+              paddingTop: 6,
               paddingHorizontal: 16,
             },
             inputContainerAnimatedStyle,
@@ -5860,7 +5883,9 @@ const ChatScreen = () => {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 12, color: "#007AFF", fontWeight: "600" }}>
-                    Replying to {replyToMessage.user.name}
+                    Replying to {replyToMessage.aiFriendId 
+                      ? (aiFriends.find(f => f.id === replyToMessage.aiFriendId)?.name || "AI Friend")
+                      : (replyToMessage.user?.name || "Unknown User")}
                   </Text>
                   <Text
                     style={{ fontSize: 13, color: "#FFFFFF", marginTop: 2 }}
@@ -6102,9 +6127,9 @@ const ChatScreen = () => {
               >
                 <View
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
+                    width: 38,
+                    height: 38,
+                    borderRadius: 19,
                     overflow: "hidden",
                     shadowColor: "#007AFF",
                     shadowOffset: { width: 0, height: 3 },
@@ -6123,7 +6148,7 @@ const ChatScreen = () => {
                       justifyContent: "center",
                       borderWidth: 1.5,
                       borderColor: "rgba(255, 255, 255, 0.2)",
-                      borderRadius: 18,
+                      borderRadius: 19,
                       overflow: "hidden",
                     }}
                   >
@@ -6141,11 +6166,11 @@ const ChatScreen = () => {
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        borderRadius: 18,
+                        borderRadius: 19,
                       }}
                       pointerEvents="none"
                     />
-                    <Plus size={18} color="#FFFFFF" />
+                    <Plus size={20} color="#FFFFFF" />
                   </BlurView>
                 </View>
               </Pressable>
@@ -6260,9 +6285,9 @@ const ChatScreen = () => {
                     style={{
                       flex: 1,
                       paddingHorizontal: 14,
-                      paddingVertical: 8,
-                      fontSize: 15,
-                      lineHeight: 19,
+                      paddingVertical: 10,
+                      fontSize: 16,
+                      lineHeight: 20,
                       color: inputTextColor,
                       fontWeight: inputFontWeight,
                       textAlignVertical: "top",
@@ -6342,9 +6367,9 @@ const ChatScreen = () => {
                 >
                   <Animated.View
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
                       overflow: "hidden",
                       shadowColor: (selectedVibe || previewVibe)
                         ? VIBE_CONFIG[selectedVibe || previewVibe!].color
@@ -6365,7 +6390,7 @@ const ChatScreen = () => {
                       tint="dark"
                       style={{
                         flex: 1,
-                        borderRadius: 18,
+                        borderRadius: 19,
                       }}
                     >
                       <Animated.View
@@ -6375,7 +6400,7 @@ const ChatScreen = () => {
                           justifyContent: "center",
                           borderWidth: 1.5,
                           borderColor: animatedBorderColor,
-                          borderRadius: 18,
+                          borderRadius: 19,
                         }}
                       >
                         {/* Layered animated gradient backgrounds for send button */}
@@ -6461,7 +6486,7 @@ const ChatScreen = () => {
                               ],
                             }}
                           >
-                            <Mic size={18} color="#FFFFFF" />
+                            <Mic size={20} color="#FFFFFF" />
                           </Animated.View>
                         ) : (
                           <Animated.View
@@ -6472,7 +6497,7 @@ const ChatScreen = () => {
                               ],
                             }}
                           >
-                            <ArrowUp size={18} color="#FFFFFF" strokeWidth={2.5} />
+                            <ArrowUp size={20} color="#FFFFFF" strokeWidth={2.5} />
                           </Animated.View>
                         )}
                         

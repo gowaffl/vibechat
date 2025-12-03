@@ -510,7 +510,7 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
             userId: msg.replyTo.userId,
             chatId: msg.replyTo.chatId,
             replyToId: msg.replyTo.replyToId,
-            editedAt: msg.replyTo.editedAt?.toISOString() || null,
+            editedAt: msg.replyTo.editedAt ? (typeof msg.replyTo.editedAt === 'string' ? msg.replyTo.editedAt : msg.replyTo.editedAt.toISOString()) : null,
             isUnsent: msg.replyTo.isUnsent,
             editHistory: msg.replyTo.editHistory,
             voiceUrl: msg.replyTo.voiceUrl,

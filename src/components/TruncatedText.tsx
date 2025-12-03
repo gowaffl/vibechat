@@ -9,6 +9,8 @@ interface TruncatedTextProps {
   expandButtonColor?: string;
   /** LOW-21: Skip truncation for critical messages like safety/crisis responses */
   bypassTruncation?: boolean;
+  /** Line height to use for truncation calculation (defaults to 20) */
+  lineHeight?: number;
 }
 
 /**
@@ -21,6 +23,7 @@ export const TruncatedText: React.FC<TruncatedTextProps> = ({
   style,
   expandButtonColor = "#007AFF",
   bypassTruncation = false,
+  lineHeight = 20,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowButton, setShouldShowButton] = useState(false);
@@ -89,7 +92,7 @@ export const TruncatedText: React.FC<TruncatedTextProps> = ({
             pointerEvents: "none",
             width: "100%",
             overflow: "hidden",
-            maxHeight: maxLines * 22, // Approximate line height
+            maxHeight: maxLines * lineHeight,
           }}
           onLayout={onTruncatedLayout}
         >
@@ -102,7 +105,7 @@ export const TruncatedText: React.FC<TruncatedTextProps> = ({
         style={
           !isExpanded && shouldShowButton
             ? {
-                maxHeight: maxLines * 22, // Approximate line height
+                maxHeight: maxLines * lineHeight,
                 overflow: "hidden",
               }
             : undefined
