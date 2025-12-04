@@ -12,6 +12,7 @@
 -- - add_birthdate_to_user ✅ APPLIED (November 24, 2025)
 -- - fix_corrupted_image_urls ✅ APPLIED (January 26, 2025) - Fixed double-prepended URLs
 -- - add_service_role_policies ✅ APPLIED (December 2, 2025) - Added explicit service role RLS policies
+-- - add_is_muted_to_chat_member ✅ APPLIED (December 4, 2025) - Added isMuted column to chat_member
 --
 -- FEATURE: Multi-Image & Video Support (December 2, 2025)
 -- - Added messageType 'video' to message table
@@ -132,6 +133,7 @@ CREATE TABLE IF NOT EXISTS "chat_member" (
     "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "isPinned" BOOLEAN NOT NULL DEFAULT false,
     "pinnedAt" TIMESTAMP(3),
+    "isMuted" BOOLEAN NOT NULL DEFAULT false,
     CONSTRAINT "chat_member_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "chat" ("id") ON DELETE CASCADE,
     CONSTRAINT "chat_member_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user" ("id") ON DELETE CASCADE,
     UNIQUE ("chatId", "userId")

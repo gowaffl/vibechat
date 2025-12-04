@@ -18,10 +18,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { MessageCircle, Users, X, ChevronRight, Search, Pin, LogOut, Bell, BellOff } from "lucide-react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { TapGestureHandler, State } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import { api, BACKEND_URL } from "@/lib/api";
+import { supabaseClient } from "@/lib/authClient";
 import { useUser } from "@/contexts/UserContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
@@ -296,6 +297,53 @@ const ChatListScreen = () => {
 
   // Fetch unread counts for all chats using shared hook
   const { data: unreadCounts = [], refetch: refetchUnread } = useUnreadCounts(user?.id);
+
+  // Ref to track current chat IDs for filtering realtime events
+  const chatIdsRef = React.useRef<Set<string>>(new Set());
+
+  // Update chat IDs ref when chats change
+  React.useEffect(() => {
+    if (chats) {
+      chatIdsRef.current = new Set(chats.map((c) => c.id));
+    }
+  }, [chats]);
+
+  // Auto-update on focus
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+      refetchUnread();
+    }, [refetch, refetchUnread])
+  );
+
+  // Real-time updates for new messages
+  React.useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabaseClient
+      .channel(`chat-list-updates-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "message",
+        },
+        (payload: any) => {
+          // Check if the message belongs to one of our chats
+          if (chatIdsRef.current.has(payload.new.chatId)) {
+            console.log("[ChatList] New message received in chat", payload.new.chatId, "refetching...");
+            refetch();
+            refetchUnread();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, [user?.id, refetch, refetchUnread]);
 
   // Create a map of chatId -> unread count for quick lookup
   const unreadCountMap = React.useMemo(() => {

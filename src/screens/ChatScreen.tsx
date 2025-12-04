@@ -30,6 +30,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -69,8 +70,10 @@ import { ReactorMenu } from "@/components/Reactor";
 import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/components/Threads";
 import { CreateCustomCommandModal } from "@/components/CustomCommands";
 import { CreateAIFriendModal } from "@/components/AIFriends";
+import { ReplyPreviewModal } from "@/components/ReplyPreviewModal";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
+import { ProfileImage } from "@/components/ProfileImage";
 import { SwipeableMessage } from "@/components/SwipeableMessage";
 import { TruncatedText } from "@/components/TruncatedText";
 import { VibeSelector, VIBE_CONFIG, VibeSelectorStatic } from "@/components/VibeSelector";
@@ -491,100 +494,6 @@ const ChatHeader = ({
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
-  );
-};
-
-// Profile image component with loading placeholder
-const ProfileImage = ({ imageUri, isAI, userName }: { imageUri?: string | null; isAI: boolean; userName?: string }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-  const fullImageUrl = getFullImageUrl(imageUri);
-  const initials = getInitials(userName);
-  const backgroundColor = getColorFromName(userName);
-
-  // AI always uses the VibeChat icon
-  if (isAI) {
-    return (
-      <View className="mr-2" style={{ width: 34, height: 34 }}>
-        <Image
-          source={require("../../assets/vibechat icon main.png")}
-          style={{ width: 34, height: 34, borderRadius: 17 }}
-          resizeMode="cover"
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View className="mr-2" style={{ width: 34, height: 34 }}>
-      {fullImageUrl && !hasError ? (
-        <View style={{ position: "relative", width: 34, height: 34 }}>
-          {/* Placeholder shown while loading */}
-          {isLoading && (
-            <View
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: 34,
-                height: 34,
-                borderRadius: 17,
-                backgroundColor: backgroundColor,
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 1,
-              }}
-            >
-              <Text
-                style={{
-                  color: "#FFFFFF",
-                  fontSize: 14,
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                {initials}
-              </Text>
-            </View>
-          )}
-          {/* Actual image */}
-          <Image
-            source={{ uri: fullImageUrl }}
-            style={{ width: 34, height: 34, borderRadius: 17 }}
-            resizeMode="cover"
-            onLoadStart={() => setIsLoading(true)}
-            onLoadEnd={() => setIsLoading(false)}
-            onError={() => {
-              setIsLoading(false);
-              setHasError(true);
-            }}
-          />
-        </View>
-      ) : (
-        // Fallback when no image or error - show initials
-        <View
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 17,
-            backgroundColor: backgroundColor,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Text
-            style={{
-              color: "#FFFFFF",
-              fontSize: 14,
-              fontWeight: "600",
-              textAlign: "center",
-            }}
-          >
-            {initials}
-          </Text>
-        </View>
-      )}
     </View>
   );
 };
@@ -1531,6 +1440,8 @@ const ChatScreen = () => {
   const isInputFocused = useRef(false);
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
   const isAtBottomRef = useRef(true); // Tracks if user is at bottom of list
+  const isHistoryLoadedRef = useRef(false); // Tracks if we have loaded older messages manually
+  const lastNewestMessageIdRef = useRef<string | null>(null); // Tracks the newest message ID to distinguish new messages from history
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [hasNewMessages, setHasNewMessages] = useState(false); // Tracks if there are new messages while scrolled up
   const [lastKnownLength, setLastKnownLength] = useState(0);
@@ -1555,6 +1466,7 @@ const ChatScreen = () => {
   const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
   const [reactionPickerMessage, setReactionPickerMessage] = useState<Message | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [replyPreviewModal, setReplyPreviewModal] = useState<Message | null>(null);
   const [showAvatarViewer, setShowAvatarViewer] = useState(false);
   const [reactionDetailsModal, setReactionDetailsModal] = useState<{
     emoji: string;
@@ -1724,12 +1636,52 @@ const ChatScreen = () => {
     enabled: !!user?.id && !!chatId,
   });
 
-  // Update messages state when data changes
+  // Reset pagination state when chat changes
+  useEffect(() => {
+    setAllMessages([]);
+    setHasMoreMessages(false);
+    setNextCursor(null);
+    isHistoryLoadedRef.current = false;
+  }, [chatId]);
+
+  // Update messages state when data changes (handling polling without overwriting history)
   useEffect(() => {
     if (messageData) {
-      setAllMessages(messageData.messages || []);
-      setHasMoreMessages(messageData.hasMore || false);
-      setNextCursor(messageData.nextCursor || null);
+      setAllMessages(prevMessages => {
+        const polledMessages = messageData.messages || [];
+        
+        // If we have no messages yet, or poll is empty, just take poll
+        if (prevMessages.length === 0 || polledMessages.length === 0) {
+          return polledMessages;
+        }
+
+        const lastPolledMsg = polledMessages[polledMessages.length - 1];
+        const lastPolledTime = new Date(lastPolledMsg.createdAt).getTime();
+
+        // Keep older messages that are strictly older than the polled chunk
+        // This preserves history while updating the head (recent messages)
+        const olderMessages = prevMessages.filter(m => {
+            const mTime = new Date(m.createdAt).getTime();
+            if (mTime < lastPolledTime) return true;
+            // Handle same timestamp edge case (rare)
+            if (mTime === lastPolledTime && m.id !== lastPolledMsg.id) {
+                 return !polledMessages.some(pm => pm.id === m.id);
+            }
+            return false;
+        });
+        
+        // Deduplicate to be safe
+        const uniqueOlder = olderMessages.filter(old => !polledMessages.some(newM => newM.id === old.id));
+
+        return [...polledMessages, ...uniqueOlder];
+      });
+
+      // Only update pagination cursor from poll if we haven't loaded history manually
+      // This prevents polling from resetting our deep scroll position
+      if (!isHistoryLoadedRef.current) {
+          setHasMoreMessages(messageData.hasMore || false);
+          setNextCursor(messageData.nextCursor || null);
+      }
     }
   }, [messageData]);
 
@@ -1748,6 +1700,7 @@ const ChatScreen = () => {
         setAllMessages(prev => [...prev, ...response.messages]);
         setHasMoreMessages(response.hasMore || false);
         setNextCursor(response.nextCursor || null);
+        isHistoryLoadedRef.current = true; // Mark history as loaded so polling doesn't reset cursor
       } else {
         setHasMoreMessages(false);
         setNextCursor(null);
@@ -4265,9 +4218,24 @@ const ChatScreen = () => {
   // Auto-scroll logic and New Message detection
   useEffect(() => {
     if (activeMessages && activeMessages.length > 0) {
+      // Handle initial load separately
+      if (lastKnownLength === 0) {
+         // Initial load
+         requestAnimationFrame(() => {
+            scrollToBottom(false);
+         });
+         lastNewestMessageIdRef.current = activeMessages[0]?.id;
+         setLastKnownLength(activeMessages.length);
+         return;
+      }
+
       const isNewMessage = activeMessages.length > lastKnownLength;
+      const newestMessageId = activeMessages[0]?.id;
+      // It's a new incoming message if length increased AND the newest message ID is different
+      // (meaning the new items were added to the start/bottom of list)
+      const isNewIncoming = isNewMessage && newestMessageId !== lastNewestMessageIdRef.current;
       
-      if (isNewMessage) {
+      if (isNewIncoming) {
         if (isAtBottomRef.current) {
           // User is at bottom.
           // Inverted list automatically shows new items at the bottom (index 0).
@@ -4277,14 +4245,9 @@ const ChatScreen = () => {
           setShowScrollToBottom(true);
           setHasNewMessages(true); // Mark that there are NEW unread messages
         }
-      } else if (lastKnownLength === 0) {
-         // Initial load
-         // Ensure we start at the bottom
-         requestAnimationFrame(() => {
-            scrollToBottom(false);
-         });
       }
       
+      lastNewestMessageIdRef.current = newestMessageId;
       setLastKnownLength(activeMessages.length);
     }
   }, [activeMessages, lastKnownLength, scrollToBottom]);
@@ -4614,7 +4577,25 @@ const ChatScreen = () => {
     );
   }, []);
 
-  const renderMessage = useCallback(({ item }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } }) => {
+  // Calculate displayData with typing indicators (memoized for renderMessage access)
+  const displayDataMemo = useMemo(() => {
+    // Reverse activeMessages for inverted list (Newest at index 0/Bottom)
+    const data: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages].reverse();
+
+    // Add AI typing indicator if AI is typing (only in main chat, not in threads)
+    if (isAITyping && !currentThreadId) {
+      data.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
+    }
+
+    // Add user typing indicator if users are typing (only in main chat, not in threads)
+    if (typingUsers.length > 0 && !currentThreadId) {
+      data.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
+    }
+    
+    return data;
+  }, [activeMessages, isAITyping, currentThreadId, typingUsers]);
+
+  const renderMessage = useCallback(({ item, index }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }, index: number }) => {
     // Check if this is the AI typing indicator
     if ('isTyping' in item && item.isTyping) {
       return <AITypingIndicator 
@@ -4629,6 +4610,21 @@ const ChatScreen = () => {
     }
 
     const message = item as Message;
+
+    // Logic for grouping consecutive messages from the same user
+    const prevMessage = displayDataMemo[index + 1]; // Older message (visually above)
+    const nextMessage = displayDataMemo[index - 1]; // Newer message (visually below)
+
+    const isSameUserAsOlder = prevMessage && !('isTyping' in prevMessage) && !('isUserTyping' in prevMessage) && (prevMessage as Message).userId === message.userId && (prevMessage as Message).messageType !== 'system';
+    const isSameUserAsNewer = nextMessage && !('isTyping' in nextMessage) && !('isUserTyping' in nextMessage) && (nextMessage as Message).userId === message.userId && (nextMessage as Message).messageType !== 'system';
+
+    // Show name only if it's the first message in the group (visually top / older)
+    const showName = !isSameUserAsOlder;
+    // Show avatar only if it's the last message in the group (visually bottom / newer)
+    const showAvatar = !isSameUserAsNewer;
+    // Reduce margin to older message (visually top) if it's the same user
+    const shouldReduceTopMargin = isSameUserAsOlder; 
+
     const isCurrentUser = message.userId === user?.id;
     // AI messages have userId: null and aiFriendId set
     const isAI = !!(message.aiFriendId && message.userId === null);
@@ -4808,6 +4804,19 @@ const ChatScreen = () => {
       const messageVibe = message.vibeType;
       const vibeConfig = messageVibe ? VIBE_CONFIG[messageVibe] : null;
       
+      // Dynamic border radius for grouped messages
+      const borderRadiusStyle = isCurrentUser ? {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: isSameUserAsOlder ? 4 : 20,
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: isSameUserAsNewer ? 4 : 20,
+      } : {
+        borderTopLeftRadius: isSameUserAsOlder ? 4 : 20,
+        borderTopRightRadius: 20,
+        borderBottomLeftRadius: isSameUserAsNewer ? 4 : 20,
+        borderBottomRightRadius: 20,
+      };
+
       // Determine bubble style - vibe takes precedence for styling
       const bubbleStyle = vibeConfig
         ? {
@@ -4836,7 +4845,7 @@ const ChatScreen = () => {
       const bubbleContent = (
         <View
           style={{
-            borderRadius: 20,
+            ...borderRadiusStyle,
             overflow: "hidden",
             shadowColor: bubbleStyle.shadowColor,
             shadowOffset: { width: 0, height: 4 },
@@ -4856,7 +4865,7 @@ const ChatScreen = () => {
             intensity={Platform.OS === "ios" ? 40 : 80}
             tint="dark"
             style={{
-              borderRadius: 20,
+              ...borderRadiusStyle,
               overflow: "hidden",
               borderWidth: isHighlighted ? 2 : 1,
               borderColor: isHighlighted ? "#FFD700" : bubbleStyle.borderColor,
@@ -5238,7 +5247,7 @@ const ChatScreen = () => {
     return (
       <Reanimated.View
         entering={FadeInUp.duration(300)}
-        className={`mb-3 flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
+        className={`${shouldReduceTopMargin ? 'mb-0.5' : 'mb-3'} flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
         style={{
           paddingHorizontal: 4,
           alignItems: "flex-start",
@@ -5269,16 +5278,21 @@ const ChatScreen = () => {
 
         {/* Profile Photo for others */}
         {!isCurrentUser && (
-          <ProfileImage 
-            imageUri={isAI ? null : message.user?.image} 
-            isAI={isAI} 
-            userName={isAI ? aiName : (message.user?.name || "Unknown")} 
-          />
+          showAvatar ? (
+            <ProfileImage 
+              imageUri={isAI ? null : message.user?.image} 
+              isAI={isAI} 
+              userName={isAI ? aiName : (message.user?.name || "Unknown")} 
+            />
+          ) : (
+             // Placeholder to keep alignment when avatar is hidden
+            <View style={{ width: 34, marginRight: 8 }} />
+          )
         )}
 
         {/* Message Content */}
-        <View style={{ maxWidth: "85%" }}>
-          {!isCurrentUser && (
+        <View style={{ flex: 1, alignItems: isCurrentUser ? "flex-end" : "flex-start" }}>
+          {!isCurrentUser && showName && (
             <Text
               className="text-xs font-medium mb-1 ml-2"
               style={{ color: isAI ? aiColor : "#6B7280", fontSize: 13, fontWeight: isAI ? "600" : "500" }}
@@ -5286,39 +5300,66 @@ const ChatScreen = () => {
               {isAI ? aiName : message.user?.name || "Unknown"}
             </Text>
           )}
-          {/* Reply Preview - HIGH-15: Compact inline design for better density */}
-          {message.replyTo && (
-            <View
-              style={{
-                marginLeft: 4,
-                marginBottom: 2,
-                paddingVertical: 4,
-                paddingHorizontal: 8,
-                borderRadius: 8,
-                backgroundColor: "rgba(255, 255, 255, 0.05)",
-                borderLeftWidth: 2,
-                borderLeftColor: isCurrentUser ? "#007AFF" : "#8E8E93",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <Text style={{ fontSize: 11, color: "#8E8E93", fontWeight: "600" }} numberOfLines={1}>
-                {message.replyTo?.aiFriendId
-                  ? (message.replyTo?.aiFriend?.name || aiFriends.find(f => f.id === message.replyTo?.aiFriendId)?.name || "AI Friend")
-                  : (message.replyTo?.user?.name || "Unknown User")}:
-              </Text>
-              <Text
-                style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.7)", flex: 1 }}
-                numberOfLines={1}
-              >
-                {message.replyTo?.messageType === "image"
-                  ? "📷 Image"
-                  : message.replyTo?.content}
-              </Text>
-            </View>
-          )}
+          {/* Reply Preview - Full Width */}
+          {message.replyTo && (() => {
+            const replyToMessage = message.replyTo;
+            const replyTapGesture = Gesture.Tap()
+              .onEnd(() => {
+                runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
+                runOnJS(setReplyPreviewModal)(replyToMessage);
+              });
+
+            return (
+              <GestureDetector gesture={replyTapGesture}>
+                <Reanimated.View
+                  style={{
+                    marginLeft: isCurrentUser ? 0 : 4,
+                    marginRight: isCurrentUser ? 4 : 0,
+                    marginBottom: 4,
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: 12,
+                    backgroundColor: "rgba(255, 255, 255, 0.08)",
+                    borderLeftWidth: 3,
+                    borderLeftColor: isCurrentUser ? "#007AFF" : "#8E8E93",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    maxWidth: "100%",
+                    alignSelf: isCurrentUser ? "flex-end" : "flex-start",
+                  }}
+                >
+                  <Text style={{ fontSize: 12, color: isCurrentUser ? "#60A5FA" : "#9CA3AF", fontWeight: "600" }} numberOfLines={1}>
+                    {replyToMessage?.aiFriendId
+                      ? (replyToMessage?.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage?.aiFriendId)?.name || "AI Friend")
+                      : (replyToMessage?.user?.name || "Unknown User")}
+                  </Text>
+                  
+                  {replyToMessage?.messageType === "image" ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                      {replyToMessage?.imageUrl && (
+                        <Image
+                          source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
+                          style={{ width: 36, height: 36, borderRadius: 6, marginRight: 6 }}
+                          contentFit="cover"
+                        />
+                      )}
+                      <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>Photo</Text>
+                    </View>
+                  ) : (
+                    <Text
+                      style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", flex: 1 }}
+                      numberOfLines={1}
+                    >
+                      {replyToMessage?.content}
+                    </Text>
+                  )}
+                </Reanimated.View>
+              </GestureDetector>
+            );
+          })()}
           {/* Message Bubble with Long Press or Selection */}
+          <View style={{ maxWidth: "85%", alignSelf: isCurrentUser ? "flex-end" : "flex-start" }}>
           <SwipeableMessage
             timestamp={messageTime}
             isCurrentUser={isCurrentUser}
@@ -5371,33 +5412,27 @@ const ChatScreen = () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           setReactionDetailsModal({ emoji, reactions: reactionsForEmoji });
                         }}
-                        style={({ pressed }) => ({
-                          paddingHorizontal: 6,
-                          paddingVertical: 3,
-                          borderRadius: 16, // Pill shape
-                          backgroundColor: "rgba(36, 36, 36, 0.95)", // Dark opaque background to hide bubble border underneath
-                          borderWidth: 1,
-                          borderColor: userReacted
-                            ? "#007AFF"
-                            : "rgba(255, 255, 255, 0.1)",
+                        style={{
                           flexDirection: "row",
                           alignItems: "center",
-                          gap: 4,
-                          transform: [{ scale: pressed ? 1.15 : 1 }],
-                          shadowColor: "#000",
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 2,
-                          elevation: 2,
-                        })}
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 20,
+                          backgroundColor: "rgba(40, 40, 40, 1)",
+                          borderWidth: 1,
+                          borderColor: userReacted ? "#007AFF" : "rgba(255, 255, 255, 0.2)",
+                          marginRight: 6,
+                          marginBottom: 6,
+                        }}
                       >
-                        <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                        <Text style={{ fontSize: 15 }}>{emoji}</Text>
                         {count > 1 && (
                           <Text
                             style={{
-                              fontSize: 11,
-                              color: userReacted ? "#007AFF" : "#AAAAAA",
-                              fontWeight: userReacted ? "600" : "500",
+                              fontSize: 13,
+                              color: userReacted ? "#007AFF" : "#FFFFFF",
+                              fontWeight: "600",
+                              marginLeft: 6,
                             }}
                           >
                             {count}
@@ -5411,6 +5446,7 @@ const ChatScreen = () => {
             </View>
           </SwipeableMessage>
         </View>
+      </View>
       </Reanimated.View>
     );
   }, [
@@ -5428,6 +5464,7 @@ const ChatScreen = () => {
     toggleBookmark,
     // LOW-21: Crisis message detection
     isCrisisMessage,
+    displayDataMemo,
   ]);
 
   if (isLoading) {
@@ -5451,19 +5488,8 @@ const ChatScreen = () => {
     willShowEmptyIfNoMatches: currentThreadId && threadMessages !== undefined && threadMessages.length === 0
   });
   
-  // Combine messages with typing indicators
-  // Reverse messages for inverted list (Newest at index 0/Bottom)
-  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages].reverse();
-
-  // Add AI typing indicator if AI is typing (only in main chat, not in threads)
-  if (isAITyping && !currentThreadId) {
-    displayData.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
-  }
-
-  // Add user typing indicator if users are typing (only in main chat, not in threads)
-  if (typingUsers.length > 0 && !currentThreadId) {
-    displayData.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
-  }
+  // Combine messages with typing indicators - Removed old definition in favor of displayDataMemo
+  // const displayData = ...
   
   // Get current thread info for display
   const currentThread = threads?.find(t => t.id === currentThreadId);
@@ -5569,7 +5595,7 @@ const ChatScreen = () => {
       >
         <AnimatedFlashList
           ref={flatListRef}
-          data={displayData}
+          data={displayDataMemo}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           renderItem={renderMessage as any}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5586,13 +5612,13 @@ const ChatScreen = () => {
           contentContainerStyle={{
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
             // Padding bottom creates space for header/threads
-            paddingBottom: insets.top + 63 + (threads ? 56 : 0) + 20, // Reduced base to 63 (header height is 68)
+            paddingBottom: insets.top + 68 + (threads ? 56 : 0) + 20, // Reduced base to 63 (header height is 68)
             paddingHorizontal: 16,
             // Visual bottom - small padding to push recent messages up slightly
-            paddingTop: 10, 
+            paddingTop: 13, 
           }}
           // Spacer for Input Bar (Glassmorphism effect)
-          ListHeaderComponent={<View style={{ height: 90 }} />}
+          ListHeaderComponent={<View style={{ height: 100 }} />}
           // HIGH-8: Load earlier messages button (appears at top in inverted list)
           ListFooterComponent={
             hasMoreMessages ? (
@@ -5801,6 +5827,8 @@ const ChatScreen = () => {
         />
       </Reanimated.View>
 
+      {/* Reply Preview Modal - Rendered before Input to sit underneath it */}
+      
       {/* Input Bar Area - Fixed at Bottom */}
       <Reanimated.View style={[{ width: "100%", backgroundColor: 'transparent' }, inputWrapperAnimatedStyle]}>
         {/* Glassmorphism Background */}
@@ -7651,6 +7679,12 @@ const ChatScreen = () => {
           onPreview={handleVibePreview}
           onCancel={handleVibeCancel}
           anchorPosition={sendButtonPosition}
+        />
+        <ReplyPreviewModal
+          key={replyPreviewModal?.id || "closed"}
+          visible={!!replyPreviewModal}
+          message={replyPreviewModal}
+          onClose={() => setReplyPreviewModal(null)}
         />
       </View>
     );

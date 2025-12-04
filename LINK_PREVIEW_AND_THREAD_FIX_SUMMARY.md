@@ -101,3 +101,4 @@ Without the backend running, the mobile app can still read from Supabase directl
 
 
 
+

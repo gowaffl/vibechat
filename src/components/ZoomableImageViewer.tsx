@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Modal,
@@ -10,6 +10,7 @@ import {
   Animated as RNAnimated,
   ActivityIndicator,
   Platform,
+  StyleSheet,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
@@ -23,6 +24,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   runOnJS,
+  interpolate,
 } from "react-native-reanimated";
 import {
   GestureDetector,
@@ -48,6 +50,9 @@ const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomC
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  // Track zoom state in React state for conditional gesture enablement
+  const [isZoomed, setIsZoomed] = useState(false);
+
   // Reset zoom and pan on unmount or url change
   useEffect(() => {
     return () => {
@@ -57,6 +62,7 @@ const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomC
       savedScale.value = 1;
       savedTranslateX.value = 0;
       savedTranslateY.value = 0;
+      setIsZoomed(false);
     };
   }, [imageUrl]);
 
@@ -77,13 +83,16 @@ const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomC
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
         runOnJS(onZoomChange)(false);
+        runOnJS(setIsZoomed)(false);
       } else if (scale.value > 1) {
         runOnJS(onZoomChange)(true);
+        runOnJS(setIsZoomed)(true);
       }
     });
 
-  // Pan gesture
+  // Pan gesture - only enabled when zoomed in
   const panGesture = Gesture.Pan()
+    .enabled(isZoomed)
     .onUpdate((e) => {
       // Only allow panning if zoomed in
       if (scale.value > 1) {
@@ -107,7 +116,9 @@ const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomC
         translateY.value = withSpring(Math.sign(translateY.value) * maxTranslateY);
         savedTranslateY.value = translateY.value;
       }
-    });
+    })
+    // Allow small horizontal swipes to fail, letting PagerView handle them when not actively panning
+    .failOffsetX([-20, 20]);
 
   // Double tap to zoom
   const doubleTapGesture = Gesture.Tap()
@@ -122,11 +133,13 @@ const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomC
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
         runOnJS(onZoomChange)(false);
+        runOnJS(setIsZoomed)(false);
       } else {
         // Zoom in to 2x
         scale.value = withSpring(2);
         savedScale.value = 2;
         runOnJS(onZoomChange)(true);
+        runOnJS(setIsZoomed)(true);
       }
     });
 
@@ -215,6 +228,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const toolbarAnim = useRef(new RNAnimated.Value(1)).current;
   const pagerRef = useRef<PagerView>(null);
+  const pageOffset = useSharedValue(0);
 
   // Normalize images list
   const images = imageUrls && imageUrls.length > 0 
@@ -227,6 +241,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
   useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
+      pageOffset.value = initialIndex;
       if (pagerRef.current && Platform.OS === 'android') {
         pagerRef.current.setPageWithoutAnimation(initialIndex);
       }
@@ -310,9 +325,14 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
     }
   };
 
-  const handlePageSelected = (e: any) => {
+  const handlePageSelected = useCallback((e: any) => {
     setCurrentIndex(e.nativeEvent.position);
-  };
+  }, []);
+
+  const handlePageScroll = useCallback((e: any) => {
+    const { position, offset } = e.nativeEvent;
+    pageOffset.value = position + offset;
+  }, []);
 
   // Reset when modal closes
   const handleClose = () => {
@@ -466,6 +486,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
               style={{ flex: 1 }}
               initialPage={initialIndex}
               onPageSelected={handlePageSelected}
+              onPageScroll={handlePageScroll}
               scrollEnabled={scrollEnabled}
               overdrag={true}
             >
@@ -485,7 +506,7 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
             </View>
           )}
 
-          {/* Action Buttons */}
+          {/* Page indicator dots and actions */}
           {showToolbar && (
             <RNAnimated.View
               style={{
@@ -503,9 +524,25 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
                 }],
               }}
             >
+              {/* Page Indicators - only if more than one image */}
+              {images.length > 1 && (
+                <View style={styles.dotsContainer}>
+                  {images.map((_, index) => (
+                    <PageDot
+                      key={index}
+                      index={index}
+                      currentPage={currentIndex}
+                      pageOffset={pageOffset}
+                      total={images.length}
+                    />
+                  ))}
+                </View>
+              )}
+
               <View
                 style={{
                   marginHorizontal: 20,
+                  marginTop: 16,
                   borderRadius: 20,
                   overflow: "hidden",
                 }}
@@ -651,3 +688,62 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
     </Modal>
   );
 };
+
+// Animated page indicator dot (Same as in MediaCarousel)
+interface PageDotProps {
+  index: number;
+  currentPage: number;
+  pageOffset: Animated.SharedValue<number>;
+  total: number;
+}
+
+const PageDot: React.FC<PageDotProps> = ({ index, pageOffset, total }) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    // Calculate distance from current position (0 = at this page, 1 = one page away)
+    const distance = Math.abs(pageOffset.value - index);
+    
+    // Animate width and opacity based on distance
+    const width = interpolate(
+      distance,
+      [0, 0.5, 1],
+      [16, 10, 6],
+      "clamp"
+    );
+    
+    const opacity = interpolate(
+      distance,
+      [0, 0.5, 1],
+      [1, 0.6, 0.4],
+      "clamp"
+    );
+
+    return {
+      width: withSpring(width, { damping: 15, stiffness: 150 }),
+      opacity: withSpring(opacity, { damping: 15, stiffness: 150 }),
+    };
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.dot,
+        animatedStyle,
+      ]}
+    />
+  );
+};
+
+const styles = StyleSheet.create({
+  dotsContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: 8, // Spacing between dots and action bar
+    gap: 4,
+  },
+  dot: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
+  },
+});
