@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, Pressable, ScrollView, StyleSheet, Animated } from "react-native";
 import { BlurView } from "expo-blur";
-import { Message } from "@shared/contracts";
+import { Message, AIFriend } from "@shared/contracts";
 import MessageText from "./MessageText";
 import { ProfileImage } from "./ProfileImage";
 import { X, ArrowDown } from "lucide-react-native";
@@ -12,12 +12,14 @@ interface ReplyPreviewModalProps {
   visible: boolean;
   message: { original: Message; reply: Message } | null;
   onClose: () => void;
+  aiFriends: AIFriend[];
 }
 
 export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
   visible,
   message,
   onClose,
+  aiFriends,
 }) => {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -37,72 +39,87 @@ export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
     onClose();
   };
 
-  const renderMessageContent = (msg: Message, isReply: boolean) => (
-    <View style={{ marginBottom: isReply ? 0 : 20 }}>
-      {/* Header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 8,
-          gap: 10,
-        }}
-      >
-        <ProfileImage
-          imageUri={msg.user?.image}
-          userName={msg.user?.name || "Unknown"}
-          size={24}
-        />
-        <View>
-          <Text style={{ color: "rgba(255, 255, 255, 0.9)", fontWeight: "600", fontSize: 14 }}>
-            {msg.user?.name || "Unknown"}
-          </Text>
-          <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 11 }}>
-            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        </View>
-        <View style={{ 
-          backgroundColor: isReply ? "rgba(0, 122, 255, 0.2)" : "rgba(255, 255, 255, 0.1)", 
-          paddingHorizontal: 8, 
-          paddingVertical: 2, 
-          borderRadius: 4,
-          marginLeft: "auto" 
-        }}>
-          <Text style={{ 
-            color: isReply ? "#60A5FA" : "rgba(255, 255, 255, 0.6)", 
-            fontSize: 10, 
-            fontWeight: "600" 
-          }}>
-            {isReply ? "REPLY" : "ORIGINAL"}
-          </Text>
-        </View>
-      </View>
+  const renderMessageContent = (msg: Message, isReply: boolean) => {
+    const displayName = msg.aiFriendId
+      ? msg.aiFriend?.name ||
+        aiFriends.find((f) => f.id === msg.aiFriendId)?.name ||
+        "AI Friend"
+      : msg.user?.name || "Unknown";
 
-      {/* Content */}
-      <View style={{ 
-        paddingLeft: 34, // Align with name (24px avatar + 10px gap)
-      }}>
-        <MessageText
-          content={msg.content}
-          mentions={msg.mentions}
+    const displayImage = msg.aiFriendId
+      ? null // AI uses default icon inside ProfileImage
+      : msg.user?.image;
+    
+    const isAIMessage = !!msg.aiFriendId;
+
+    return (
+      <View style={{ marginBottom: isReply ? 0 : 20 }}>
+        {/* Header */}
+        <View
           style={{
-            color: "#FFFFFF",
-            fontSize: 15,
-            lineHeight: 22,
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: 8,
+            gap: 10,
           }}
-          isOwnMessage={false}
-        />
-        
-        {msg.messageType === "image" && msg.imageUrl && (
-          <View style={{ marginTop: 8 }}>
-            <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontStyle: "italic", fontSize: 13 }}>
-              [Image attachment]
+        >
+          <ProfileImage
+            imageUri={displayImage}
+            userName={displayName}
+            isAI={isAIMessage}
+            size={24}
+          />
+          <View>
+            <Text style={{ color: "rgba(255, 255, 255, 0.9)", fontWeight: "600", fontSize: 14 }}>
+              {displayName}
+            </Text>
+            <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 11 }}>
+              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
-        )}
+          <View style={{ 
+            backgroundColor: isReply ? "rgba(0, 122, 255, 0.2)" : "rgba(255, 255, 255, 0.1)", 
+            paddingHorizontal: 8, 
+            paddingVertical: 2, 
+            borderRadius: 4,
+            marginLeft: "auto" 
+          }}>
+            <Text style={{ 
+              color: isReply ? "#60A5FA" : "rgba(255, 255, 255, 0.6)", 
+              fontSize: 10, 
+              fontWeight: "600" 
+            }}>
+              {isReply ? "REPLY" : "ORIGINAL"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Content */}
+        <View style={{ 
+          paddingLeft: 34, // Align with name (24px avatar + 10px gap)
+        }}>
+          <MessageText
+            content={msg.content}
+            mentions={msg.mentions}
+            style={{
+              color: "#FFFFFF",
+              fontSize: 15,
+              lineHeight: 22,
+            }}
+            isOwnMessage={false}
+          />
+          
+          {msg.messageType === "image" && msg.imageUrl && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontStyle: "italic", fontSize: 13 }}>
+                [Image attachment]
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <Animated.View

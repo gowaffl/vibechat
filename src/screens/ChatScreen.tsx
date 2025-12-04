@@ -88,6 +88,7 @@ import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+import { useToast } from "@/components/Toast";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
@@ -1430,6 +1431,7 @@ const ChatScreen = () => {
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const colorScheme = useColorScheme();
 
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
@@ -7807,10 +7809,11 @@ const ChatScreen = () => {
           anchorPosition={sendButtonPosition}
         />
         <ReplyPreviewModal
-          key={replyPreviewModal?.id || "closed"}
+          key={replyPreviewModal ? `${replyPreviewModal.original.id}-${replyPreviewModal.reply.id}` : "closed"}
           visible={!!replyPreviewModal}
           message={replyPreviewModal}
           onClose={() => setReplyPreviewModal(null)}
+          aiFriends={aiFriends || []}
         />
       </View>
     );

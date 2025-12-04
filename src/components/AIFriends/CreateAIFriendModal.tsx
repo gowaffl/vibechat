@@ -72,6 +72,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
 
   useEffect(() => {
     if (visible) {
+      setShowModal(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {

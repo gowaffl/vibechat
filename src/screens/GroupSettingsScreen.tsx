@@ -484,7 +484,7 @@ const GroupSettingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ["messages"] });
       queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Success", `${data.deletedCount} messages cleared successfully`);
+      Alert.alert("Success", "Messages cleared successfully");
     },
     onError: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
