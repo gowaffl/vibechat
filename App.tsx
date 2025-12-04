@@ -11,6 +11,7 @@ import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
+import { ToastProvider } from "@/components/Toast";
 
 const linking = {
   prefixes: [
@@ -157,37 +158,39 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <UserProvider>
-        <KeyboardProvider>
-          <GestureHandlerRootView>
-            <SafeAreaProvider>
-              <NavigationContainer
-                linking={linking}
-                ref={navigationRef}
-                onReady={() => {
-                  console.log("[Navigation] ✅ Navigation container ready");
-                  // If there's a pending invite token, navigate to it now
-                  if (pendingInviteToken.current && navigationRef.current) {
-                    console.log("[DeepLink] 🚀 Late navigation to Invite with token:", pendingInviteToken.current);
-                    setTimeout(() => {
-                      if (navigationRef.current && pendingInviteToken.current) {
-                        navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
-                        pendingInviteToken.current = null;
-                      }
-                    }, 100);
-                  }
-                }}
-                onStateChange={() => {
-                  // Haptics are now handled in the navigator listeners for more precise timing
-                }}
-              >
-                <RootStackNavigator />
-                <StatusBar style="auto" />
-              </NavigationContainer>
-            </SafeAreaProvider>
-          </GestureHandlerRootView>
-        </KeyboardProvider>
-      </UserProvider>
+      <ToastProvider>
+        <UserProvider>
+          <KeyboardProvider>
+            <GestureHandlerRootView>
+              <SafeAreaProvider>
+                <NavigationContainer
+                  linking={linking}
+                  ref={navigationRef}
+                  onReady={() => {
+                    console.log("[Navigation] ✅ Navigation container ready");
+                    // If there's a pending invite token, navigate to it now
+                    if (pendingInviteToken.current && navigationRef.current) {
+                      console.log("[DeepLink] 🚀 Late navigation to Invite with token:", pendingInviteToken.current);
+                      setTimeout(() => {
+                        if (navigationRef.current && pendingInviteToken.current) {
+                          navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
+                          pendingInviteToken.current = null;
+                        }
+                      }, 100);
+                    }
+                  }}
+                  onStateChange={() => {
+                    // Haptics are now handled in the navigator listeners for more precise timing
+                  }}
+                >
+                  <RootStackNavigator />
+                  <StatusBar style="auto" />
+                </NavigationContainer>
+              </SafeAreaProvider>
+            </GestureHandlerRootView>
+          </KeyboardProvider>
+        </UserProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

@@ -71,6 +71,7 @@ import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/componen
 import { CreateCustomCommandModal } from "@/components/CustomCommands";
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ReplyPreviewModal } from "@/components/ReplyPreviewModal";
+import { ReplyChip } from "@/components/ReplyChip";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
 import { ProfileImage } from "@/components/ProfileImage";
@@ -1466,7 +1467,7 @@ const ChatScreen = () => {
   const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
   const [reactionPickerMessage, setReactionPickerMessage] = useState<Message | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
-  const [replyPreviewModal, setReplyPreviewModal] = useState<Message | null>(null);
+  const [replyPreviewModal, setReplyPreviewModal] = useState<{ original: Message; reply: Message } | null>(null);
   const [showAvatarViewer, setShowAvatarViewer] = useState(false);
   const [reactionDetailsModal, setReactionDetailsModal] = useState<{
     emoji: string;
@@ -2300,7 +2301,7 @@ const ChatScreen = () => {
       }
       console.error("Error sending message:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      showToast({ title: "Error", message: "Failed to send message. Please try again.", type: "error" });
     },
     onSuccess: (newMessage) => {
       // Smoothly replace optimistic message with real one from server
@@ -2368,7 +2369,11 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("[ChatScreen] Error adding reaction:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to add reaction");
+      showToast({ 
+        title: "Error", 
+        message: error?.message || "Failed to add reaction", 
+        type: "error" 
+      });
     },
   });
 
@@ -2383,7 +2388,11 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error deleting message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to delete message");
+      showToast({ 
+        title: "Error", 
+        message: error?.message || "Failed to delete message", 
+        type: "error" 
+      });
     },
   });
 
@@ -2403,7 +2412,11 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error editing message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to edit message");
+      showToast({ 
+        title: "Error", 
+        message: error?.message || "Failed to edit message", 
+        type: "error" 
+      });
     },
   });
 
@@ -2420,7 +2433,11 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error unsending message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to unsend message");
+      showToast({ 
+        title: "Error", 
+        message: error?.message || "Failed to unsend message", 
+        type: "error" 
+      });
     },
   });
 
@@ -2437,11 +2454,16 @@ const ChatScreen = () => {
       queryClient.invalidateQueries({ queryKey: ["customCommands", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowCreateCustomCommand(false);
+      showToast({ title: "Success", message: "Custom slash command created!", type: "success" });
     },
     onError: (error: any) => {
       console.error("Error creating custom command:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to create custom command");
+      showToast({ 
+        title: "Error", 
+        message: error?.message || "Failed to create custom command", 
+        type: "error" 
+      });
     },
   });
 
@@ -2471,7 +2493,11 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error creating AI friend:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to create AI friend");
+      showToast({ 
+        title: "Error", 
+        message: error?.message || "Failed to create AI friend", 
+        type: "error" 
+      });
     },
   });
 
@@ -2581,7 +2607,7 @@ const ChatScreen = () => {
           ]
         );
       } else {
-        Alert.alert("Error", "Failed to generate image. Please try again.");
+        showToast({ title: "Error", message: "Failed to generate image. Please try again.", type: "error" });
       }
     },
   });
@@ -2649,7 +2675,7 @@ const ChatScreen = () => {
           ]
         );
       } else {
-        Alert.alert("Error", "Failed to generate meme. Please try again.");
+        showToast({ title: "Error", message: "Failed to generate meme. Please try again.", type: "error" });
       }
     },
   });
@@ -2706,7 +2732,7 @@ const ChatScreen = () => {
           ]
         );
       } else {
-        Alert.alert("Error", "Failed to execute custom command. Please try again.");
+        showToast({ title: "Error", message: "Failed to execute custom command. Please try again.", type: "error" });
       }
     },
   });
@@ -2787,7 +2813,7 @@ const ChatScreen = () => {
       }
     } catch (error) {
       console.error("Error taking photo:", error);
-      Alert.alert("Error", "Failed to take photo");
+      showToast({ title: "Error", message: "Failed to take photo", type: "error" });
     }
   };
 
@@ -2843,7 +2869,7 @@ const ChatScreen = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image");
+      showToast({ title: "Error", message: "Failed to pick image", type: "error" });
     }
   };
 
@@ -2918,7 +2944,7 @@ const ChatScreen = () => {
       setSelectedImages([]);
     } catch (error) {
       console.error("Error uploading image:", error);
-      Alert.alert("Error", "Failed to upload image");
+      showToast({ title: "Error", message: "Failed to upload image", type: "error" });
     } finally {
       setIsUploadingImage(false);
     }
@@ -2945,7 +2971,7 @@ const ChatScreen = () => {
       }
     } catch (error) {
       console.error("Error picking video:", error);
-      Alert.alert("Error", "Failed to pick video");
+      showToast({ title: "Error", message: "Failed to pick video", type: "error" });
     }
   };
 
@@ -3039,7 +3065,7 @@ const ChatScreen = () => {
       setSelectedVideo(null);
     } catch (error) {
       console.error("Error uploading video:", error);
-      Alert.alert("Error", "Failed to upload video");
+      showToast({ title: "Error", message: "Failed to upload video", type: "error" });
     } finally {
       setIsUploadingVideo(false);
     }
@@ -3101,7 +3127,7 @@ const ChatScreen = () => {
     } catch (error) {
       console.error("[ChatScreen] Error uploading voice message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", "Failed to upload voice message. Please try again.");
+      showToast({ title: "Error", message: "Failed to upload voice message. Please try again.", type: "error" });
     } finally {
       setIsUploadingVoice(false);
     }
@@ -3186,7 +3212,7 @@ const ChatScreen = () => {
             setSelectedImages([]);
           } catch (error) {
             console.error("[ChatScreen /image] ❌ Error uploading reference images:", error);
-            Alert.alert("Error", "Failed to upload reference images");
+            showToast({ title: "Error", message: "Failed to upload reference images", type: "error" });
           } finally {
             setIsUploadingImage(false);
           }
@@ -3253,7 +3279,7 @@ const ChatScreen = () => {
             setSelectedImages([]);
           } catch (error) {
             console.error("Error uploading reference image:", error);
-            Alert.alert("Error", "Failed to upload reference image");
+            showToast({ title: "Error", message: "Failed to upload reference image", type: "error" });
           } finally {
             setIsUploadingImage(false);
           }
@@ -3396,7 +3422,7 @@ const ChatScreen = () => {
         console.log('[ChatScreen] AI chat mutation called');
       } catch (error) {
         console.error('[ChatScreen] ERROR during AI message flow:', error);
-        Alert.alert('Error', `Failed to send AI message: ${error}`);
+        showToast({ title: "Error", message: `Failed to send AI message: ${error}`, type: "error" });
       }
       return; // Don't continue to regular message sending
 
@@ -3506,7 +3532,7 @@ const ChatScreen = () => {
     if (message.content) {
       await Clipboard.setStringAsync(message.content);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Copied", "Message copied to clipboard");
+      showToast({ message: "Message copied to clipboard", type: "info" });
     }
   };
 
@@ -3951,11 +3977,11 @@ const ChatScreen = () => {
         await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
       }
 
-      Alert.alert("Success", `${imageMessages.length} image(s) saved to your library!`);
+      showToast({ title: "Success", message: `${imageMessages.length} image(s) saved to your library!`, type: "success" });
       cancelImageSelectionMode();
     } catch (error) {
       console.error("Error saving images:", error);
-      Alert.alert("Error", "Failed to save images");
+      showToast({ title: "Error", message: "Failed to save images", type: "error" });
     }
   };
 
@@ -3967,7 +3993,7 @@ const ChatScreen = () => {
       // Check if sharing is available
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert("Error", "Sharing is not available on this device");
+        showToast({ title: "Error", message: "Sharing is not available on this device", type: "error" });
         return;
       }
 
@@ -3992,7 +4018,7 @@ const ChatScreen = () => {
       } else {
         // For multiple images, share the first one with a note
         await Sharing.shareAsync(fileUris[0]);
-        Alert.alert("Note", "Multiple images selected. Some platforms may only share the first image.");
+        showToast({ title: "Note", message: "Multiple images selected. Some platforms may only share the first image.", type: "info" });
       }
 
       cancelImageSelectionMode();
@@ -5447,63 +5473,17 @@ const ChatScreen = () => {
             </Text>
           )}
           {/* Reply Preview - Full Width */}
-          {message.replyTo && (() => {
-            const replyToMessage = message.replyTo;
-            const replyTapGesture = Gesture.Tap()
-              .onEnd(() => {
-                runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
-                runOnJS(setReplyPreviewModal)(replyToMessage);
-              });
-
-            return (
-              <GestureDetector gesture={replyTapGesture}>
-                <Reanimated.View
-                  style={{
-                    marginLeft: isCurrentUser ? 0 : 4,
-                    marginRight: isCurrentUser ? 4 : 0,
-                    marginBottom: 4,
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: 12,
-                    backgroundColor: "rgba(255, 255, 255, 0.08)",
-                    borderLeftWidth: 3,
-                    borderLeftColor: isCurrentUser ? "#007AFF" : "#8E8E93",
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    maxWidth: "100%",
-                    alignSelf: isCurrentUser ? "flex-end" : "flex-start",
-                  }}
-                >
-                  <Text style={{ fontSize: 12, color: isCurrentUser ? "#60A5FA" : "#9CA3AF", fontWeight: "600" }} numberOfLines={1}>
-                    {replyToMessage?.aiFriendId
-                      ? (replyToMessage?.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage?.aiFriendId)?.name || "AI Friend")
-                      : (replyToMessage?.user?.name || "Unknown User")}
-                  </Text>
-                  
-                  {replyToMessage?.messageType === "image" ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                      {replyToMessage?.imageUrl && (
-                        <Image
-                          source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
-                          style={{ width: 36, height: 36, borderRadius: 6, marginRight: 6 }}
-                          contentFit="cover"
-                        />
-                      )}
-                      <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>Photo</Text>
-                    </View>
-                  ) : (
-                    <Text
-                      style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", flex: 1 }}
-                      numberOfLines={1}
-                    >
-                      {replyToMessage?.content}
-                    </Text>
-                  )}
-                </Reanimated.View>
-              </GestureDetector>
-            );
-          })()}
+          {message.replyTo && (
+            <ReplyChip
+              replyToMessage={message.replyTo}
+              replyMessage={message}
+              isCurrentUser={isCurrentUser}
+              aiFriends={aiFriends}
+              onPress={(original, reply) => {
+                setReplyPreviewModal({ original, reply });
+              }}
+            />
+          )}
           {/* Message Bubble with Long Press or Selection */}
           <View style={{ maxWidth: "85%", alignSelf: isCurrentUser ? "flex-end" : "flex-start" }}>
           <SwipeableMessage

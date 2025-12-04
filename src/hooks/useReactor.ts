@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Message } from "@shared/contracts";
-import { Alert } from "react-native";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 export function useReactor(chatId: string, userId: string) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   // Generate caption for media
   const captionMutation = useMutation({
@@ -21,11 +22,19 @@ export function useReactor(chatId: string, userId: string) {
     onSuccess: () => {
       console.log("[Reactor] Caption success, invalidating queries");
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      Alert.alert("✨ Caption Ready!", "Check the chat for your AI-generated caption", [{ text: "OK" }]);
+      showToast({ 
+        title: "✨ Caption Ready!", 
+        message: "Check the chat for your AI-generated caption",
+        type: "success" 
+      });
     },
     onError: (error: Error) => {
       console.log("[Reactor] Caption mutation error:", error);
-      Alert.alert("❌ Caption Failed", error.message || "Could not generate caption. Please try again.", [{ text: "OK" }]);
+      showToast({ 
+        title: "❌ Caption Failed", 
+        message: error.message || "Could not generate caption. Please try again.",
+        type: "error" 
+      });
     },
   });
 
@@ -54,7 +63,11 @@ export function useReactor(chatId: string, userId: string) {
       // Only show success alert if we actually got data back
       if (data && data.id) {
         console.log("[Reactor] Showing success alert");
-        Alert.alert("🎨 Remix Ready!", "Your remixed image has been posted to the chat", [{ text: "OK" }]);
+        showToast({ 
+          title: "🎨 Remix Ready!", 
+          message: "Your remixed image has been posted to the chat",
+          type: "success" 
+        });
       }
     },
     onError: (error: Error) => {
@@ -77,7 +90,11 @@ export function useReactor(chatId: string, userId: string) {
         userMessage = "Image service is temporarily unavailable. Please try again later.";
       }
       
-      Alert.alert("❌ Remix Failed", userMessage, [{ text: "OK" }]);
+      showToast({ 
+        title: "❌ Remix Failed", 
+        message: userMessage,
+        type: "error" 
+      });
     },
   });
 
@@ -103,7 +120,11 @@ export function useReactor(chatId: string, userId: string) {
     onSuccess: () => {
       console.log("[Reactor] Meme success, invalidating queries");
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      Alert.alert("😂 Meme Ready!", "Your hilarious meme has been posted to the chat", [{ text: "OK" }]);
+      showToast({ 
+        title: "😂 Meme Ready!", 
+        message: "Your hilarious meme has been posted to the chat",
+        type: "success" 
+      });
     },
     onError: (error: Error) => {
       console.log("[Reactor] Meme mutation error:", error);
@@ -125,7 +146,11 @@ export function useReactor(chatId: string, userId: string) {
         userMessage = "Image service is temporarily unavailable. Please try again later.";
       }
       
-      Alert.alert("❌ Meme Failed", userMessage, [{ text: "OK" }]);
+      showToast({ 
+        title: "❌ Meme Failed", 
+        message: userMessage,
+        type: "error" 
+      });
     },
   });
 

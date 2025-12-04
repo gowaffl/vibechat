@@ -783,7 +783,8 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
 
     console.log(`✅ [Messages] Message ${messageId} unsent successfully`);
 
-    return c.json(unsendMessageResponseSchema.parse({
+    // Safely construct the response object handling potential snake_case/camelCase issues
+    const responseObj = {
       id: updatedMessage.id,
       content: updatedMessage.content,
       messageType: updatedMessage.messageType,
@@ -795,15 +796,16 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
       editedAt: updatedMessage.editedAt ? new Date(updatedMessage.editedAt).toISOString() : null,
       isUnsent: updatedMessage.isUnsent,
       editHistory: typeof updatedMessage.editHistory === 'object' ? JSON.stringify(updatedMessage.editHistory) : updatedMessage.editHistory,
-      createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at).toISOString(),
+      // Handle both camelCase and snake_case for createdAt
+      createdAt: new Date(updatedMessage.createdAt || (updatedMessage as any).created_at || new Date()).toISOString(),
       user: user ? {
         id: user.id,
         name: user.name,
         bio: user.bio,
         image: user.image,
         hasCompletedOnboarding: user.hasCompletedOnboarding,
-        createdAt: new Date(user.createdAt).toISOString(),
-        updatedAt: new Date(user.updatedAt).toISOString(),
+        createdAt: new Date(user.createdAt || (user as any).created_at || new Date()).toISOString(),
+        updatedAt: new Date(user.updatedAt || (user as any).updated_at || new Date()).toISOString(),
       } : null,
       replyTo: replyTo ? {
         id: replyTo.id,
@@ -814,15 +816,16 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
         userId: replyTo.userId,
         chatId: replyTo.chatId,
         replyToId: replyTo.replyToId,
-        createdAt: new Date(replyTo.createdAt).toISOString(),
+        // Handle both camelCase and snake_case for replyTo.createdAt
+        createdAt: new Date(replyTo.createdAt || (replyTo as any).created_at || new Date()).toISOString(),
         user: {
           id: replyTo.user.id,
           name: replyTo.user.name,
           bio: replyTo.user.bio,
           image: replyTo.user.image,
           hasCompletedOnboarding: replyTo.user.hasCompletedOnboarding,
-          createdAt: new Date(replyTo.user.createdAt).toISOString(),
-          updatedAt: new Date(replyTo.user.updatedAt).toISOString(),
+          createdAt: new Date(replyTo.user.createdAt || (replyTo.user as any).created_at || new Date()).toISOString(),
+          updatedAt: new Date(replyTo.user.updatedAt || (replyTo.user as any).updated_at || new Date()).toISOString(),
         },
       } : null,
       reactions: reactions.map((reaction: any) => ({
@@ -830,9 +833,14 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
         emoji: reaction.emoji,
         userId: reaction.userId,
         messageId: reaction.messageId,
-        createdAt: new Date(reaction.createdAt).toISOString(),
+        createdAt: new Date(reaction.createdAt || reaction.created_at || new Date()).toISOString(),
       })),
-    }));
+      // Include default values for fields required by schema but potentially missing from DB update result
+      mentions: [], // We don't fetch mentions for unsent message response
+      linkPreview: null,
+    };
+
+    return c.json(unsendMessageResponseSchema.parse(responseObj));
   } catch (error) {
     console.error("Error unsending message:", error);
     return c.json({ error: "Failed to unsend message" }, 500);

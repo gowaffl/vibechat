@@ -4,13 +4,13 @@ import { BlurView } from "expo-blur";
 import { Message } from "@shared/contracts";
 import MessageText from "./MessageText";
 import { ProfileImage } from "./ProfileImage";
-import { X } from "lucide-react-native";
+import { X, ArrowDown } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
 interface ReplyPreviewModalProps {
   visible: boolean;
-  message: Message | null;
+  message: { original: Message; reply: Message } | null;
   onClose: () => void;
 }
 
@@ -36,6 +36,73 @@ export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
   };
+
+  const renderMessageContent = (msg: Message, isReply: boolean) => (
+    <View style={{ marginBottom: isReply ? 0 : 20 }}>
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 8,
+          gap: 10,
+        }}
+      >
+        <ProfileImage
+          imageUri={msg.user?.image}
+          userName={msg.user?.name || "Unknown"}
+          size={24}
+        />
+        <View>
+          <Text style={{ color: "rgba(255, 255, 255, 0.9)", fontWeight: "600", fontSize: 14 }}>
+            {msg.user?.name || "Unknown"}
+          </Text>
+          <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 11 }}>
+            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+        <View style={{ 
+          backgroundColor: isReply ? "rgba(0, 122, 255, 0.2)" : "rgba(255, 255, 255, 0.1)", 
+          paddingHorizontal: 8, 
+          paddingVertical: 2, 
+          borderRadius: 4,
+          marginLeft: "auto" 
+        }}>
+          <Text style={{ 
+            color: isReply ? "#60A5FA" : "rgba(255, 255, 255, 0.6)", 
+            fontSize: 10, 
+            fontWeight: "600" 
+          }}>
+            {isReply ? "REPLY" : "ORIGINAL"}
+          </Text>
+        </View>
+      </View>
+
+      {/* Content */}
+      <View style={{ 
+        paddingLeft: 34, // Align with name (24px avatar + 10px gap)
+      }}>
+        <MessageText
+          content={msg.content}
+          mentions={msg.mentions}
+          style={{
+            color: "#FFFFFF",
+            fontSize: 15,
+            lineHeight: 22,
+          }}
+          isOwnMessage={false}
+        />
+        
+        {msg.messageType === "image" && msg.imageUrl && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontStyle: "italic", fontSize: 13 }}>
+              [Image attachment]
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
 
   return (
     <Animated.View
@@ -63,16 +130,16 @@ export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
           style={{
             width: "100%",
             maxWidth: 400,
-            backgroundColor: "rgba(30, 30, 30, 0.9)",
+            backgroundColor: "rgba(30, 30, 30, 0.95)",
             borderRadius: 24,
             borderWidth: 1,
             borderColor: "rgba(255, 255, 255, 0.1)",
             overflow: "hidden",
             shadowColor: "#000",
             shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.3,
-            shadowRadius: 20,
-            elevation: 10,
+            shadowOpacity: 0.5,
+            shadowRadius: 30,
+            elevation: 20,
           }}
         >
           {/* Header */}
@@ -86,21 +153,9 @@ export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
               borderBottomColor: "rgba(255, 255, 255, 0.1)",
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <ProfileImage
-                imageUri={message?.user?.image}
-                userName={message?.user?.name || "Unknown"}
-                size={32}
-              />
-              <View>
-                <Text style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 16 }}>
-                  {message?.user?.name || "Unknown"}
-                </Text>
-                <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12 }}>
-                  {message ? new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                </Text>
-              </View>
-            </View>
+            <Text style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 16 }}>
+              Thread Context
+            </Text>
             
             <Pressable
               onPress={handleClose}
@@ -117,32 +172,48 @@ export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
             </Pressable>
           </View>
 
-          {/* Message Content */}
+          {/* Thread Content */}
           <ScrollView
-            style={{ maxHeight: 300 }}
+            style={{ maxHeight: 400 }}
             contentContainerStyle={{ padding: 20 }}
             keyboardShouldPersistTaps="always"
           >
             {message && (
               <>
-                <MessageText
-                  content={message.content}
-                  mentions={message.mentions}
-                  style={{
-                    color: "#FFFFFF",
-                    fontSize: 17,
-                    lineHeight: 24,
-                  }}
-                  isOwnMessage={false}
-                />
+                {/* Original Message */}
+                {renderMessageContent(message.original, false)}
+
+                {/* Connector Line */}
+                <View style={{ 
+                  marginLeft: 11, 
+                  height: 20, 
+                  borderLeftWidth: 2, 
+                  borderLeftColor: "rgba(255, 255, 255, 0.1)",
+                  marginTop: -20,
+                  marginBottom: 0,
+                }} />
                 
-                {message.messageType === "image" && message.imageUrl && (
-                  <View style={{ marginTop: 10 }}>
-                    <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontStyle: "italic" }}>
-                      [Image attachment]
-                    </Text>
-                  </View>
-                )}
+                {/* Reply Arrow */}
+                <View style={{ 
+                  flexDirection: 'row', 
+                  alignItems: 'center', 
+                  marginBottom: 10,
+                  marginLeft: 4
+                }}>
+                   <View style={{ 
+                     width: 16, 
+                     height: 16, 
+                     borderRadius: 8, 
+                     backgroundColor: "rgba(255, 255, 255, 0.1)",
+                     alignItems: 'center',
+                     justifyContent: 'center'
+                   }}>
+                     <ArrowDown size={10} color="rgba(255, 255, 255, 0.5)" />
+                   </View>
+                </View>
+
+                {/* Reply Message */}
+                {renderMessageContent(message.reply, true)}
               </>
             )}
           </ScrollView>
