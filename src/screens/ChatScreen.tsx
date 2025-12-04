@@ -4615,15 +4615,161 @@ const ChatScreen = () => {
     const prevMessage = displayDataMemo[index + 1]; // Older message (visually above)
     const nextMessage = displayDataMemo[index - 1]; // Newer message (visually below)
 
-    const isSameUserAsOlder = prevMessage && !('isTyping' in prevMessage) && !('isUserTyping' in prevMessage) && (prevMessage as Message).userId === message.userId && (prevMessage as Message).messageType !== 'system';
-    const isSameUserAsNewer = nextMessage && !('isTyping' in nextMessage) && !('isUserTyping' in nextMessage) && (nextMessage as Message).userId === message.userId && (nextMessage as Message).messageType !== 'system';
+    const isSameUserAsOlder = prevMessage && !('isTyping' in prevMessage) && !('isUserTyping' in prevMessage) && (prevMessage as Message).messageType !== 'system' && 
+      (prevMessage as Message).userId === message.userId && 
+      ((prevMessage as Message).userId !== null || (prevMessage as Message).aiFriendId === message.aiFriendId);
+
+    const isSameUserAsNewer = nextMessage && !('isTyping' in nextMessage) && !('isUserTyping' in nextMessage) && (nextMessage as Message).messageType !== 'system' && 
+      (nextMessage as Message).userId === message.userId && 
+      ((nextMessage as Message).userId !== null || (nextMessage as Message).aiFriendId === message.aiFriendId);
 
     // Show name only if it's the first message in the group (visually top / older)
     const showName = !isSameUserAsOlder;
     // Show avatar only if it's the last message in the group (visually bottom / newer)
     const showAvatar = !isSameUserAsNewer;
     // Reduce margin to older message (visually top) if it's the same user
-    const shouldReduceTopMargin = isSameUserAsOlder; 
+    const shouldReduceTopMargin = isSameUserAsOlder;
+    
+    // Increase margin to newer message (visually bottom) if the next message is from a different user
+    // This ensures the "end" of a group has normal spacing before the next person speaks
+    const shouldIncreaseBottomMargin = !isSameUserAsNewer;
+
+    // EXTRA CHECK: If the *previous* message (visually above/older) was the end of a group, 
+    // we need to make sure *this* message (start of new group) has top margin.
+    // However, in inverted list, margin-bottom on the *older* message pushes the *newer* message away.
+    // So `shouldIncreaseBottomMargin` on the OLDER message is what creates the gap.
+    // We just need to make sure our logic is sound.
+
+    // Let's simplify:
+    // If same user as older -> mb-0.5 (tight with message above)
+    // If different user as older -> mb-3 (gap with message above) -- wait, this is wrong for inverted list?
+    
+    // RE-THINKING FOR INVERTED LIST:
+    // FlatList is inverted.
+    // Item 0 is at the BOTTOM of the screen (Newest).
+    // Item 1 is ABOVE Item 0 (Older).
+    
+    // Render order: Item 0, Item 1, Item 2...
+    // Visual stack (Top to Bottom):
+    // Item 2 (Oldest)
+    // Item 1
+    // Item 0 (Newest)
+
+    // We are applying `marginBottom` to the item container.
+    // In a standard View (flex-direction: column), marginBottom pushes the NEXT element down.
+    // But inside an INVERTED FlatList?
+    // Inverted FlatList usually just flips the scaleY or renders items in reverse order visually.
+    // If it renders Item 0 at the bottom, and Item 1 above it...
+    // Does margin-bottom on Item 1 push Item 0 down? Or does it create space *below* Item 1?
+    // Visually: [Item 1] -> space -> [Item 0]
+    // If Item 1 has marginBottom, that space is *below* Item 1, so yes, between 1 and 0.
+
+    // So:
+    // `prevMessage` is `displayDataMemo[index + 1]` -> OLDER (Visually ABOVE)
+    // `nextMessage` is `displayDataMemo[index - 1]` -> NEWER (Visually BELOW)
+
+    // If I am Item 1.
+    // `isSameUserAsOlder` checks Item 2 (Above me).
+    // `isSameUserAsNewer` checks Item 0 (Below me).
+
+    // If I am the BOTTOM of a group (Item 1, and Item 0 is different user):
+    // `isSameUserAsNewer` is FALSE.
+    // I want a gap BELOW me.
+    // So `marginBottom` should be LARGE (mb-3).
+
+    // If I am the MIDDLE of a group (Item 1, and Item 0 is same user):
+    // `isSameUserAsNewer` is TRUE.
+    // I want NO gap BELOW me (tight).
+    // So `marginBottom` should be SMALL (mb-0.5).
+
+    // Wait, my previous logic was:
+    // `shouldReduceTopMargin = isSameUserAsOlder` -> controls TOP margin?
+    // `shouldIncreaseBottomMargin = !isSameUserAsNewer` -> controls BOTTOM margin?
+    
+    // The code uses: `className={... mb-... ...}`
+    // This applies MARGIN BOTTOM.
+    
+    // So we are ONLY controlling the space BELOW the message (visually).
+    // Visually BELOW = Towards the NEWER message (Item 0).
+
+    // So:
+    // If `isSameUserAsNewer` (Next/Below message is me) -> mb-0.5 (Tight)
+    // If `!isSameUserAsNewer` (Next/Below message is different OR null) -> mb-3 (Gap)
+
+    // Let's look at the current code again:
+    // `${shouldReduceTopMargin ? 'mb-0.5' : (shouldIncreaseBottomMargin ? 'mb-3' : 'mb-3')}`
+    
+    // `shouldReduceTopMargin` = `isSameUserAsOlder` (Visually ABOVE is same)
+    // If TRUE (Same above) -> mb-0.5.
+    // This sets the margin BELOW THIS MESSAGE to 0.5?
+    // NO. `mb-` sets margin-bottom.
+    // If `isSameUserAsOlder` is true, that means *I* am the 2nd, 3rd, etc message in a group.
+    // The message visually ABOVE me is same user.
+    // Why would we set *my* bottom margin based on the guy *above* me?
+    
+    // AH! The logic is inverted because I might be thinking about `marginTop` behavior?
+    // In a normal list (Top->Bottom):
+    // Item 1 (Top) -> mb-? -> Item 2 (Bottom)
+    // If Item 1 & 2 are same -> Item 1 gets small mb.
+    
+    // In our INVERTED list:
+    // Item 0 (Bottom/Newest)
+    // Item 1 (Top/Older)
+    // FlatList renders them.
+    
+    // If `isSameUserAsNewer` is true (I am Item 1, Item 0 is me):
+    // I (Item 1) am visually ABOVE Item 0.
+    // I need small margin-bottom so Item 0 is close to me.
+    
+    // So the condition for `mb-0.5` should be `isSameUserAsNewer`.
+    
+    // Current code:
+    // `shouldReduceTopMargin` is `isSameUserAsOlder`.
+    // If `isSameUserAsOlder` -> mb-0.5.
+    // This means: If the guy ABOVE me is me, I set MY bottom margin to small.
+    // That implies I want the guy BELOW me to be close? That makes no sense unless everyone is me.
+    
+    // SCENARIO:
+    // Item 2 (User A)
+    // Item 1 (User A)
+    // Item 0 (User B)
+    
+    // Item 1 analysis:
+    // `isSameUserAsOlder` (Item 2) = TRUE.
+    // Current code sets `mb-0.5`.
+    // So Item 1 has small bottom margin.
+    // Result: Item 1 sits close to Item 0 (User B).
+    // ERROR: User A (Item 1) should have GAP before User B (Item 0).
+    
+    // CORRECTION:
+    // We need to check `isSameUserAsNewer` to determine OUR bottom margin.
+    
+    // Logic:
+    // If `isSameUserAsNewer` (Visually below is same) -> `mb-0.5`
+    // Else -> `mb-3`
+    
+    // What about the top margin?
+    // We generally don't use margin-top in lists, we rely on the previous item's margin-bottom.
+    // EXCEPT... if we are the very top item? No, inverted list handles that.
+    
+    // So, the `className` should be:
+    // `isSameUserAsNewer ? 'mb-0.5' : 'mb-3'`
+    
+    // Let's check the inverse case:
+    // Item 1 (User A)
+    // Item 0 (User A)
+    
+    // Item 1:
+    // `isSameUserAsNewer` (Item 0) = TRUE.
+    // Result: `mb-0.5`.
+    // Visual: Item 1 close to Item 0. CORRECT.
+    
+    // Item 0:
+    // `isSameUserAsNewer` (null/future) = FALSE.
+    // Result: `mb-3`.
+    // Visual: Gap after last message. CORRECT.
+
+    const marginBottomClass = isSameUserAsNewer ? 'mb-0.5' : 'mb-3';
 
     const isCurrentUser = message.userId === user?.id;
     // AI messages have userId: null and aiFriendId set
@@ -5247,7 +5393,7 @@ const ChatScreen = () => {
     return (
       <Reanimated.View
         entering={FadeInUp.duration(300)}
-        className={`${shouldReduceTopMargin ? 'mb-0.5' : 'mb-3'} flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
+        className={`${marginBottomClass} flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
         style={{
           paddingHorizontal: 4,
           alignItems: "flex-start",
