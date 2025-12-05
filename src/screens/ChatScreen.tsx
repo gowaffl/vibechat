@@ -1636,6 +1636,9 @@ const ChatScreen = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
 
+  // Track realtime subscription retries (helps surface errors + auto-retry)
+  const [realtimeRetryCount, setRealtimeRetryCount] = useState(0);
+
   // Fetch messages for this chat (with pagination support)
   const { data: messageData, isLoading } = useQuery({
     queryKey: ["messages", chatId],
@@ -1649,13 +1652,27 @@ const ChatScreen = () => {
     enabled: !!user?.id && !!chatId,
   });
 
+  // Ensure Realtime has the current auth token (important when sessions refresh)
+  useEffect(() => {
+    const syncRealtimeAuth = async () => {
+      const { data } = await supabaseClient.auth.getSession();
+      const token = data.session?.access_token;
+      console.log("[Realtime] Syncing auth token for realtime. Has token:", !!token);
+      if (token) {
+        supabaseClient.realtime.setAuth(token);
+      }
+    };
+
+    syncRealtimeAuth();
+  }, [user?.id]);
+
   // Realtime subscription for messages and reactions
   // NOTE: We don't use filters because Supabase Realtime doesn't support camelCase column names
   // in filter strings. Instead, we filter client-side in the callback (like ChatListScreen does).
   useEffect(() => {
     if (!chatId) return;
 
-    console.log(`[Realtime] Subscribing to chat:${chatId}`);
+    console.log(`[Realtime] Subscribing to chat:${chatId} (attempt ${realtimeRetryCount + 1})`);
     const channel = supabaseClient.channel(`chat:${chatId}`)
       // Listen for new messages
       .on(
@@ -1782,13 +1799,31 @@ const ChatScreen = () => {
         console.log(`[Realtime] Subscription status for chat:${chatId}:`, status);
         if (err) {
           console.error('[Realtime] Subscription error:', err);
+          // Retry on error paths to recover without user action
+          setTimeout(() => {
+            setRealtimeRetryCount((prev) => prev + 1);
+          }, 500);
+        }
+
+        if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          setTimeout(() => {
+            setRealtimeRetryCount((prev) => prev + 1);
+          }, 500);
         }
       });
 
+    // Safety net: if we don't get SUBSCRIBED within 5s, force a refetch and retry
+    const subscriptionTimeout = setTimeout(() => {
+      console.warn(`[Realtime] Subscription timeout for chat:${chatId}, forcing refetch + retry`);
+      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+      setRealtimeRetryCount((prev) => prev + 1);
+    }, 5000);
+
     return () => {
+      clearTimeout(subscriptionTimeout);
       supabaseClient.removeChannel(channel);
     };
-  }, [chatId, queryClient]);
+  }, [chatId, queryClient, realtimeRetryCount]);
 
   // Update messages state when data changes
   useEffect(() => {
