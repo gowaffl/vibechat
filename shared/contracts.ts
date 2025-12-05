@@ -423,7 +423,7 @@ export const imagePreviewResponseSchema = z.object({
   imageUrl: z.string(),
   previewId: z.string(), // Unique ID for this preview session
   prompt: z.string(),
-  metadata: z.object({}).passthrough().optional(),
+  metadata: z.any().optional(),
 });
 export type ImagePreviewResponse = z.infer<typeof imagePreviewResponseSchema>;
 
@@ -450,12 +450,7 @@ export const confirmImageRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   type: z.enum(["image", "meme", "remix"]),
-  metadata: z.object({
-    slashCommand: z.object({
-      command: z.string(),
-      prompt: z.string().optional(),
-    }).optional(),
-  }).passthrough().optional(), // For reactor metadata and slash command badges
+  metadata: z.any().optional(), // For reactor metadata and slash command badges
 });
 export type ConfirmImageRequest = z.infer<typeof confirmImageRequestSchema>;
 export const confirmImageResponseSchema = messageSchema;
