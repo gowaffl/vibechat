@@ -12,6 +12,12 @@ export interface ReactorOptions {
 export function useReactor(chatId: string, userId: string, options?: ReactorOptions) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  
+  console.log("[useReactor] Hook initialized with options:", {
+    hasOnStart: !!options?.onStart,
+    hasOnPreview: !!options?.onPreview,
+    hasOnGenerationError: !!options?.onGenerationError,
+  });
 
   // Generate caption for media
   const captionMutation = useMutation({
@@ -68,7 +74,12 @@ export function useReactor(chatId: string, userId: string, options?: ReactorOpti
     },
     onMutate: ({ remixPrompt }) => {
       // Notify that generation is starting so UI can show loading state
-      options?.onStart?.("remix", remixPrompt);
+      // Small delay to allow ReactorMenu modal to close first (prevents modal conflict)
+      console.log("[useReactor] remixMutation onMutate fired, scheduling onStart with prompt:", remixPrompt);
+      setTimeout(() => {
+        console.log("[useReactor] Calling onStart now (after delay)");
+        options?.onStart?.("remix", remixPrompt);
+      }, 350);
     },
     onSuccess: (data) => {
       console.log("[Reactor] Remix success with data:", data);
@@ -146,7 +157,12 @@ export function useReactor(chatId: string, userId: string, options?: ReactorOpti
     },
     onMutate: ({ memePrompt }) => {
       // Notify that generation is starting so UI can show loading state
-      options?.onStart?.("meme", memePrompt || "");
+      // Small delay to allow ReactorMenu modal to close first (prevents modal conflict)
+      console.log("[useReactor] memeMutation onMutate fired, scheduling onStart with prompt:", memePrompt);
+      setTimeout(() => {
+        console.log("[useReactor] Calling onStart now (after delay)");
+        options?.onStart?.("meme", memePrompt || "");
+      }, 350);
     },
     onSuccess: (data) => {
       console.log("[Reactor] Meme success, data:", data);

@@ -1990,7 +1990,8 @@ const ChatScreen = () => {
     },
     onStart: (type, prompt) => {
       // Immediately open preview modal with loading state
-      console.log("[ChatScreen] Reactor generation started:", type);
+      console.log("[ChatScreen] onStart callback received - type:", type, "prompt:", prompt);
+      console.log("[ChatScreen] Setting previewImage to show shimmer loading...");
       setPreviewImage({
         imageUrl: '', // Empty triggers loading/shimmer state
         previewId: 'generating',
@@ -1998,6 +1999,7 @@ const ChatScreen = () => {
       });
       setOriginalPreviewPrompt(prompt);
       setPreviewType(type);
+      console.log("[ChatScreen] Preview modal should now be visible with shimmer");
     },
     onGenerationError: () => {
       // Close the preview modal on error

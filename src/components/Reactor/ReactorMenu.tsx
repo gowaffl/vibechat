@@ -125,16 +125,22 @@ const ReactorMenu: React.FC<ReactorMenuProps> = ({
   };
 
   const handleRemixSubmit = () => {
+    console.log("[ReactorMenu] handleRemixSubmit called, prompt:", remixPrompt);
     if (remixPrompt.trim()) {
+      console.log("[ReactorMenu] Calling onRemix with prompt:", remixPrompt.trim());
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onRemix(remixPrompt.trim());
       handleClose();
+    } else {
+      console.log("[ReactorMenu] Prompt is empty, not calling onRemix");
     }
   };
 
   const handleMemeSubmit = () => {
+    console.log("[ReactorMenu] handleMemeSubmit called, prompt:", memePrompt);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // Allow empty prompt - AI will decide on its own
+    console.log("[ReactorMenu] Calling onMeme with prompt:", memePrompt.trim());
     onMeme(memePrompt.trim());
     handleClose();
   };
