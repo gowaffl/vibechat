@@ -8158,7 +8158,7 @@ const ChatScreen = () => {
             if (reactorMessageId && prompt.trim()) {
               console.log("[ChatScreen] Triggering remix for:", reactorMessageId, "prompt:", prompt);
               setIsAITyping(true); // Show AI typing animation
-              remix({ messageId: reactorMessageId, remixPrompt: prompt });
+              remix({ messageId: reactorMessageId, remixPrompt: prompt, preview: true });
               setShowReactorMenu(false);
               setReactorMessageId(null);
               // Auto-scroll removed per user request
@@ -8176,7 +8176,7 @@ const ChatScreen = () => {
             if (reactorMessageId) {
               console.log("[ChatScreen] Triggering meme generation for:", reactorMessageId, "prompt:", prompt || "(AI will decide)");
               setIsAITyping(true); // Show AI typing animation
-              createMeme({ messageId: reactorMessageId, memePrompt: prompt || undefined });
+              createMeme({ messageId: reactorMessageId, memePrompt: prompt || undefined, preview: true });
               setShowReactorMenu(false);
               setReactorMessageId(null);
               // Scroll to show AI typing indicator
