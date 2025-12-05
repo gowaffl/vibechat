@@ -866,20 +866,20 @@ chats.get("/:id/messages", async (c) => {
       }
 
       return {
-        id: msg.id,
-        content: msg.content,
+      id: msg.id,
+      content: msg.content,
         messageType: msg.messageType,
-        imageUrl: msg.imageUrl,
-        imageDescription: msg.imageDescription,
-        voiceUrl: msg.voiceUrl,
-        voiceDuration: msg.voiceDuration,
-        eventId: msg.eventId,
-        pollId: msg.pollId,
-        userId: msg.userId,
-        chatId: msg.chatId,
-        replyToId: msg.replyToId,
-        vibeType: msg.vibeType || null,
-        metadata: parsedMetadata,
+      imageUrl: msg.imageUrl,
+      imageDescription: msg.imageDescription,
+      voiceUrl: msg.voiceUrl,
+      voiceDuration: msg.voiceDuration,
+      eventId: msg.eventId,
+      pollId: msg.pollId,
+      userId: msg.userId,
+      chatId: msg.chatId,
+      replyToId: msg.replyToId,
+      vibeType: msg.vibeType || null,
+      metadata: parsedMetadata,
         aiFriendId: msg.aiFriendId,
         aiFriend: msg.aiFriend ? {
           id: msg.aiFriend.id,
@@ -893,10 +893,10 @@ chats.get("/:id/messages", async (c) => {
           sortOrder: msg.aiFriend.sortOrder,
           createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
           updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
-        } : null,
-        editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
-        isUnsent: msg.isUnsent,
-        editHistory: msg.editHistory,
+      } : null,
+      editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
+      isUnsent: msg.isUnsent,
+      editHistory: msg.editHistory,
         user: msg.user ? {
           id: msg.user.id,
           name: msg.user.name,
@@ -905,7 +905,7 @@ chats.get("/:id/messages", async (c) => {
           hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
           createdAt: new Date(msg.user.createdAt).toISOString(),
           updatedAt: new Date(msg.user.updatedAt).toISOString(),
-        } : null,
+      } : null,
         replyTo: msg.replyTo ? {
           id: msg.replyTo.id,
           content: msg.replyTo.content,
@@ -929,7 +929,7 @@ chats.get("/:id/messages", async (c) => {
             hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
             createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
             updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
-          } : null,
+        } : null,
           aiFriend: msg.replyTo.aiFriend ? {
             id: msg.replyTo.aiFriend.id,
             name: msg.replyTo.aiFriend.name,
@@ -942,9 +942,9 @@ chats.get("/:id/messages", async (c) => {
             sortOrder: msg.replyTo.aiFriend.sortOrder,
             createdAt: new Date(msg.replyTo.aiFriend.createdAt).toISOString(),
             updatedAt: new Date(msg.replyTo.aiFriend.updatedAt).toISOString(),
-          } : null,
-          createdAt: new Date(msg.replyTo.createdAt).toISOString(),
         } : null,
+          createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+      } : null,
         reactions: (msg.reactions || []).map((r: any) => ({
           id: r.id,
           emoji: r.emoji,
@@ -986,19 +986,19 @@ chats.get("/:id/messages", async (c) => {
             updatedAt: new Date(mention.mentionedBy.updatedAt).toISOString(),
           } : null,
         })),
-        linkPreview:
-          msg.linkPreviewUrl
-            ? {
-                url: msg.linkPreviewUrl,
-                title: msg.linkPreviewTitle,
-                description: msg.linkPreviewDescription,
-                image: msg.linkPreviewImage,
-                siteName: msg.linkPreviewSiteName,
-                favicon: msg.linkPreviewFavicon,
-              }
-            : null,
-        createdAt: new Date(msg.createdAt).toISOString(),
-      };
+      linkPreview:
+        msg.linkPreviewUrl
+          ? {
+              url: msg.linkPreviewUrl,
+              title: msg.linkPreviewTitle,
+              description: msg.linkPreviewDescription,
+              image: msg.linkPreviewImage,
+              siteName: msg.linkPreviewSiteName,
+              favicon: msg.linkPreviewFavicon,
+            }
+          : null,
+      createdAt: new Date(msg.createdAt).toISOString(),
+    };
     });
 
     // HIGH-8: Return pagination info with messages

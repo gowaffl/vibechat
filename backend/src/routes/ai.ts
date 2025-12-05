@@ -60,7 +60,7 @@ const confirmImageRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   type: z.enum(["image", "meme", "remix"]),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.any().optional(),
 });
 
 // Request schema for editing image
