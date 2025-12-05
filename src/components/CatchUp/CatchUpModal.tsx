@@ -24,10 +24,11 @@ interface CatchUpModalProps {
   summary: ConversationSummary | null;
   onViewMessage?: (messageId: string) => void;
   isLoading?: boolean;
-  onGenerateSummary?: (type: "concise" | "detailed") => void;
+  onGenerateSummary?: (type: "concise" | "detailed", sinceMessageId?: string) => void;
   user?: User | null;
   onSavePreference?: (preference: "concise" | "detailed") => void;
   onMarkPreferencePromptSeen?: () => void;
+  sinceMessageId?: string; // The message ID to start summarizing from (to avoid race condition with read receipts)
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -42,6 +43,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   user,
   onSavePreference,
   onMarkPreferencePromptSeen,
+  sinceMessageId,
 }) => {
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -59,11 +61,11 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   // Auto-generate summary when modal opens
   useEffect(() => {
     if (visible && onGenerateSummary && !summary && !isLoading && !hasTriggeredGeneration) {
-      console.log("[CatchUpModal] Auto-generating summary with preference:", userPreference);
+      console.log("[CatchUpModal] Auto-generating summary with preference:", userPreference, "sinceMessageId:", sinceMessageId);
       setHasTriggeredGeneration(true);
-      onGenerateSummary(userPreference as "concise" | "detailed");
+      onGenerateSummary(userPreference as "concise" | "detailed", sinceMessageId);
     }
-  }, [visible, onGenerateSummary, summary, isLoading, userPreference, hasTriggeredGeneration]);
+  }, [visible, onGenerateSummary, summary, isLoading, userPreference, hasTriggeredGeneration, sinceMessageId]);
 
   // Reset generation trigger when modal closes
   useEffect(() => {
@@ -248,8 +250,8 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
     if (!onGenerateSummary) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const newType = isDetailedView ? "concise" : "detailed";
-    onGenerateSummary(newType);
-  }, [onGenerateSummary, isDetailedView]);
+    onGenerateSummary(newType, sinceMessageId);
+  }, [onGenerateSummary, isDetailedView, sinceMessageId]);
 
   const handleSavePreference = useCallback((save: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

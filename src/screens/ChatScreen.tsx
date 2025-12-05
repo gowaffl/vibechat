@@ -1476,6 +1476,7 @@ const ChatScreen = () => {
   const [editText, setEditText] = useState("");
   const [activeInput, setActiveInput] = useState<"main" | "edit">("main");
   const [catchUpCount, setCatchUpCount] = useState(0);
+  const [catchUpSinceMessageId, setCatchUpSinceMessageId] = useState<string | undefined>(undefined);
   const editModalDragY = useRef(new Animated.Value(0)).current;
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
@@ -1900,11 +1901,25 @@ const ChatScreen = () => {
   }, [chatId]);
 
   // Persist catch-up button if unread count was high (threshold: 10+ messages)
+  // Also capture the sinceMessageId at this moment to avoid race conditions with read receipts
   useEffect(() => {
     if (currentChatUnreadCount >= 10 && !catchUpDismissed) {
       setCatchUpCount(prev => Math.max(prev, currentChatUnreadCount));
+      
+      // Capture sinceMessageId NOW (before read receipts could update)
+      // Only set if we don't already have one stored (to preserve the original)
+      if (!catchUpSinceMessageId && messages && messages.length > 0) {
+        // Messages are sorted newest-first, so the message at index [unreadCount] 
+        // is the last read message (the one BEFORE the unread messages)
+        const lastReadIndex = Math.min(currentChatUnreadCount, messages.length - 1);
+        const lastReadMessage = messages[lastReadIndex];
+        if (lastReadMessage) {
+          console.log("[ChatScreen] Capturing sinceMessageId on enter:", lastReadMessage.id, "unreadCount:", currentChatUnreadCount);
+          setCatchUpSinceMessageId(lastReadMessage.id);
+        }
+      }
     }
-  }, [currentChatUnreadCount, catchUpDismissed]);
+  }, [currentChatUnreadCount, catchUpDismissed, messages, catchUpSinceMessageId]);
 
   // Fetch bookmarks for this chat
   const { data: bookmarks = [] } = useQuery({
@@ -1916,9 +1931,11 @@ const ChatScreen = () => {
   // AI Super Features hooks
   const { cachedSummary, generateCatchUp, clearCachedSummary, isGenerating: isGeneratingCatchUp, error: catchUpError } = useCatchUp(chatId || "", user?.id || "");
   
-  // Handle Catch Up Dismissal
+  // Handle Catch Up Dismissal (when badge is swiped away or summary is viewed)
   const handleCatchUpDismiss = useCallback(async () => {
     setCatchUpDismissed(true);
+    setCatchUpCount(0); // Clear the stored count
+    setCatchUpSinceMessageId(undefined); // Clear the stored message ID
     try {
       if (chatId) {
         await AsyncStorage.setItem(`catchup_dismissed_${chatId}`, "true");
@@ -7623,6 +7640,7 @@ const ChatScreen = () => {
           visible={showCatchUpModal}
           onClose={() => {
             setShowCatchUpModal(false);
+            setCatchUpSinceMessageId(undefined); // Clear the since message ID
             // If we have a summary, dismiss the badge since user has viewed/generated one
             if (cachedSummary) {
               handleCatchUpDismiss();
@@ -7632,15 +7650,17 @@ const ChatScreen = () => {
           }}
           summary={cachedSummary ?? null}
           isLoading={isGeneratingCatchUp}
-          onGenerateSummary={(type: "concise" | "detailed") => {
-            generateCatchUp(type);
+          onGenerateSummary={(type: "concise" | "detailed", sinceMessageId?: string) => {
+            generateCatchUp(type, sinceMessageId);
           }}
           onViewMessage={(messageId) => {
             setShowCatchUpModal(false);
+            setCatchUpSinceMessageId(undefined);
             clearCachedSummary(); // Clear so user sees selection screen next time
             scrollToMessage(messageId);
           }}
           user={user}
+          sinceMessageId={catchUpSinceMessageId}
           onSavePreference={async (preference: "concise" | "detailed") => {
             try {
               await api.patch(`/api/users/${user?.id}`, { summaryPreference: preference });
@@ -7729,7 +7749,9 @@ const ChatScreen = () => {
           unreadCount={catchUpCount > 0 ? catchUpCount : currentChatUnreadCount}
           isVisible={(currentChatUnreadCount >= 10 || catchUpCount >= 10) && !showCatchUpModal && !catchUpDismissed}
           onPress={() => {
-            // Open modal - auto-generates summary with user's preferred type
+            // sinceMessageId was already captured when we detected >= 10 unread (in useEffect)
+            // This ensures we have the right message ID even if read receipts have since updated
+            console.log("[ChatScreen] Opening catch-up modal with sinceMessageId:", catchUpSinceMessageId);
             setShowCatchUpModal(true);
           }}
           onDismiss={handleCatchUpDismiss}
