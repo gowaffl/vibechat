@@ -1668,8 +1668,8 @@ const ChatScreen = () => {
                setAllMessages(prev => {
                  // Deduplicate
                  if (prev.some(m => m.id === newMessage.id)) return prev;
-                 // Add to END (Ascending order: Oldest -> Newest)
-                 return [...prev, newMessage];
+                 // Prepend to START (Descending order: Newest -> Oldest)
+                 return [newMessage, ...prev];
                });
             }
           } catch (error) {
@@ -1785,8 +1785,8 @@ const ChatScreen = () => {
       );
       
       if (response.messages && response.messages.length > 0) {
-        // Prepend older messages to the START of the array (since we're keeping Ascending order in state)
-        setAllMessages(prev => [...response.messages, ...prev]);
+        // Append older messages to the END of the array (Descending order: Newest -> Oldest)
+        setAllMessages(prev => [...prev, ...response.messages]);
         setHasMoreMessages(response.hasMore || false);
         setNextCursor(response.nextCursor || null);
       } else {
@@ -2442,18 +2442,18 @@ const ChatScreen = () => {
           mentions: [], // Mentions will be populated by the server response
         };
 
-        // Update with paginated format
+        // Update with paginated format (prepend for descending order: Newest -> Oldest)
         queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
           {
-            messages: [...previousData.messages, optimisticMessage],
+            messages: [optimisticMessage, ...previousData.messages],
             hasMore: previousData.hasMore,
             nextCursor: previousData.nextCursor,
           }
         );
         
         // Also update allMessages state for immediate UI update
-        setAllMessages(prev => [...prev, optimisticMessage]);
+        setAllMessages(prev => [optimisticMessage, ...prev]);
       }
 
       // Return context with the previous data for rollback
@@ -2473,9 +2473,9 @@ const ChatScreen = () => {
       // Smoothly replace optimistic message with real one from server
       const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
       if (currentData?.messages) {
-        // Remove optimistic message and add real one
+        // Remove optimistic message and prepend real one (descending order: Newest -> Oldest)
         const withoutOptimistic = currentData.messages.filter(m => !m.id.startsWith('optimistic-'));
-        const updatedMessages = [...withoutOptimistic, newMessage];
+        const updatedMessages = [newMessage, ...withoutOptimistic];
         queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
           {

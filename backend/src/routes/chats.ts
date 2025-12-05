@@ -833,7 +833,7 @@ chats.get("/:id/messages", async (c) => {
         tags:message_tag (*)
       `)
       .eq("chatId", chatId)
-      .order("createdAt", { ascending: true })
+      .order("createdAt", { ascending: false })
       .limit(limit + 1);
     
     if (cursor) {
