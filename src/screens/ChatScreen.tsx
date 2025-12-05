@@ -1688,8 +1688,14 @@ const ChatScreen = () => {
           
           try {
             const newMessageId = payload.new.id;
-            const isAIMessage = !payload.new.userId && payload.new.aiFriendId;
-            console.log('[Realtime] New message received:', newMessageId, isAIMessage ? '(AI)' : '(User)');
+            // Check for AI message - userId should be null/undefined and aiFriendId should be set
+            const isAIMessage = (payload.new.userId === null || payload.new.userId === undefined) && 
+                                (payload.new.aiFriendId !== null && payload.new.aiFriendId !== undefined);
+            console.log('[Realtime] New message received:', newMessageId, {
+              isAIMessage,
+              userId: payload.new.userId,
+              aiFriendId: payload.new.aiFriendId
+            });
             
             // If this is an AI message, clear the AI typing indicator immediately
             // This ensures seamless transition: typing indicator -> message appears
@@ -2405,9 +2411,10 @@ const ChatScreen = () => {
           color: aiTyper.color || "#14B8A6",
         } as AIFriend);
       } else {
-        // Only clear if there are no AI typers - don't clear on every poll
-        // The realtime handler will clear when the message arrives
-        // This prevents flickering between polls
+        // Clear typing indicator when backend reports no AI typers
+        // This provides a fallback in case realtime doesn't fire
+        setIsAITyping(false);
+        setTypingAIFriend(null);
       }
       
       return response;
@@ -2845,28 +2852,20 @@ const ChatScreen = () => {
 
       return result;
     },
-    onMutate: () => {
-      // Show typing indicator immediately for responsive UI
-      setIsAITyping(true);
-    },
     onSuccess: (data) => {
-      // Don't clear typing indicator here - realtime handler will clear it when message arrives
-      // For preview mode, clear since no message is created yet
+      // Preview mode - show the preview modal
       if ('previewId' in data) {
-        setIsAITyping(false);
         console.log("[ChatScreen] Image preview received:", data.previewId);
         const previewData = data as ImagePreviewResponse;
         setPreviewImage(previewData);
         setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("image");
       } else {
-        // Direct message - realtime will handle clearing
+        // Direct message (fallback)
         queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       }
     },
     onError: (error: any) => {
-      // Only clear on error since message won't arrive via realtime
-      setIsAITyping(false);
       console.error("[ChatScreen] Image generation error:", error);
       
       // Check if this is a timeout error where the image might still be generating
@@ -2970,28 +2969,20 @@ const ChatScreen = () => {
 
       return result;
     },
-    onMutate: () => {
-      // Show typing indicator immediately for responsive UI
-      setIsAITyping(true);
-    },
     onSuccess: (data) => {
-      // Don't clear typing indicator here - realtime handler will clear it when message arrives
-      // For preview mode, clear since no message is created yet
+      // Preview mode - show the preview modal
       if ('previewId' in data) {
-        setIsAITyping(false);
         console.log("[ChatScreen] Meme preview received:", data.previewId);
         const previewData = data as ImagePreviewResponse;
         setPreviewImage(previewData);
         setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("meme");
       } else {
-        // Direct message - realtime will handle clearing
+        // Direct message (fallback)
         queryClient.invalidateQueries({ queryKey: ["messages"] });
       }
     },
     onError: (error: any) => {
-      // Only clear on error since message won't arrive via realtime
-      setIsAITyping(false);
       console.error("[ChatScreen] Meme generation error:", error);
       
       // Check if this is a timeout error where the meme might still be generating

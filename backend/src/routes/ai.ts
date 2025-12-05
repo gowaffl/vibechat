@@ -521,20 +521,8 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    // Get AI friend for this chat (for typing indicator)
-    const { data: aiFriendForTyping } = await db
-      .from("ai_friend")
-      .select("id, name, color")
-      .eq("chatId", chatId)
-      .order("sortOrder", { ascending: true })
-      .limit(1)
-      .single();
-
-    // Set AI typing status BEFORE generating image
-    if (aiFriendForTyping) {
-      setAITypingStatus(chatId, aiFriendForTyping.id, true, aiFriendForTyping.name || "AI", aiFriendForTyping.color || "#14B8A6");
-      console.log(`[AI Image] 💬 AI typing indicator set for ${aiFriendForTyping.name}`);
-    }
+    // Note: No typing indicator for image generation since it uses preview mode
+    // User will see the preview modal instead of typing animation
 
     console.log("[AI Image] Generating image with Gemini 3 Pro Image Preview:", prompt);
     console.log("[AI Image] API Key available:", !!process.env.GOOGLE_API_KEY);
@@ -784,12 +772,6 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       return c.json({ error: "Failed to create message" }, 500);
     }
 
-    // Clear AI typing status after message is saved
-    if (aiFriendForTyping) {
-      setAITypingStatus(chatId, aiFriendForTyping.id, false);
-      console.log(`[AI Image] 💬 AI typing indicator cleared for ${aiFriendForTyping.name}`);
-    }
-
     return c.json({
       id: message.id,
       content: message.content,
@@ -850,20 +832,8 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
-    // Get AI friend for this chat (for typing indicator)
-    const { data: aiFriendForMeme } = await db
-      .from("ai_friend")
-      .select("id, name, color")
-      .eq("chatId", chatId)
-      .order("sortOrder", { ascending: true })
-      .limit(1)
-      .single();
-
-    // Set AI typing status BEFORE generating meme
-    if (aiFriendForMeme) {
-      setAITypingStatus(chatId, aiFriendForMeme.id, true, aiFriendForMeme.name || "AI", aiFriendForMeme.color || "#14B8A6");
-      console.log(`[AI Meme] 💬 AI typing indicator set for ${aiFriendForMeme.name}`);
-    }
+    // Note: No typing indicator for meme generation since it uses preview mode
+    // User will see the preview modal instead of typing animation
 
     console.log("[AI Meme] Generating meme with Gemini 3 Pro Image Preview:", prompt);
 
@@ -1098,12 +1068,6 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     if (insertError || !message) {
       console.error("[AI Meme] Failed to create message:", insertError);
       return c.json({ error: "Failed to create message" }, 500);
-    }
-
-    // Clear AI typing status after message is saved
-    if (aiFriendForMeme) {
-      setAITypingStatus(chatId, aiFriendForMeme.id, false);
-      console.log(`[AI Meme] 💬 AI typing indicator cleared for ${aiFriendForMeme.name}`);
     }
 
     return c.json({
