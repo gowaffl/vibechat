@@ -192,7 +192,7 @@ const PollCard: React.FC<PollCardProps> = ({
       </View>
 
       {/* Options */}
-      <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 20, gap: 16 }}>
         {poll.options?.map((option, index) => {
           const voteCount = option.voteCount || 0;
           const percentage =
@@ -211,7 +211,6 @@ const PollCard: React.FC<PollCardProps> = ({
               onPress={() => handleOptionPress(option.id)}
               disabled={!canVote}
               style={({ pressed }) => ({
-                marginBottom: index < (poll.options?.length || 0) - 1 ? 15 : 0,
                 opacity: isVoting && isSelected ? 0.7 : pressed && canVote ? 0.9 : 1,
                 transform: [{ scale: pressed && canVote ? 0.98 : 1 }],
               })}

@@ -21,8 +21,99 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  withRepeat,
+  Easing,
+  interpolate,
 } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
 import LiquidGlassButton from "./LiquidGlass/LiquidGlassButton";
+
+// Shimmer Loading Component
+const ShimmerLoader: React.FC = () => {
+  const shimmerValue = useSharedValue(0);
+
+  useEffect(() => {
+    shimmerValue.value = withRepeat(
+      withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      false
+    );
+  }, []);
+
+  const shimmerStyle = useAnimatedStyle(() => {
+    const translateX = interpolate(
+      shimmerValue.value,
+      [0, 1],
+      [-SCREEN_WIDTH, SCREEN_WIDTH]
+    );
+    return {
+      transform: [{ translateX }],
+    };
+  });
+
+  return (
+    <View style={shimmerStyles.container}>
+      {/* Background placeholder */}
+      <View style={shimmerStyles.placeholder}>
+        {/* Animated shimmer gradient */}
+        <Animated.View style={[shimmerStyles.shimmer, shimmerStyle]}>
+          <LinearGradient
+            colors={[
+              'transparent',
+              'rgba(255, 255, 255, 0.08)',
+              'rgba(255, 255, 255, 0.15)',
+              'rgba(255, 255, 255, 0.08)',
+              'transparent',
+            ]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      </View>
+      
+      {/* Loading indicator and text */}
+      <View style={shimmerStyles.loadingContent}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={shimmerStyles.loadingText}>Creating your masterpiece...</Text>
+        <Text style={shimmerStyles.loadingSubtext}>This may take a moment</Text>
+      </View>
+    </View>
+  );
+};
+
+const shimmerStyles = StyleSheet.create({
+  container: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  placeholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#1a1a1a',
+    overflow: 'hidden',
+  },
+  shimmer: {
+    ...StyleSheet.absoluteFillObject,
+    width: SCREEN_WIDTH * 2,
+  },
+  loadingContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  loadingSubtext: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
+  },
+});
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -146,16 +237,14 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                   resizeMode="contain"
                 />
               ) : (
-                <View style={[styles.image, { justifyContent: 'center', alignItems: 'center' }]}>
-                   <ActivityIndicator size="large" color="#FFF" />
-                </View>
+                <ShimmerLoader />
               )}
               
-              {localProcessing && (
+              {localProcessing && imageUrl && (
                 <View style={styles.loadingOverlay}>
                   <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-                  <ActivityIndicator size="large" color="#0061FF" />
-                  <Text style={styles.loadingText}>Generating...</Text>
+                  <ActivityIndicator size="large" color="#007AFF" />
+                  <Text style={styles.loadingText}>Refining...</Text>
                 </View>
               )}
             </View>
@@ -227,7 +316,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 </View>
               ) : (
                 <View style={styles.actionButtons}>
-                  {/* Reject / Cancel */}
+                  {/* Reject / Cancel - always enabled so user can cancel during generation */}
                   <TouchableOpacity onPress={onCancel} activeOpacity={0.7}>
                     <View style={[styles.iconButton, styles.rejectButton]}>
                       <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -235,17 +324,25 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     </View>
                   </TouchableOpacity>
                   
-                  {/* Edit */}
-                  <TouchableOpacity onPress={() => setIsEditing(true)} activeOpacity={0.7}>
-                    <View style={styles.iconButton}>
+                  {/* Edit - disabled while loading */}
+                  <TouchableOpacity 
+                    onPress={() => setIsEditing(true)} 
+                    activeOpacity={0.7}
+                    disabled={!imageUrl}
+                  >
+                    <View style={[styles.iconButton, !imageUrl && styles.disabledIconButton]}>
                       <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                      <Edit2 size={28} color="#FFF" />
+                      <Edit2 size={28} color={imageUrl ? "#FFF" : "rgba(255,255,255,0.3)"} />
                     </View>
                   </TouchableOpacity>
 
-                  {/* Accept / Send */}
-                  <TouchableOpacity onPress={handleAccept} activeOpacity={0.7}>
-                    <View style={[styles.iconButton, styles.acceptButton]}>
+                  {/* Accept / Send - disabled while loading */}
+                  <TouchableOpacity 
+                    onPress={handleAccept} 
+                    activeOpacity={0.7}
+                    disabled={!imageUrl}
+                  >
+                    <View style={[styles.iconButton, styles.acceptButton, !imageUrl && styles.disabledAcceptButton]}>
                       <Send size={28} color="#FFF" fill="white" />
                     </View>
                   </TouchableOpacity>
@@ -346,6 +443,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
+  },
+  disabledIconButton: {
+    opacity: 0.4,
+  },
+  disabledAcceptButton: {
+    backgroundColor: "rgba(0, 122, 255, 0.3)",
+    borderColor: "rgba(0, 122, 255, 0.3)",
+    shadowOpacity: 0,
   },
   editContainer: {
     gap: 12,

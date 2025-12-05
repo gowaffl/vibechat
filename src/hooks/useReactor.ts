@@ -5,6 +5,8 @@ import { useToast } from "@/components/Toast";
 
 export interface ReactorOptions {
   onPreview?: (data: ImagePreviewResponse, type: "remix" | "meme") => void;
+  onStart?: (type: "remix" | "meme", prompt: string) => void;
+  onGenerationError?: () => void;
 }
 
 export function useReactor(chatId: string, userId: string, options?: ReactorOptions) {
@@ -64,6 +66,10 @@ export function useReactor(chatId: string, userId: string, options?: ReactorOpti
       console.log("[Reactor] Remix generated successfully, result:", result);
       return result;
     },
+    onMutate: ({ remixPrompt }) => {
+      // Notify that generation is starting so UI can show loading state
+      options?.onStart?.("remix", remixPrompt);
+    },
     onSuccess: (data) => {
       console.log("[Reactor] Remix success with data:", data);
       
@@ -90,6 +96,9 @@ export function useReactor(chatId: string, userId: string, options?: ReactorOpti
       console.log("[Reactor] Full error object:", error);
       // Invalidate queries to refresh the chat
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+      
+      // Notify parent to close preview modal
+      options?.onGenerationError?.();
       
       // Parse error message to give user helpful feedback
       let userMessage = "Could not remix image. Please try again.";
@@ -135,6 +144,10 @@ export function useReactor(chatId: string, userId: string, options?: ReactorOpti
       console.log("[Reactor] Meme generated successfully");
       return result;
     },
+    onMutate: ({ memePrompt }) => {
+      // Notify that generation is starting so UI can show loading state
+      options?.onStart?.("meme", memePrompt || "");
+    },
     onSuccess: (data) => {
       console.log("[Reactor] Meme success, data:", data);
       
@@ -157,6 +170,9 @@ export function useReactor(chatId: string, userId: string, options?: ReactorOpti
       console.log("[Reactor] Full error object:", error);
       // Invalidate queries to refresh the chat
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+      
+      // Notify parent to close preview modal
+      options?.onGenerationError?.();
       
       // Parse error message to give user helpful feedback
       let userMessage = "Could not create meme. Please try again.";

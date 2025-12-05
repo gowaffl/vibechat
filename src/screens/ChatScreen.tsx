@@ -1987,7 +1987,22 @@ const ChatScreen = () => {
       setPreviewImage(data);
       setOriginalPreviewPrompt(data.prompt);
       setPreviewType(type);
-    }
+    },
+    onStart: (type, prompt) => {
+      // Immediately open preview modal with loading state
+      console.log("[ChatScreen] Reactor generation started:", type);
+      setPreviewImage({
+        imageUrl: '', // Empty triggers loading/shimmer state
+        previewId: 'generating',
+        prompt,
+      });
+      setOriginalPreviewPrompt(prompt);
+      setPreviewType(type);
+    },
+    onGenerationError: () => {
+      // Close the preview modal on error
+      setPreviewImage(null);
+    },
   });
   const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
   const { data: threadMessages, isLoading: isLoadingThreadMessages, error: threadMessagesError } = useThreadMessages(currentThreadId, user?.id || "");
@@ -2882,6 +2897,17 @@ const ChatScreen = () => {
 
       return result;
     },
+    onMutate: (data) => {
+      // Immediately open preview modal with loading state
+      console.log("[ChatScreen] Image generation started, opening preview modal");
+      setPreviewImage({
+        imageUrl: '', // Empty triggers loading/shimmer state
+        previewId: 'generating',
+        prompt: data.prompt,
+      });
+      setOriginalPreviewPrompt(data.prompt);
+      setPreviewType("image");
+    },
     onSuccess: (data) => {
       // Preview mode - show the preview modal
       if ('previewId' in data) {
@@ -2897,6 +2923,9 @@ const ChatScreen = () => {
     },
     onError: (error: any) => {
       console.error("[ChatScreen] Image generation error:", error);
+      
+      // Close the preview modal on error
+      setPreviewImage(null);
       
       // Check if this is a timeout error where the image might still be generating
       const errorMessage = error?.message || String(error);
@@ -2999,6 +3028,17 @@ const ChatScreen = () => {
 
       return result;
     },
+    onMutate: (data) => {
+      // Immediately open preview modal with loading state
+      console.log("[ChatScreen] Meme generation started, opening preview modal");
+      setPreviewImage({
+        imageUrl: '', // Empty triggers loading/shimmer state
+        previewId: 'generating',
+        prompt: data.prompt,
+      });
+      setOriginalPreviewPrompt(data.prompt);
+      setPreviewType("meme");
+    },
     onSuccess: (data) => {
       // Preview mode - show the preview modal
       if ('previewId' in data) {
@@ -3014,6 +3054,9 @@ const ChatScreen = () => {
     },
     onError: (error: any) => {
       console.error("[ChatScreen] Meme generation error:", error);
+      
+      // Close the preview modal on error
+      setPreviewImage(null);
       
       // Check if this is a timeout error where the meme might still be generating
       const errorMessage = error?.message || String(error);
