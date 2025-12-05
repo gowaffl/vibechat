@@ -2385,6 +2385,44 @@ const ChatScreen = () => {
     loadDismissState();
   }, [chatId]);
 
+  // Load draft message from AsyncStorage when entering chat
+  useEffect(() => {
+    const loadDraft = async () => {
+      try {
+        const draftKey = `draft_message_${chatId}`;
+        const draft = await AsyncStorage.getItem(draftKey);
+        if (draft) {
+          setMessageText(draft);
+          console.log("[ChatScreen] Loaded draft message for chat:", chatId);
+        }
+      } catch (error) {
+        console.error("[ChatScreen] Failed to load draft message:", error);
+      }
+    };
+    loadDraft();
+  }, [chatId]);
+
+  // Save draft message to AsyncStorage when message text changes (debounced)
+  useEffect(() => {
+    const saveDraft = async () => {
+      try {
+        const draftKey = `draft_message_${chatId}`;
+        if (messageText.trim()) {
+          await AsyncStorage.setItem(draftKey, messageText);
+        } else {
+          // Clear draft if message is empty
+          await AsyncStorage.removeItem(draftKey);
+        }
+      } catch (error) {
+        console.error("[ChatScreen] Failed to save draft message:", error);
+      }
+    };
+    
+    // Debounce the save operation to avoid too many writes
+    const timeoutId = setTimeout(saveDraft, 500);
+    return () => clearTimeout(timeoutId);
+  }, [messageText, chatId]);
+
   // Reset catch-up dismiss state when there are new unread messages
   useEffect(() => {
     if (currentChatUnreadCount > 0 && catchUpDismissed) {
@@ -2507,6 +2545,7 @@ const ChatScreen = () => {
       
       // Clear state (these may have already been cleared for text messages, but need to be cleared for image/voice)
       setMessageText("");
+      clearDraftMessage(); // Clear draft immediately
       setSelectedImages([]);
       setReplyToMessage(null);
       setInputHeight(MIN_INPUT_HEIGHT);
@@ -3362,6 +3401,7 @@ const ChatScreen = () => {
       
       if (prompt) {
         setMessageText(""); // Clear input immediately
+        clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
 
         // If user has images selected, upload them first and use as references
@@ -3442,6 +3482,7 @@ const ChatScreen = () => {
       const prompt = trimmedMessage.substring(6).trim();
       if (prompt) {
         setMessageText(""); // Clear input immediately
+        clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
 
         // If user has images selected, upload the first one and use as reference
@@ -3525,6 +3566,7 @@ const ChatScreen = () => {
         const commandInput = commandEnd > 0 ? trimmedMessage.substring(commandEnd + 1).trim() : "";
         const replyToId = replyToMessage?.id; // Capture reply context
         setMessageText(""); // Clear input immediately
+        clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
         executeCustomCommandMutation.mutate({
           commandId: matchedCommand.id,
@@ -3602,6 +3644,7 @@ const ChatScreen = () => {
         const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
         const currentVibe = overrideVibe !== undefined ? overrideVibe : selectedVibe;
         setMessageText("");
+        clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
         setMentionedUserIds([]);
         setInputHeight(MIN_INPUT_HEIGHT);
@@ -3643,6 +3686,7 @@ const ChatScreen = () => {
       const currentMentions = mentionedUserIds.length > 0 ? mentionedUserIds : undefined;
       const currentVibe = overrideVibe !== undefined ? overrideVibe : selectedVibe;
       setMessageText("");
+      clearDraftMessage(); // Clear draft immediately
       setReplyToMessage(null);
       setMentionedUserIds([]);
       setInputHeight(MIN_INPUT_HEIGHT);
@@ -4260,6 +4304,16 @@ const ChatScreen = () => {
         },
       ]
     );
+  };
+
+  // Helper to clear draft message immediately (bypass debounce)
+  const clearDraftMessage = async () => {
+    try {
+      const draftKey = `draft_message_${chatId}`;
+      await AsyncStorage.removeItem(draftKey);
+    } catch (error) {
+      console.error("[ChatScreen] Failed to clear draft message:", error);
+    }
   };
 
   // Handler for typing indicator
@@ -7946,13 +8000,13 @@ const ChatScreen = () => {
                 userId: user?.id || "",
                 chatId,
                 type: previewType,
-                metadata: JSON.stringify({
+                metadata: {
                   ...previewImage.metadata,
                   // Add slash command badge for AI-generated images/memes
                   slashCommand: {
                     command: `/${previewType}`, // "/image", "/meme", or "/remix"
                   },
-                }),
+                },
               });
             }
           }}
