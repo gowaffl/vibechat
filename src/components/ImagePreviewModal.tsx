@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   ActivityIndicator
 } from "react-native";
@@ -29,7 +30,8 @@ interface ImagePreviewModalProps {
   visible: boolean;
   imageUrl: string | null;
   initialPrompt: string;
-  onAccept: () => void;
+  defaultCaption?: string;
+  onAccept: (caption: string) => void;
   onEdit: (prompt: string) => void;
   onCancel: () => void;
   isProcessing: boolean;
@@ -40,6 +42,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   visible,
   imageUrl,
   initialPrompt,
+  defaultCaption = "",
   onAccept,
   onEdit,
   onCancel,
@@ -47,7 +50,9 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   previewType,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [editPrompt, setEditPrompt] = useState("");
+  const [finalCaption, setFinalCaption] = useState("");
   const [localProcessing, setLocalProcessing] = useState(false);
 
   const slideAnim = useSharedValue(SCREEN_HEIGHT);
@@ -57,19 +62,16 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
     if (visible) {
       slideAnim.value = withSpring(0, { damping: 20, stiffness: 90 });
       opacityAnim.value = withTiming(1, { duration: 300 });
-      setEditPrompt(initialPrompt); // Pre-fill with used prompt, or empty? "Submit a follow-up prompt" implies refinement. 
-      // If refining, maybe better to start empty or "Make it darker"? 
-      // Requirement: "submit a follow-up prompt to try to tweak and dial in the image"
-      // So user types "make it blue" -> API needs "Edit this image... make it blue".
-      // So we just capture the NEW instruction here.
       setEditPrompt("");
+      setFinalCaption(defaultCaption);
     } else {
       slideAnim.value = withTiming(SCREEN_HEIGHT, { duration: 200 });
       opacityAnim.value = withTiming(0, { duration: 200 });
       setIsEditing(false);
+      setIsFinalizing(false);
       setLocalProcessing(false);
     }
-  }, [visible, initialPrompt]);
+  }, [visible, defaultCaption]);
 
   // Sync external processing state
   useEffect(() => {
@@ -77,7 +79,13 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   }, [isProcessing]);
 
   const handleAccept = () => {
-    onAccept();
+    setIsFinalizing(true);
+  };
+
+  const handleFinalize = () => {
+    onAccept(finalCaption);
+    setIsFinalizing(false);
+    Keyboard.dismiss();
   };
 
   const handleEditSubmit = () => {
@@ -168,51 +176,79 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     onSubmitEditing={handleEditSubmit}
                   />
                   <View style={styles.editButtons}>
-                    <LiquidGlassButton
+                    <TouchableOpacity 
                       onPress={() => setIsEditing(false)}
-                      variant="secondary"
-                      style={{ flex: 1 }}
+                      activeOpacity={0.7}
+                      style={[styles.actionButton, styles.cancelButton]}
                     >
-                      Cancel
-                    </LiquidGlassButton>
-                    <LiquidGlassButton
+                      <Text style={styles.buttonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
                       onPress={handleEditSubmit}
-                      variant="primary"
-                      style={{ flex: 1 }}
+                      activeOpacity={0.7}
                       disabled={!editPrompt.trim()}
+                      style={[styles.actionButton, styles.updateButton, !editPrompt.trim() && styles.disabledButton]}
                     >
-                      Update
-                    </LiquidGlassButton>
+                      <Text style={styles.buttonText}>Update</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : isFinalizing ? (
+                <View style={styles.editContainer}>
+                  <Text style={styles.helperText}>Add a caption (optional):</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter a caption..."
+                    placeholderTextColor="rgba(255,255,255,0.5)"
+                    value={finalCaption}
+                    onChangeText={setFinalCaption}
+                    autoFocus
+                    multiline
+                    returnKeyType="default"
+                  />
+                  <View style={styles.editButtons}>
+                    <TouchableOpacity 
+                      onPress={() => setIsFinalizing(false)}
+                      activeOpacity={0.7}
+                      style={[styles.actionButton, styles.cancelButton]}
+                    >
+                      <Text style={styles.buttonText}>Back</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      onPress={handleFinalize}
+                      activeOpacity={0.7}
+                      style={[styles.actionButton, styles.updateButton]}
+                    >
+                      <Text style={styles.buttonText}>Send</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ) : (
                 <View style={styles.actionButtons}>
-                  <LiquidGlassButton
-                    onPress={onCancel}
-                    variant="secondary" // Use secondary/ghost for "Discard"/Cancel to distinguish
-                    style={{ flex: 1, backgroundColor: 'rgba(255, 59, 48, 0.2)', borderColor: 'rgba(255, 59, 48, 0.3)' }}
-                    icon={<Trash2 size={18} color="#FF3B30" />}
-                  >
-                    Discard
-                  </LiquidGlassButton>
+                  {/* Reject / Cancel */}
+                  <TouchableOpacity onPress={onCancel} activeOpacity={0.7}>
+                    <View style={[styles.iconButton, styles.rejectButton]}>
+                      <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                      <X size={28} color="#FF453A" />
+                    </View>
+                  </TouchableOpacity>
                   
-                  <LiquidGlassButton
-                    onPress={() => setIsEditing(true)}
-                    variant="secondary"
-                    style={{ flex: 1 }}
-                    icon={<Edit2 size={18} color="#FFF" />}
-                  >
-                    Edit
-                  </LiquidGlassButton>
+                  {/* Edit */}
+                  <TouchableOpacity onPress={() => setIsEditing(true)} activeOpacity={0.7}>
+                    <View style={styles.iconButton}>
+                      <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                      <Edit2 size={28} color="#FFF" />
+                    </View>
+                  </TouchableOpacity>
 
-                  <LiquidGlassButton
-                    onPress={handleAccept}
-                    variant="primary"
-                    style={{ flex: 1.5 }}
-                    icon={<Send size={18} color="#FFF" />}
-                  >
-                    Send
-                  </LiquidGlassButton>
+                  {/* Accept / Send */}
+                  <TouchableOpacity onPress={handleAccept} activeOpacity={0.7}>
+                    <View style={[styles.iconButton, styles.acceptButton]}>
+                      <Send size={28} color="#FFF" fill="white" />
+                    </View>
+                  </TouchableOpacity>
                 </View>
               )}
             </Animated.View>
@@ -279,7 +315,37 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: "row",
-    gap: 12,
+    justifyContent: "space-evenly",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    width: "100%",
+  },
+  iconButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  rejectButton: {
+    borderColor: "rgba(255, 69, 58, 0.3)",
+    backgroundColor: "rgba(255, 69, 58, 0.15)",
+  },
+  acceptButton: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+    width: 70, // Slightly larger for primary action
+    height: 70,
+    borderRadius: 35,
+    shadowColor: "#007AFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   editContainer: {
     gap: 12,
@@ -302,6 +368,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginTop: 8,
+  },
+  actionButton: {
+    flex: 1,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cancelButton: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  updateButton: {
+    backgroundColor: "#007AFF",
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  buttonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

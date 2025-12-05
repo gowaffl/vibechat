@@ -1099,12 +1099,10 @@ ai.post("/confirm-image", zValidator("json", confirmImageRequestSchema), async (
       aiFriendId: null,
     };
 
-    // Add metadata if present (e.g. for reactor)
+    // Add metadata if present (e.g. for reactor, slash command badges)
     if (metadata) {
-      // If it's a remix or meme from reactor, we might want to store that in metadata
-      // but for now, the message schema handles imageUrl and content.
-      // We can add reactor metadata if we want to track origin.
-      messageData.metadata = metadata;
+      // Stringify metadata for database storage
+      messageData.metadata = JSON.stringify(metadata);
     }
 
     // Create message
@@ -1121,6 +1119,16 @@ ai.post("/confirm-image", zValidator("json", confirmImageRequestSchema), async (
 
     console.log(`[AI Confirm] Message created successfully: ${message.id}`);
 
+    // Parse metadata back for response
+    let parsedMetadata = message.metadata;
+    if (typeof message.metadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(message.metadata);
+      } catch {
+        parsedMetadata = null;
+      }
+    }
+
     return c.json({
       id: message.id,
       content: message.content,
@@ -1129,6 +1137,7 @@ ai.post("/confirm-image", zValidator("json", confirmImageRequestSchema), async (
       userId: message.userId,
       chatId: message.chatId,
       createdAt: message.createdAt,
+      metadata: parsedMetadata,
     });
   } catch (error) {
     console.error("[AI Confirm] Error confirming image:", error);

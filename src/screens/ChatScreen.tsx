@@ -1527,6 +1527,7 @@ const ChatScreen = () => {
 
   // Image Preview State
   const [previewImage, setPreviewImage] = useState<ImagePreviewResponse | null>(null);
+  const [originalPreviewPrompt, setOriginalPreviewPrompt] = useState<string>("");
   const [previewType, setPreviewType] = useState<"image" | "meme" | "remix">("image");
   const [isConfirmingImage, setIsConfirmingImage] = useState(false);
   const [isEditingImage, setIsEditingImage] = useState(false);
@@ -1880,6 +1881,7 @@ const ChatScreen = () => {
     onPreview: (data, type) => {
       console.log("[ChatScreen] Reactor preview received:", type);
       setPreviewImage(data);
+      setOriginalPreviewPrompt(data.prompt);
       setPreviewType(type);
     }
   });
@@ -2729,7 +2731,9 @@ const ChatScreen = () => {
       // Check if it's a preview or a direct message
       if ('previewId' in data) {
         console.log("[ChatScreen] Image preview received:", data.previewId);
-        setPreviewImage(data as ImagePreviewResponse);
+        const previewData = data as ImagePreviewResponse;
+        setPreviewImage(previewData);
+        setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("image");
       } else {
         // Direct message (fallback or if preview=false)
@@ -2797,7 +2801,13 @@ const ChatScreen = () => {
       chatId: string; 
       type: "image" | "meme" | "remix";
     }) => {
-      return await api.post<ImagePreviewResponse>("/api/ai/edit-image", data);
+      return await api.post<ImagePreviewResponse>("/api/ai/edit-image", {
+        originalImageUrl: data.previousImageUrl,
+        editPrompt: data.editPrompt,
+        userId: data.userId,
+        chatId: data.chatId,
+        preview: true
+      });
     },
     onMutate: () => {
       setIsEditingImage(true);
@@ -2844,7 +2854,9 @@ const ChatScreen = () => {
       // Check if it's a preview or a direct message
       if ('previewId' in data) {
         console.log("[ChatScreen] Meme preview received:", data.previewId);
-        setPreviewImage(data as ImagePreviewResponse);
+        const previewData = data as ImagePreviewResponse;
+        setPreviewImage(previewData);
+        setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("meme");
       } else {
         queryClient.invalidateQueries({ queryKey: ["messages"] });
@@ -5841,8 +5853,8 @@ const ChatScreen = () => {
             paddingTop: 13, 
           }}
           // Spacer for Input Bar (Glassmorphism effect)
-          // Dynamic height: 95px default, 110px when smart replies are showing
-          ListHeaderComponent={<View style={{ height: areSmartRepliesVisible ? 110 : 95 }} />}
+          // Dynamic height: 95px default, 120px when smart replies are showing
+          ListHeaderComponent={<View style={{ height: areSmartRepliesVisible ? 120 : 95 }} />}
           // HIGH-8: Load earlier messages button (appears at top in inverted list)
           ListFooterComponent={
             hasMoreMessages ? (
@@ -7918,16 +7930,29 @@ const ChatScreen = () => {
           imageUrl={previewImage?.imageUrl || null}
           initialPrompt={previewImage?.prompt || ""}
           previewType={previewType}
+          defaultCaption={(() => {
+            if (!previewImage) return "";
+            if (originalPreviewPrompt && originalPreviewPrompt !== previewImage.prompt) {
+              return `Original: ${originalPreviewPrompt}\nEdit: ${previewImage.prompt}`;
+            }
+            return previewImage.prompt;
+          })()}
           isProcessing={isConfirmingImage || isEditingImage}
-          onAccept={() => {
+          onAccept={(caption) => {
             if (previewImage) {
               confirmImageMutation.mutate({
                 imageUrl: previewImage.imageUrl,
-                prompt: previewImage.prompt,
+                prompt: caption,
                 userId: user?.id || "",
                 chatId,
                 type: previewType,
-                metadata: previewImage.metadata,
+                metadata: {
+                  ...previewImage.metadata,
+                  // Add slash command badge for AI-generated images/memes
+                  slashCommand: {
+                    command: `/${previewType}`, // "/image", "/meme", or "/remix"
+                  },
+                },
               });
             }
           }}
