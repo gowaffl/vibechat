@@ -28,56 +28,136 @@ import Animated, {
 import { LinearGradient } from "expo-linear-gradient";
 import LiquidGlassButton from "./LiquidGlass/LiquidGlassButton";
 
-// Shimmer Loading Component
-const ShimmerLoader: React.FC = () => {
-  const shimmerValue = useSharedValue(0);
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// Reusable shimmer animation hook
+const useShimmerAnimation = () => {
+  const shimmerProgress = useSharedValue(0);
+  const pulseOpacity = useSharedValue(0.3);
 
   useEffect(() => {
-    shimmerValue.value = withRepeat(
-      withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+    // Smooth continuous shimmer sweep
+    shimmerProgress.value = withRepeat(
+      withTiming(1, { 
+        duration: 1800, 
+        easing: Easing.inOut(Easing.ease) // Smooth ease-in-out
+      }),
       -1,
       false
+    );
+    
+    // Subtle pulse effect for depth
+    pulseOpacity.value = withRepeat(
+      withTiming(0.6, { 
+        duration: 1200, 
+        easing: Easing.inOut(Easing.quad) // Quadratic ease for smooth pulse
+      }),
+      -1,
+      true
     );
   }, []);
 
   const shimmerStyle = useAnimatedStyle(() => {
     const translateX = interpolate(
-      shimmerValue.value,
+      shimmerProgress.value,
       [0, 1],
-      [-SCREEN_WIDTH, SCREEN_WIDTH]
+      [-SCREEN_WIDTH, SCREEN_WIDTH * 2]
     );
     return {
       transform: [{ translateX }],
     };
   });
 
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: pulseOpacity.value,
+  }));
+
+  return { shimmerStyle, pulseStyle };
+};
+
+// Full-screen Shimmer Loading Component (for initial generation)
+const ShimmerLoader: React.FC = () => {
+  const { shimmerStyle, pulseStyle } = useShimmerAnimation();
+
   return (
     <View style={shimmerStyles.container}>
-      {/* Background placeholder */}
-      <View style={shimmerStyles.placeholder}>
-        {/* Animated shimmer gradient */}
-        <Animated.View style={[shimmerStyles.shimmer, shimmerStyle]}>
-          <LinearGradient
-            colors={[
-              'transparent',
-              'rgba(255, 255, 255, 0.08)',
-              'rgba(255, 255, 255, 0.15)',
-              'rgba(255, 255, 255, 0.08)',
-              'transparent',
-            ]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
-      </View>
+      {/* Dark background with subtle gradient */}
+      <LinearGradient
+        colors={['#0a0a0a', '#111111', '#0a0a0a']}
+        style={StyleSheet.absoluteFill}
+      />
       
-      {/* Loading indicator and text */}
-      <View style={shimmerStyles.loadingContent}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      {/* Animated shimmer sweep */}
+      <Animated.View style={[shimmerStyles.shimmerContainer, shimmerStyle]}>
+        <LinearGradient
+          colors={[
+            'transparent',
+            'rgba(255, 255, 255, 0.02)',
+            'rgba(255, 255, 255, 0.06)',
+            'rgba(255, 255, 255, 0.02)',
+            'transparent',
+          ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={shimmerStyles.gradient}
+        />
+      </Animated.View>
+
+      {/* Secondary shimmer layer for depth */}
+      <Animated.View style={[shimmerStyles.shimmerContainer, shimmerStyle, { opacity: 0.5 }]}>
+        <LinearGradient
+          colors={[
+            'transparent',
+            'rgba(100, 150, 255, 0.02)',
+            'rgba(100, 150, 255, 0.04)',
+            'rgba(100, 150, 255, 0.02)',
+            'transparent',
+          ]}
+          start={{ x: 0, y: 0.3 }}
+          end={{ x: 1, y: 0.7 }}
+          style={[shimmerStyles.gradient, { transform: [{ skewX: '-20deg' }] }]}
+        />
+      </Animated.View>
+      
+      {/* Centered text with pulse */}
+      <Animated.View style={[shimmerStyles.textContainer, pulseStyle]}>
         <Text style={shimmerStyles.loadingText}>Creating your masterpiece...</Text>
         <Text style={shimmerStyles.loadingSubtext}>This may take a moment</Text>
-      </View>
+      </Animated.View>
+    </View>
+  );
+};
+
+// Shimmer Overlay Component (for refining/editing existing image)
+const ShimmerOverlay: React.FC<{ text?: string }> = ({ text = "Refining..." }) => {
+  const { shimmerStyle, pulseStyle } = useShimmerAnimation();
+
+  return (
+    <View style={shimmerOverlayStyles.container}>
+      {/* Dark semi-transparent backdrop */}
+      <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={shimmerOverlayStyles.darkOverlay} />
+      
+      {/* Animated shimmer sweep */}
+      <Animated.View style={[shimmerOverlayStyles.shimmerContainer, shimmerStyle]}>
+        <LinearGradient
+          colors={[
+            'transparent',
+            'rgba(255, 255, 255, 0.03)',
+            'rgba(255, 255, 255, 0.08)',
+            'rgba(255, 255, 255, 0.03)',
+            'transparent',
+          ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={shimmerOverlayStyles.gradient}
+        />
+      </Animated.View>
+      
+      {/* Centered text with pulse */}
+      <Animated.View style={[shimmerOverlayStyles.textContainer, pulseStyle]}>
+        <Text style={shimmerOverlayStyles.loadingText}>{text}</Text>
+      </Animated.View>
     </View>
   );
 };
@@ -85,37 +165,66 @@ const ShimmerLoader: React.FC = () => {
 const shimmerStyles = StyleSheet.create({
   container: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.6,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
-  placeholder: {
+  shimmerContainer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#1a1a1a',
-    overflow: 'hidden',
   },
-  shimmer: {
-    ...StyleSheet.absoluteFillObject,
+  gradient: {
     width: SCREEN_WIDTH * 2,
+    height: '100%',
   },
-  loadingContent: {
+  textContainer: {
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   loadingText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
-    marginTop: 8,
+    letterSpacing: 0.5,
   },
   loadingSubtext: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.4)',
     fontSize: 14,
   },
 });
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const shimmerOverlayStyles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  darkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  shimmerContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gradient: {
+    width: SCREEN_WIDTH * 2,
+    height: '100%',
+  },
+  textContainer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  loadingText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+});
 
 interface ImagePreviewModalProps {
   visible: boolean;
@@ -241,11 +350,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               )}
               
               {localProcessing && imageUrl && (
-                <View style={styles.loadingOverlay}>
-                  <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-                  <ActivityIndicator size="large" color="#007AFF" />
-                  <Text style={styles.loadingText}>Refining...</Text>
-                </View>
+                <ShimmerOverlay text="Refining..." />
               )}
             </View>
 
@@ -389,17 +494,6 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     height: SCREEN_WIDTH, // Square aspect ratio default
     backgroundColor: "#1a1a1a",
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  loadingText: {
-    color: "#FFF",
-    marginTop: 10,
-    fontWeight: "500",
   },
   controlsContainer: {
     padding: 20,
