@@ -7998,7 +7998,7 @@ const ChatScreen = () => {
               setEditingEvent(null);
             }}
             initialEvent={editingEvent}
-            onCreate={(title, description, type, eventDate, options) => {
+            onCreate={(title, description, type, eventDate, timezone, options) => {
               if (editingEvent) {
                 // Update existing event
                 // Note: We currently don't update options or event type to preserve votes and avoid complexity with option IDs
@@ -8008,6 +8008,7 @@ const ChatScreen = () => {
                     title,
                     description: description || undefined,
                     eventDate: eventDate ? eventDate.toISOString() : null,
+                    timezone: timezone || null,
                   },
                   {
                     onSuccess: () => {
@@ -8030,6 +8031,7 @@ const ChatScreen = () => {
                     description: description || undefined,
                     eventType: type,
                     eventDate: eventDate ? eventDate.toISOString() : null,
+                    timezone,
                     options,
                   },
                   {

@@ -994,6 +994,7 @@ export const eventSchema = z.object({
   eventType: z.enum(["meeting", "hangout", "meal", "activity", "other"]),
   status: z.enum(["proposed", "voting", "confirmed", "cancelled"]),
   eventDate: z.string().nullable(), // The actual date/time when the event will happen
+  timezone: z.string().nullable(), // The timezone in which the event was created (e.g., "America/New_York")
   finalizedDate: z.string().nullable(),
   creatorId: z.string(),
   createdAt: z.string(),
@@ -1132,6 +1133,7 @@ export const createEventRequestSchema = z.object({
   description: z.string().nullable().optional(),
   eventType: z.enum(["meeting", "hangout", "meal", "activity", "other"]),
   eventDate: z.string().nullable().optional(), // ISO date string for when the event will happen
+  timezone: z.string().optional(), // The timezone in which the event was created (e.g., "America/New_York")
   options: z.array(z.object({
     optionType: z.enum(["datetime", "location", "activity"]),
     optionValue: z.string(),
@@ -1174,6 +1176,7 @@ export const updateEventRequestSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().nullable().optional(),
   eventDate: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional(), // The timezone in which the event was created
   status: z.enum(["proposed", "voting", "confirmed", "cancelled"]).optional(),
   finalizedDate: z.string().nullable().optional(),
 });

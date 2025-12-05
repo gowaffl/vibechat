@@ -495,12 +495,14 @@ const EventCard: React.FC<EventCardProps> = ({
                         }}
                       >
                         {new Date(event.eventDate).toLocaleString("en-US", {
+                          timeZone: event.timezone || undefined,
                           weekday: "short",
                           month: "short",
                           day: "numeric",
                           year: "numeric",
                           hour: "numeric",
                           minute: "2-digit",
+                          timeZoneName: "short",
                         })}
                       </Text>
                     </View>

@@ -32,6 +32,7 @@ interface CreateEventModalProps {
     description: string,
     type: "meeting" | "hangout" | "meal" | "activity" | "other",
     eventDate: Date | null,
+    timezone: string,
     options: Array<{ optionType: "datetime" | "location" | "activity"; optionValue: string }>
   ) => void;
   isCreating?: boolean;
@@ -203,6 +204,9 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
     }
   }, [visible]);
 
+  // Get user's timezone for accurate time handling
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const handleCreate = () => {
     console.log("=== [CreateEventModal] handleCreate called ===");
     const validOptions = options.filter((opt) => opt.trim().length > 0);
@@ -237,9 +241,9 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
         }))
       : [];
 
-    console.log("[CreateEventModal] Calling onCreate with:", { title: title.trim(), description: description.trim(), type, eventDate, options: formattedOptions });
+    console.log("[CreateEventModal] Calling onCreate with:", { title: title.trim(), description: description.trim(), type, eventDate, timezone: userTimezone, options: formattedOptions });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onCreate(title.trim(), description.trim(), type, eventDate, formattedOptions);
+    onCreate(title.trim(), description.trim(), type, eventDate, userTimezone, formattedOptions);
     console.log("[CreateEventModal] onCreate called successfully");
   };
 
@@ -260,21 +264,29 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       setShowDatePicker(false);
     }
     if (selectedDate) {
+      // Create a new Date that preserves the exact time the user selected
+      const newDate = new Date(selectedDate.getTime());
+      console.log("[CreateEventModal] Date selected:", {
+        selectedDate: selectedDate.toString(),
+        newDate: newDate.toString(),
+        timezone: userTimezone,
+        isoString: newDate.toISOString(),
+      });
+      
       if (Platform.OS === "ios") {
         // On iOS with datetime mode, the picker returns the complete date+time
-        // Just use it directly without trying to preserve anything
-        setEventDate(new Date(selectedDate));
+        setEventDate(newDate);
       } else {
         // On Android, we have separate pickers, so preserve time when selecting date
         const currentDate = eventDate || getDefaultDateTime();
-        const newDate = new Date(currentDate);
+        const mergedDate = new Date(currentDate);
         
         // Update the date portion while preserving time
-        newDate.setFullYear(selectedDate.getFullYear());
-        newDate.setMonth(selectedDate.getMonth());
-        newDate.setDate(selectedDate.getDate());
+        mergedDate.setFullYear(newDate.getFullYear());
+        mergedDate.setMonth(newDate.getMonth());
+        mergedDate.setDate(newDate.getDate());
         
-        setEventDate(newDate);
+        setEventDate(mergedDate);
         
         // After selecting date, show time picker on Android
         setTimeout(() => setShowTimePicker(true), 300);
@@ -300,6 +312,13 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       newDate.setSeconds(0);
       newDate.setMilliseconds(0);
       
+      console.log("[CreateEventModal] Time selected:", {
+        selectedTime: selectedTime.toString(),
+        newDate: newDate.toString(),
+        timezone: userTimezone,
+        isoString: newDate.toISOString(),
+      });
+      
       setEventDate(newDate);
       Haptics.selectionAsync();
     }
@@ -314,6 +333,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      timeZoneName: "short", // Show timezone abbreviation (EST, PST, etc.)
     };
     return date.toLocaleString("en-US", options);
   };

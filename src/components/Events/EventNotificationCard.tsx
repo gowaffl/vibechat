@@ -137,11 +137,13 @@ const EventNotificationCard: React.FC<EventNotificationCardProps> = ({
                       }}
                     >
                       {new Date(event.eventDate).toLocaleString("en-US", {
+                        timeZone: event.timezone || undefined,
                         weekday: "short",
                         month: "short",
                         day: "numeric",
                         hour: "numeric",
                         minute: "2-digit",
+                        timeZoneName: "short",
                       })}
                     </Text>
                   </View>

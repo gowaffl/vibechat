@@ -29,6 +29,7 @@ const linking = {
 export default function App() {
   const navigationRef = useRef<any>(null);
   const pendingInviteToken = useRef<string | null>(null);
+  const pendingNotification = useRef<{ chatId: string; chatName: string } | null>(null);
 
   useEffect(() => {
     // Handle initial URL when app is opened from a link
@@ -103,16 +104,21 @@ export default function App() {
       try {
         const data = response.notification.request.content.data;
         const chatId = data?.chatId;
+        // Get chat name from notification title if available, or fallback to "Chat"
+        const chatName = response.notification.request.content.title || "Chat";
         
-        if (chatId && navigationRef.current) {
-          console.log("[Notifications] 🚀 Navigating to chat:", chatId);
-          // Get chat name from notification title if available, or fallback to "Chat"
-          const chatName = response.notification.request.content.title || "Chat";
-          
-          navigationRef.current.navigate("Chat", { 
-            chatId,
-            chatName 
-          });
+        if (chatId) {
+          if (navigationRef.current) {
+            console.log("[Notifications] 🚀 Navigating to chat:", chatId);
+            navigationRef.current.navigate("Chat", { 
+              chatId,
+              chatName 
+            });
+          } else {
+            // Store for later navigation when ready
+            console.log("[Notifications] ⚠️ Navigation not ready, storing pending notification for chat:", chatId);
+            pendingNotification.current = { chatId, chatName };
+          }
         }
       } catch (error) {
         console.error("[Notifications] Error handling notification:", error);
@@ -175,6 +181,16 @@ export default function App() {
                         if (navigationRef.current && pendingInviteToken.current) {
                           navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
                           pendingInviteToken.current = null;
+                        }
+                      }, 100);
+                    }
+                    // If there's a pending notification, navigate to it now
+                    if (pendingNotification.current && navigationRef.current) {
+                      console.log("[Notifications] 🚀 Late navigation to Chat:", pendingNotification.current.chatId);
+                      setTimeout(() => {
+                        if (navigationRef.current && pendingNotification.current) {
+                          navigationRef.current.navigate('Chat', pendingNotification.current);
+                          pendingNotification.current = null;
                         }
                       }, 100);
                     }

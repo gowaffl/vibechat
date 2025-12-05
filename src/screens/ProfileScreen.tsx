@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Camera, User as UserIcon, Bell, BellOff, Trash2, AlertTriangle, ChevronDown, ChevronRight, Sparkles } from "lucide-react-native";
+import { Camera, User as UserIcon, Bell, BellOff, Trash2, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Zap, FileText } from "lucide-react-native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -158,15 +158,20 @@ const ProfileScreen = () => {
   };
 
   const handleToggleSummaryPreference = async (preference: "concise" | "detailed") => {
-    if (!user?.id) return;
+    if (!user?.id || isUpdatingSummaryPreference) return;
 
+    // Optimistically update UI immediately
+    const previousPreference = summaryPreference;
+    setSummaryPreference(preference);
     setIsUpdatingSummaryPreference(true);
+
     try {
       await api.patch(`/api/users/${user.id}`, { summaryPreference: preference });
-      setSummaryPreference(preference);
       await updateUser({ summaryPreference: preference });
     } catch (error) {
       console.error("Failed to update summary preference:", error);
+      // Revert on error
+      setSummaryPreference(previousPreference);
       Alert.alert("Error", "Failed to update summary preference");
     } finally {
       setIsUpdatingSummaryPreference(false);
@@ -545,103 +550,73 @@ const ProfileScreen = () => {
                   borderColor: "rgba(255, 255, 255, 0.2)",
                 }}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-                  <Sparkles size={20} color="#FFB380" />
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Sparkles size={20} color="#4FC3F7" />
                   <View style={{ marginLeft: 12, flex: 1 }}>
                     <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>
-                      Default Summary Type
+                      Summary Detail
                     </Text>
                     <Text style={{ color: "#8E8E93", fontSize: 13, marginTop: 2 }}>
-                      Choose your preferred catch-up style
+                      {summaryPreference === "concise" ? "Quick overview" : "Full context"}
                     </Text>
                   </View>
-                </View>
-                
-                {isUpdatingSummaryPreference ? (
-                  <View style={{ alignItems: "center", paddingVertical: 8 }}>
-                    <LuxeLogoLoader size="small" />
-                  </View>
-                ) : (
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <Pressable
-                      onPress={() => handleToggleSummaryPreference("concise")}
-                      style={({ pressed }) => ({
-                        flex: 1,
-                        paddingVertical: 12,
-                        paddingHorizontal: 16,
-                        borderRadius: 12,
-                        backgroundColor: summaryPreference === "concise" 
-                          ? "rgba(255, 179, 128, 0.3)" 
-                          : "rgba(255, 255, 255, 0.05)",
-                        borderWidth: 1,
-                        borderColor: summaryPreference === "concise" 
-                          ? "#FFB380" 
-                          : "rgba(255, 255, 255, 0.1)",
+                  <Pressable
+                    onPress={() => handleToggleSummaryPreference(summaryPreference === "concise" ? "detailed" : "concise")}
+                    disabled={isUpdatingSummaryPreference}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: "rgba(255, 255, 255, 0.08)",
+                      borderRadius: 20,
+                      padding: 4,
+                    }}
+                  >
+                    <View
+                      style={{
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 16,
+                        backgroundColor: summaryPreference === "concise" ? "#4FC3F7" : "transparent",
+                        flexDirection: "row",
                         alignItems: "center",
-                        opacity: pressed ? 0.7 : 1,
-                      })}
+                        gap: 4,
+                      }}
                     >
-                      <Text style={{ fontSize: 18, marginBottom: 4 }}>⚡</Text>
+                      <Zap size={14} color={summaryPreference === "concise" ? "#000000" : "#8E8E93"} />
                       <Text
                         style={{
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: "600",
-                          color: summaryPreference === "concise" ? "#FFB380" : "#FFFFFF",
+                          color: summaryPreference === "concise" ? "#000000" : "#8E8E93",
                         }}
                       >
                         Concise
                       </Text>
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: summaryPreference === "concise" ? "rgba(255, 179, 128, 0.8)" : "#8E8E93",
-                          marginTop: 2,
-                        }}
-                      >
-                        Quick overview
-                      </Text>
-                    </Pressable>
-                    
-                    <Pressable
-                      onPress={() => handleToggleSummaryPreference("detailed")}
-                      style={({ pressed }) => ({
-                        flex: 1,
-                        paddingVertical: 12,
-                        paddingHorizontal: 16,
-                        borderRadius: 12,
-                        backgroundColor: summaryPreference === "detailed" 
-                          ? "rgba(255, 179, 128, 0.3)" 
-                          : "rgba(255, 255, 255, 0.05)",
-                        borderWidth: 1,
-                        borderColor: summaryPreference === "detailed" 
-                          ? "#FFB380" 
-                          : "rgba(255, 255, 255, 0.1)",
+                    </View>
+                    <View
+                      style={{
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 16,
+                        backgroundColor: summaryPreference === "detailed" ? "#4FC3F7" : "transparent",
+                        flexDirection: "row",
                         alignItems: "center",
-                        opacity: pressed ? 0.7 : 1,
-                      })}
+                        gap: 4,
+                      }}
                     >
-                      <Text style={{ fontSize: 18, marginBottom: 4 }}>📋</Text>
+                      <FileText size={14} color={summaryPreference === "detailed" ? "#000000" : "#8E8E93"} />
                       <Text
                         style={{
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: "600",
-                          color: summaryPreference === "detailed" ? "#FFB380" : "#FFFFFF",
+                          color: summaryPreference === "detailed" ? "#000000" : "#8E8E93",
                         }}
                       >
                         Detailed
                       </Text>
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: summaryPreference === "detailed" ? "rgba(255, 179, 128, 0.8)" : "#8E8E93",
-                          marginTop: 2,
-                        }}
-                      >
-                        Full context
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
+                    </View>
+                  </Pressable>
+                </View>
               </View>
             </View>
 

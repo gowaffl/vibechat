@@ -16,8 +16,8 @@ const events = new Hono();
 // POST /api/events - Create event
 events.post("/", zValidator("json", createEventRequestSchema), async (c) => {
   try {
-    const { chatId, creatorId, title, description, eventType, eventDate, options } = c.req.valid("json");
-    console.log("[POST /api/events] Received request:", { chatId, creatorId, title, description, eventType, eventDate, options });
+    const { chatId, creatorId, title, description, eventType, eventDate, timezone, options } = c.req.valid("json");
+    console.log("[POST /api/events] Received request:", { chatId, creatorId, title, description, eventType, eventDate, timezone, options });
 
     // Verify user is a member of the chat (with retry logic)
     const { data: membership, error: membershipError } = await executeWithRetry(async () => {
@@ -45,6 +45,7 @@ events.post("/", zValidator("json", createEventRequestSchema), async (c) => {
         description,
         eventType,
         eventDate: eventDate ? new Date(eventDate).toISOString() : null,
+        timezone: timezone || null,
         status: "planning",
       })
       .select("*")
@@ -113,6 +114,7 @@ events.post("/", zValidator("json", createEventRequestSchema), async (c) => {
       ...completeEvent,
       creatorId: completeEvent.createdBy,
       eventDate: completeEvent.eventDate || null,
+      timezone: completeEvent.timezone || null,
       finalizedDate: completeEvent.finalizedAt ? new Date(completeEvent.finalizedAt).toISOString() : null,
       status: mapDbStatusToContract(completeEvent.status),
       createdAt: new Date(completeEvent.createdAt).toISOString(),
@@ -247,6 +249,7 @@ events.get("/:chatId", zValidator("query", getEventsRequestSchema), async (c) =>
         ...event,
         creatorId: event.createdBy,
         eventDate: event.eventDate || null,
+        timezone: event.timezone || null,
         finalizedDate: event.finalizedAt ? new Date(event.finalizedAt).toISOString() : null,
         status: mapDbStatusToContract(event.status),
         createdAt: new Date(event.createdAt).toISOString(),
@@ -515,6 +518,11 @@ events.patch("/:eventId", zValidator("json", updateEventRequestSchema), async (c
       updateData.eventDate = updates.eventDate ? new Date(updates.eventDate).toISOString() : null;
     }
     
+    // Handle timezone update
+    if (updates.timezone !== undefined) {
+      updateData.timezone = updates.timezone;
+    }
+    
     if (updates.status === "confirmed" || updates.status === "finalized") {
         updateData.status = "finalized"; 
         updateData.finalizedAt = new Date().toISOString();
@@ -550,6 +558,7 @@ events.patch("/:eventId", zValidator("json", updateEventRequestSchema), async (c
       ...updatedEvent,
       creatorId: updatedEvent.createdBy,
       eventDate: updatedEvent.eventDate || null,
+      timezone: updatedEvent.timezone || null,
       finalizedDate: updatedEvent.finalizedAt ? new Date(updatedEvent.finalizedAt).toISOString() : null,
       status: mapDbStatusToContract(updatedEvent.status),
       createdAt: new Date(updatedEvent.createdAt).toISOString(),

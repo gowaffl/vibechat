@@ -13,6 +13,7 @@ import {
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { Zap, FileText, Sparkles, Check } from "lucide-react-native";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
@@ -212,18 +213,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
     }
   }, [visible]);
 
-  const getSentimentEmoji = (sentiment?: string) => {
-    switch (sentiment) {
-      case "positive":
-        return "😊";
-      case "negative":
-        return "😔";
-      case "mixed":
-        return "🤔";
-      default:
-        return "💭";
-    }
-  };
+  // Removed emoji-based sentiment display for cleaner premium look
 
   const getSummaryTypeLabel = (type: string) => {
     switch (type) {
@@ -372,7 +362,13 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                             marginBottom: 4,
                           }}
                         >
-                          <Text style={{ fontSize: 32, marginRight: 8 }}>⚡</Text>
+                          <View style={{ marginRight: 10 }}>
+                            {summary?.summaryType === "detailed" ? (
+                              <FileText size={28} color="#FFB380" />
+                            ) : (
+                              <Zap size={28} color="#FFB380" />
+                            )}
+                          </View>
                           <Text
                             style={{
                               fontSize: 24,
@@ -389,8 +385,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                             color: "rgba(255, 255, 255, 0.6)",
                           }}
                         >
-                          {getSentimentEmoji(content?.sentiment)} Here&apos;s what you
-                          missed
+                          Here&apos;s what you missed
                         </Text>
                       </View>
 
@@ -466,28 +461,9 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                         </View>
                       ) : content ? (
                         <>
-                          {/* Main Summary */}
-                          <LiquidGlassCard
-                            variant="catchup"
-                            style={{ marginBottom: 16 }}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 15,
-                                lineHeight: 22,
-                                color: "rgba(255, 255, 255, 0.95)",
-                                fontWeight: "500",
-                              }}
-                            >
-                              {content.summary}
-                            </Text>
-                          </LiquidGlassCard>
-
-                          {/* Key Points */}
+                          {/* Key Points - Main content display */}
                           {content.keyPoints && content.keyPoints.length > 0 && (
                             <LiquidGlassCard
-                              title="Key Points"
-                              icon={<Text style={{ fontSize: 20 }}>📌</Text>}
                               variant="catchup"
                               style={{ marginBottom: 16 }}
                             >
@@ -619,9 +595,11 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                                   gap: 8,
                                 }}
                               >
-                                <Text style={{ fontSize: 18 }}>
-                                  {isDetailedView ? "✨" : "📋"}
-                                </Text>
+                                {isDetailedView ? (
+                                  <Zap size={18} color="#FFB380" />
+                                ) : (
+                                  <FileText size={18} color="#FFB380" />
+                                )}
                                 <Text
                                   style={{
                                     fontSize: 15,
@@ -640,7 +618,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                               variant="primary"
                               size="large"
                             >
-                              Got it! 👍
+                              Got it
                             </LiquidGlassButton>
                           </View>
                         </>
@@ -684,7 +662,9 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                       alignItems: "center",
                     }}
                   >
-                    <Text style={{ fontSize: 40, marginBottom: 16 }}>✨</Text>
+                    <View style={{ marginBottom: 16 }}>
+                      <Sparkles size={40} color="#FFB380" />
+                    </View>
                     <Text
                       style={{
                         fontSize: 18,
