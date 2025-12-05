@@ -2149,17 +2149,17 @@ const ChatScreen = () => {
       return;
     }
 
-    // Calculate inverted index for displayData
-    // activeMessages is Old -> New
-    // displayData is Typing -> New -> Old
-    // So index is typingOffset + (activeMessages.length - 1 - originalIndex)
+    // Calculate display index for displayData
+    // activeMessages is New -> Old (descending order)
+    // displayData is Typing indicators -> New -> Old (same order, just with typing at front)
+    // So index is typingOffset + originalIndex
     let typingOffset = 0;
     if (isAITyping && !currentThreadId) typingOffset++;
     if (typingUsers.length > 0 && !currentThreadId) typingOffset++;
 
-    const invertedIndex = typingOffset + (activeMessages.length - 1 - originalIndex);
+    const displayIndex = typingOffset + originalIndex;
 
-    console.log(`[ScrollToMessage] Found message ${messageId} at original index ${originalIndex}, inverted index ${invertedIndex}`);
+    console.log(`[ScrollToMessage] Found message ${messageId} at original index ${originalIndex}, display index ${displayIndex}`);
     
     if (!flatListRef.current) {
       console.log(`[ScrollToMessage] FlatList ref not available`);
@@ -2181,19 +2181,19 @@ const ChatScreen = () => {
     
     // Delay to allow modal to close
     setTimeout(() => {
-      console.log(`[ScrollToMessage] Attempting scrollToIndex to ${invertedIndex}`);
+      console.log(`[ScrollToMessage] Attempting scrollToIndex to ${displayIndex}`);
       
       try {
         // Try to scroll to the index
         flatListRef.current?.scrollToIndex({
-          index: invertedIndex,
+          index: displayIndex,
           animated: true,
           viewPosition: 0.5, // Center the message
         });
       } catch (error) {
         console.log(`[ScrollToMessage] scrollToIndex failed:`, error);
         // Fallback: scroll to approximate position
-        const estimatedOffset = invertedIndex * 100; 
+        const estimatedOffset = displayIndex * 100; 
         flatListRef.current?.scrollToOffset({
           offset: estimatedOffset,
           animated: true,
@@ -2220,18 +2220,34 @@ const ChatScreen = () => {
       .filter((msg): msg is Message => msg !== undefined);
   }, [bookmarks, messages]);
 
-  // Prepare last 3 messages for smart reply context
+  // Check if the most recent message is from another user or AI (for smart reply eligibility)
+  const mostRecentMessageIsFromOther = useMemo(() => {
+    if (!messages || messages.length === 0) return false;
+    
+    // Get the actual most recent message (index 0 since descending order)
+    const mostRecent = messages[0];
+    if (!mostRecent) return false;
+    
+    // AI messages have userId: null, so they're not from current user
+    // Other users have a different userId
+    const isFromCurrentUser = mostRecent.userId === user?.id;
+    return !isFromCurrentUser;
+  }, [messages, user?.id]);
+
+  // Prepare last 3 messages for smart reply context (for the AI to generate suggestions)
+  // Messages are in descending order (newest first), so we take first 3
   const lastMessagesForSmartReply = useMemo(() => {
     if (!messages || messages.length === 0) return [];
     
-    // Get last 3 messages (excluding system messages and voice messages without content)
+    // Get most recent 3 messages with content (excluding system messages and empty messages)
+    // Messages are [Newest, ..., Oldest], so slice(0, 3) gets the 3 newest with content
     const relevantMessages = messages
       .filter(msg => 
         msg.messageType !== "system" && 
         msg.content && 
         msg.content.trim().length > 0
       )
-      .slice(-3);
+      .slice(0, 3);
     
     return relevantMessages.map(msg => ({
       content: msg.content || "",
@@ -2251,15 +2267,15 @@ const ChatScreen = () => {
       console.log("[Smart Replies Frontend] Last messages count:", lastMessagesForSmartReply.length);
       console.log("[Smart Replies Frontend] Last messages for context:", JSON.stringify(lastMessagesForSmartReply, null, 2));
       
-      // Don't fetch if no messages or last message is from current user
+      // Don't fetch if no messages with content for context
       if (lastMessagesForSmartReply.length === 0) {
-        console.log("[Smart Replies Frontend] ❌ Skipping - no messages");
+        console.log("[Smart Replies Frontend] ❌ Skipping - no messages with content for context");
         return { replies: [] };
       }
       
-      const lastMsg = lastMessagesForSmartReply[lastMessagesForSmartReply.length - 1];
-      if (lastMsg?.isCurrentUser) {
-        console.log("[Smart Replies Frontend] ❌ Skipping - last message is from current user");
+      // mostRecentMessageIsFromOther is checked in `enabled`, but double-check here
+      if (!mostRecentMessageIsFromOther) {
+        console.log("[Smart Replies Frontend] ❌ Skipping - most recent message is from current user");
         return { replies: [] };
       }
 
@@ -2272,8 +2288,8 @@ const ChatScreen = () => {
       console.log("[Smart Replies Frontend] ✅ Response received:", JSON.stringify(response, null, 2));
       return response;
     },
-    enabled: lastMessagesForSmartReply.length > 0 && 
-             lastMessagesForSmartReply[lastMessagesForSmartReply.length - 1]?.isCurrentUser === false,
+    // Only enable if the most recent message is from someone else (another user or AI)
+    enabled: lastMessagesForSmartReply.length > 0 && mostRecentMessageIsFromOther,
     staleTime: 0, // Don't cache - always fetch fresh
     gcTime: 0, // Don't keep in garbage collection
     refetchOnWindowFocus: false,
@@ -2282,8 +2298,8 @@ const ChatScreen = () => {
 
   const smartReplies = smartRepliesData?.replies || [];
   
-  console.log("[Smart Replies Frontend] Query enabled:", lastMessagesForSmartReply.length > 0 && 
-             lastMessagesForSmartReply[lastMessagesForSmartReply.length - 1]?.isCurrentUser === false);
+  console.log("[Smart Replies Frontend] Query enabled:", lastMessagesForSmartReply.length > 0 && mostRecentMessageIsFromOther);
+  console.log("[Smart Replies Frontend] Most recent is from other:", mostRecentMessageIsFromOther);
   console.log("[Smart Replies Frontend] Is loading:", isLoadingSmartReplies);
   console.log("[Smart Replies Frontend] Has error:", !!smartRepliesError);
   if (smartRepliesError) {
@@ -5679,11 +5695,14 @@ const ChatScreen = () => {
     willShowEmptyIfNoMatches: currentThreadId && threadMessages !== undefined && threadMessages.length === 0
   });
   
+  // Check if smart replies are visible (for dynamic bottom padding)
+  const areSmartRepliesVisible = smartReplies.length > 0 && !messageText && selectedImages.length === 0 && !replyToMessage;
+  
   // Combine messages with typing indicators
-  // Backend returns Oldest-First (Ascending)
-  // Inverted FlashList needs Newest-First (Newest at index 0) to render at bottom
-  // So we MUST reverse the array here.
-  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages].reverse();
+  // Backend returns Newest-First (Descending): [Newest, ..., Oldest]
+  // Inverted FlashList renders index 0 at bottom
+  // So newest (index 0) appears at bottom - no reverse needed!
+  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
 
   // Add AI typing indicator if AI is typing (only in main chat, not in threads)
   if (isAITyping && !currentThreadId) {
@@ -5822,7 +5841,8 @@ const ChatScreen = () => {
             paddingTop: 13, 
           }}
           // Spacer for Input Bar (Glassmorphism effect)
-          ListHeaderComponent={<View style={{ height: 100 }} />}
+          // Dynamic height: 95px default, 110px when smart replies are showing
+          ListHeaderComponent={<View style={{ height: areSmartRepliesVisible ? 110 : 95 }} />}
           // HIGH-8: Load earlier messages button (appears at top in inverted list)
           ListFooterComponent={
             hasMoreMessages ? (

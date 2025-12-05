@@ -1482,17 +1482,19 @@ ai.post("/smart-replies", zValidator("json", smartRepliesRequestSchema), async (
     console.log("[Smart Replies] Last messages count:", lastMessages.length);
     console.log("[Smart Replies] Last messages:", JSON.stringify(lastMessages, null, 2));
 
-    // Don't generate if the last message is from the current user
-    const lastMessage = lastMessages[lastMessages.length - 1];
-    if (lastMessages.length > 0 && lastMessage?.isCurrentUser) {
-      console.log("[Smart Replies] Last message is from current user, skipping");
+    // Don't generate if the most recent message is from the current user
+    // Messages are now in descending order: [Newest, ..., Oldest], so index 0 is most recent
+    const mostRecentMessage = lastMessages[0];
+    if (lastMessages.length > 0 && mostRecentMessage?.isCurrentUser) {
+      console.log("[Smart Replies] Most recent message is from current user, skipping");
       return c.json({ replies: [] });
     }
 
     // Build conversation context with emphasis on the most recent message
+    // Messages are [Newest, 2nd newest, 3rd newest], so index 0 is most recent
     const conversationLines = lastMessages.map((msg, index) => {
-      const isLast = index === lastMessages.length - 1;
-      const prefix = isLast ? ">>> MOST RECENT" : "Earlier";
+      const isMostRecent = index === 0;
+      const prefix = isMostRecent ? ">>> MOST RECENT" : "Earlier";
       return `${prefix} - ${msg.userName}: ${msg.content}`;
     });
     const conversationContext = conversationLines.join("\n");
