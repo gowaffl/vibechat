@@ -13,6 +13,7 @@
 -- - fix_corrupted_image_urls ✅ APPLIED (January 26, 2025) - Fixed double-prepended URLs
 -- - add_service_role_policies ✅ APPLIED (December 2, 2025) - Added explicit service role RLS policies
 -- - add_is_muted_to_chat_member ✅ APPLIED (December 4, 2025) - Added isMuted column to chat_member
+-- - add_summary_preference_to_user ✅ APPLIED (December 5, 2025) - Added summaryPreference and hasSeenSummaryPreferencePrompt columns
 --
 -- FEATURE: Multi-Image & Video Support (December 2, 2025)
 -- - Added messageType 'video' to message table
@@ -90,8 +91,11 @@ CREATE TABLE IF NOT EXISTS "user" (
     "hasCompletedOnboarding" BOOLEAN NOT NULL DEFAULT false,
     "pushToken" TEXT,
     "pushNotificationsEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "summaryPreference" TEXT NOT NULL DEFAULT 'concise', -- AI catch-up summary preference: 'concise' or 'detailed'
+    "hasSeenSummaryPreferencePrompt" BOOLEAN NOT NULL DEFAULT false, -- Whether user has seen the first-time preference prompt
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "user_summaryPreference_check" CHECK ("summaryPreference" IN ('concise', 'detailed'))
 );
 
 CREATE TRIGGER update_user_updatedAt

@@ -1429,7 +1429,7 @@ const ChatScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<RootStackScreenProps<"Chat">["navigation"]>();
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
-  const { user } = useUser();
+  const { user, updateUser } = useUser();
   const queryClient = useQueryClient();
   const colorScheme = useColorScheme();
 
@@ -1899,9 +1899,9 @@ const ChatScreen = () => {
     };
   }, [chatId]);
 
-  // Persist catch-up button if unread count was high
+  // Persist catch-up button if unread count was high (threshold: 10+ messages)
   useEffect(() => {
-    if (currentChatUnreadCount >= 5 && !catchUpDismissed) {
+    if (currentChatUnreadCount >= 10 && !catchUpDismissed) {
       setCatchUpCount(prev => Math.max(prev, currentChatUnreadCount));
     }
   }, [currentChatUnreadCount, catchUpDismissed]);
@@ -7632,13 +7632,36 @@ const ChatScreen = () => {
           }}
           summary={cachedSummary ?? null}
           isLoading={isGeneratingCatchUp}
-          onGenerateSummary={(type) => {
+          onGenerateSummary={(type: "concise" | "detailed") => {
             generateCatchUp(type);
           }}
           onViewMessage={(messageId) => {
             setShowCatchUpModal(false);
             clearCachedSummary(); // Clear so user sees selection screen next time
             scrollToMessage(messageId);
+          }}
+          user={user}
+          onSavePreference={async (preference: "concise" | "detailed") => {
+            try {
+              await api.patch(`/api/users/${user?.id}`, { summaryPreference: preference });
+              // Update local user state
+              if (updateUser) {
+                await updateUser({ summaryPreference: preference } as any);
+              }
+            } catch (error) {
+              console.error("[ChatScreen] Failed to save summary preference:", error);
+            }
+          }}
+          onMarkPreferencePromptSeen={async () => {
+            try {
+              await api.patch(`/api/users/${user?.id}`, { hasSeenSummaryPreferencePrompt: true });
+              // Update local user state
+              if (updateUser) {
+                await updateUser({ hasSeenSummaryPreferencePrompt: true } as any);
+              }
+            } catch (error) {
+              console.error("[ChatScreen] Failed to mark preference prompt as seen:", error);
+            }
           }}
         />
 
@@ -7704,9 +7727,9 @@ const ChatScreen = () => {
         {/* Smart Catch-Up Floating Button */}
         <CatchUpButton
           unreadCount={catchUpCount > 0 ? catchUpCount : currentChatUnreadCount}
-          isVisible={(currentChatUnreadCount >= 5 || catchUpCount >= 5) && !showCatchUpModal && !catchUpDismissed}
+          isVisible={(currentChatUnreadCount >= 10 || catchUpCount >= 10) && !showCatchUpModal && !catchUpDismissed}
           onPress={() => {
-            // Just open the modal - user will select summary type inside
+            // Open modal - auto-generates summary with user's preferred type
             setShowCatchUpModal(true);
           }}
           onDismiss={handleCatchUpDismiss}

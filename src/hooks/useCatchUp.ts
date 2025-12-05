@@ -69,7 +69,7 @@ export function useCatchUp(chatId: string, userId: string) {
   });
 
   const generateCatchUp = (
-    summaryType: "quick" | "detailed" | "personalized" = "personalized",
+    summaryType: "concise" | "detailed" = "concise",
     sinceMessageId?: string
   ) => {
     generateMutation.mutate({ summaryType, sinceMessageId });

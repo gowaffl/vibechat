@@ -22,6 +22,8 @@ export const userSchema = z.object({
   image: z.string().nullable(),
   birthdate: z.string().nullable().optional(), // ISO date string
   hasCompletedOnboarding: z.boolean(),
+  summaryPreference: z.enum(["concise", "detailed"]).default("concise"), // AI catch-up summary preference
+  hasSeenSummaryPreferencePrompt: z.boolean().default(false), // Whether user has seen the first-time preference prompt
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -235,6 +237,8 @@ export const updateUserRequestSchema = z.object({
   image: z.string().optional(),
   birthdate: z.string().optional(),
   hasCompletedOnboarding: z.boolean().optional(),
+  summaryPreference: z.enum(["concise", "detailed"]).optional(),
+  hasSeenSummaryPreferencePrompt: z.boolean().optional(),
 });
 export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
 export const updateUserResponseSchema = userSchema;
@@ -1036,7 +1040,7 @@ export const conversationSummarySchema = z.object({
   id: z.string(),
   chatId: z.string(),
   userId: z.string(),
-  summaryType: z.enum(["quick", "detailed", "personalized"]),
+  summaryType: z.enum(["concise", "detailed"]),
   content: conversationSummaryContentSchema,
   startMessageId: z.string(),
   endMessageId: z.string(),
@@ -1241,7 +1245,7 @@ export type CreateMemeFromMediaResponse = z.infer<typeof createMemeFromMediaResp
 export const generateCatchUpRequestSchema = z.object({
   chatId: z.string(),
   userId: z.string(),
-  summaryType: z.enum(["quick", "detailed", "personalized"]).default("personalized"),
+  summaryType: z.enum(["concise", "detailed"]).default("concise"),
   sinceMessageId: z.string().optional(), // If provided, summarize from this message onwards
 });
 export type GenerateCatchUpRequest = z.infer<typeof generateCatchUpRequestSchema>;

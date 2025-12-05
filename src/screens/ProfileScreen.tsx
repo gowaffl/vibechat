@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Camera, User as UserIcon, Bell, BellOff, Trash2, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react-native";
+import { Camera, User as UserIcon, Bell, BellOff, Trash2, AlertTriangle, ChevronDown, ChevronRight, Sparkles } from "lucide-react-native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -43,6 +43,8 @@ const ProfileScreen = () => {
   const [isDeleteSectionExpanded, setIsDeleteSectionExpanded] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [deletionFeedback, setDeletionFeedback] = useState("");
+  const [summaryPreference, setSummaryPreference] = useState<"concise" | "detailed">(user?.summaryPreference || "concise");
+  const [isUpdatingSummaryPreference, setIsUpdatingSummaryPreference] = useState(false);
 
   // Keyboard listener
   React.useEffect(() => {
@@ -152,6 +154,22 @@ const ProfileScreen = () => {
       Alert.alert("Error", "Failed to update notification preferences");
     } finally {
       setIsUpdatingNotifications(false);
+    }
+  };
+
+  const handleToggleSummaryPreference = async (preference: "concise" | "detailed") => {
+    if (!user?.id) return;
+
+    setIsUpdatingSummaryPreference(true);
+    try {
+      await api.patch(`/api/users/${user.id}`, { summaryPreference: preference });
+      setSummaryPreference(preference);
+      await updateUser({ summaryPreference: preference });
+    } catch (error) {
+      console.error("Failed to update summary preference:", error);
+      Alert.alert("Error", "Failed to update summary preference");
+    } finally {
+      setIsUpdatingSummaryPreference(false);
     }
   };
 
@@ -511,6 +529,119 @@ const ProfileScreen = () => {
                     />
                   )}
                 </View>
+              </View>
+            </View>
+
+            {/* AI Summary Preference */}
+            <View className="mb-6">
+              <Text className="text-sm font-semibold mb-3 ml-1" style={{ color: "#8E8E93" }}>
+                AI SUMMARY STYLE
+              </Text>
+              <View
+                className="rounded-2xl px-5 py-4"
+                style={{
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 255, 255, 0.2)",
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+                  <Sparkles size={20} color="#FFB380" />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>
+                      Default Summary Type
+                    </Text>
+                    <Text style={{ color: "#8E8E93", fontSize: 13, marginTop: 2 }}>
+                      Choose your preferred catch-up style
+                    </Text>
+                  </View>
+                </View>
+                
+                {isUpdatingSummaryPreference ? (
+                  <View style={{ alignItems: "center", paddingVertical: 8 }}>
+                    <LuxeLogoLoader size="small" />
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <Pressable
+                      onPress={() => handleToggleSummaryPreference("concise")}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        borderRadius: 12,
+                        backgroundColor: summaryPreference === "concise" 
+                          ? "rgba(255, 179, 128, 0.3)" 
+                          : "rgba(255, 255, 255, 0.05)",
+                        borderWidth: 1,
+                        borderColor: summaryPreference === "concise" 
+                          ? "#FFB380" 
+                          : "rgba(255, 255, 255, 0.1)",
+                        alignItems: "center",
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ fontSize: 18, marginBottom: 4 }}>⚡</Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "600",
+                          color: summaryPreference === "concise" ? "#FFB380" : "#FFFFFF",
+                        }}
+                      >
+                        Concise
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: summaryPreference === "concise" ? "rgba(255, 179, 128, 0.8)" : "#8E8E93",
+                          marginTop: 2,
+                        }}
+                      >
+                        Quick overview
+                      </Text>
+                    </Pressable>
+                    
+                    <Pressable
+                      onPress={() => handleToggleSummaryPreference("detailed")}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        borderRadius: 12,
+                        backgroundColor: summaryPreference === "detailed" 
+                          ? "rgba(255, 179, 128, 0.3)" 
+                          : "rgba(255, 255, 255, 0.05)",
+                        borderWidth: 1,
+                        borderColor: summaryPreference === "detailed" 
+                          ? "#FFB380" 
+                          : "rgba(255, 255, 255, 0.1)",
+                        alignItems: "center",
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ fontSize: 18, marginBottom: 4 }}>📋</Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "600",
+                          color: summaryPreference === "detailed" ? "#FFB380" : "#FFFFFF",
+                        }}
+                      >
+                        Detailed
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: summaryPreference === "detailed" ? "rgba(255, 179, 128, 0.8)" : "#8E8E93",
+                          marginTop: 2,
+                        }}
+                      >
+                        Full context
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
             </View>
 

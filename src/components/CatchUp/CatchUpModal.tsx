@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Animated,
   Dimensions,
   SafeAreaView,
-  ActivityIndicator,
   PanResponder,
 } from "react-native";
 import { BlurView } from "expo-blur";
@@ -17,7 +16,7 @@ import * as Haptics from "expo-haptics";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
-import type { ConversationSummary } from "@shared/contracts";
+import type { ConversationSummary, User } from "@shared/contracts";
 
 interface CatchUpModalProps {
   visible: boolean;
@@ -25,7 +24,10 @@ interface CatchUpModalProps {
   summary: ConversationSummary | null;
   onViewMessage?: (messageId: string) => void;
   isLoading?: boolean;
-  onGenerateSummary?: (type: "quick" | "detailed" | "personalized") => void;
+  onGenerateSummary?: (type: "concise" | "detailed") => void;
+  user?: User | null;
+  onSavePreference?: (preference: "concise" | "detailed") => void;
+  onMarkPreferencePromptSeen?: () => void;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -37,6 +39,9 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   onViewMessage,
   isLoading = false,
   onGenerateSummary,
+  user,
+  onSavePreference,
+  onMarkPreferencePromptSeen,
 }) => {
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -44,11 +49,43 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   const [rotateAnim] = useState(new Animated.Value(0));
   const dragY = useRef(new Animated.Value(0)).current;
   const [showModal, setShowModal] = useState(visible);
+  const [showPreferencePopup, setShowPreferencePopup] = useState(false);
+  const [hasTriggeredGeneration, setHasTriggeredGeneration] = useState(false);
+
+  // Get user's preferred summary type
+  const userPreference = user?.summaryPreference || "concise";
+  const hasSeenPrompt = user?.hasSeenSummaryPreferencePrompt || false;
+
+  // Auto-generate summary when modal opens
+  useEffect(() => {
+    if (visible && onGenerateSummary && !summary && !isLoading && !hasTriggeredGeneration) {
+      console.log("[CatchUpModal] Auto-generating summary with preference:", userPreference);
+      setHasTriggeredGeneration(true);
+      onGenerateSummary(userPreference as "concise" | "detailed");
+    }
+  }, [visible, onGenerateSummary, summary, isLoading, userPreference, hasTriggeredGeneration]);
+
+  // Reset generation trigger when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setHasTriggeredGeneration(false);
+    }
+  }, [visible]);
+
+  // Show preference popup after first successful summary generation
+  useEffect(() => {
+    if (summary && !hasSeenPrompt && !showPreferencePopup && visible) {
+      // Small delay to let the user see the summary first
+      const timer = setTimeout(() => {
+        setShowPreferencePopup(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [summary, hasSeenPrompt, showPreferencePopup, visible]);
 
   useEffect(() => {
     if (visible) {
       setShowModal(true);
-      // Reduced to very light feedback
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Animated.parallel([
         Animated.spring(slideAnim, {
@@ -75,14 +112,16 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
           duration: 150,
           useNativeDriver: true,
         }),
-      ]).start(() => setShowModal(false));
+      ]).start(() => {
+        setShowModal(false);
+        setShowPreferencePopup(false);
+      });
     }
   }, [visible, slideAnim, fadeAnim]);
 
   // Loading animation effects
   useEffect(() => {
     if (isLoading) {
-      // Pulse animation
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -98,7 +137,6 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
         ])
       ).start();
 
-      // Rotation animation
       Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1,
@@ -113,12 +151,10 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   }, [isLoading, pulseAnim, rotateAnim]);
 
   const handleClose = () => {
-    // Removed haptic on close
     onClose();
   };
 
   // PanResponder for swipe-down gesture
-  // We use a ref to hold the latest onClose callback to avoid stale closures in PanResponder
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -137,9 +173,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 100 || gestureState.vy > 0.5) {
-          // Light feedback on dismiss
           Haptics.selectionAsync();
-          // Use the ref to ensure we call the latest callback
           if (onCloseRef.current) {
             onCloseRef.current();
           }
@@ -191,12 +225,10 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
 
   const getSummaryTypeLabel = (type: string) => {
     switch (type) {
-      case "quick":
+      case "concise":
         return "Quick Catch-Up";
       case "detailed":
         return "Detailed Summary";
-      case "personalized":
-        return "Your Personalized Catch-Up";
       default:
         return "Catch-Up";
     }
@@ -209,10 +241,29 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
     sentiment?: string;
   } | undefined;
 
-  const spin = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
+  const currentSummaryType = summary?.summaryType || "concise";
+  const isDetailedView = currentSummaryType === "detailed";
+
+  const handleToggleSummaryType = useCallback(() => {
+    if (!onGenerateSummary) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const newType = isDetailedView ? "concise" : "detailed";
+    onGenerateSummary(newType);
+  }, [onGenerateSummary, isDetailedView]);
+
+  const handleSavePreference = useCallback((save: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowPreferencePopup(false);
+    
+    if (save && onSavePreference && currentSummaryType) {
+      onSavePreference(currentSummaryType as "concise" | "detailed");
+    }
+    
+    // Mark that user has seen the prompt either way
+    if (onMarkPreferencePromptSeen) {
+      onMarkPreferencePromptSeen();
+    }
+  }, [onSavePreference, onMarkPreferencePromptSeen, currentSummaryType]);
 
   return (
     <Modal
@@ -327,7 +378,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                               color: "#FFFFFF",
                             }}
                           >
-                            {getSummaryTypeLabel(summary?.summaryType || "quick")}
+                            {getSummaryTypeLabel(summary?.summaryType || "concise")}
                           </Text>
                         </View>
                         <Text
@@ -410,154 +461,6 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                               </View>
                             </LiquidGlassCard>
                           </View>
-                        </View>
-                      ) : !content && onGenerateSummary ? (
-                        // Selection Screen - Choose Summary Type
-                        <View style={{ paddingVertical: 20 }}>
-                          <Text
-                            style={{
-                              fontSize: 17,
-                              fontWeight: "600",
-                              color: "rgba(255, 255, 255, 0.9)",
-                              textAlign: "center",
-                              marginBottom: 24,
-                              lineHeight: 24,
-                            }}
-                          >
-                            Choose your summary style:
-                          </Text>
-
-                          {/* Quick Summary Option */}
-                          <Pressable
-                            onPress={() => {
-                              Haptics.selectionAsync();
-                              onGenerateSummary("quick");
-                            }}
-                            style={({ pressed }) => ({
-                              marginBottom: 16,
-                              opacity: pressed ? 0.7 : 1,
-                            })}
-                          >
-                            <LiquidGlassCard variant="catchup">
-                              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                                <Text style={{ fontSize: 28, marginRight: 12 }}>⚡</Text>
-                                <Text
-                                  style={{
-                                    fontSize: 18,
-                                    fontWeight: "700",
-                                    color: "#FFFFFF",
-                                  }}
-                                >
-                                  Quick Summary
-                                </Text>
-                              </View>
-                              <Text
-                                style={{
-                                  fontSize: 14,
-                                  color: "rgba(255, 255, 255, 0.75)",
-                                  lineHeight: 20,
-                                }}
-                              >
-                                15-20 second read • 2-3 bullet points{"\n"}
-                                Main topics and critical actions only
-                              </Text>
-                            </LiquidGlassCard>
-                          </Pressable>
-
-                          {/* Personalized Summary Option */}
-                          <Pressable
-                            onPress={() => {
-                              Haptics.selectionAsync();
-                              onGenerateSummary("personalized");
-                            }}
-                            style={({ pressed }) => ({
-                              marginBottom: 16,
-                              opacity: pressed ? 0.7 : 1,
-                            })}
-                          >
-                            <LiquidGlassCard variant="catchup">
-                              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                                <Text style={{ fontSize: 28, marginRight: 12 }}>👤</Text>
-                                <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 18,
-                                      fontWeight: "700",
-                                      color: "#FFFFFF",
-                                    }}
-                                  >
-                                    Personalized
-                                  </Text>
-                                  <View
-                                    style={{
-                                      backgroundColor: "#FFB380",
-                                      paddingHorizontal: 8,
-                                      paddingVertical: 3,
-                                      borderRadius: 8,
-                                      marginLeft: 10,
-                                    }}
-                                  >
-                                    <Text
-                                      style={{
-                                        fontSize: 11,
-                                        fontWeight: "700",
-                                        color: "#1C1C1E",
-                                      }}
-                                    >
-                                      RECOMMENDED
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-                              <Text
-                                style={{
-                                  fontSize: 14,
-                                  color: "rgba(255, 255, 255, 0.75)",
-                                  lineHeight: 20,
-                                }}
-                              >
-                                20-25 second read • 3-4 bullet points{"\n"}
-                                Focused on mentions, questions, and actions for you
-                              </Text>
-                            </LiquidGlassCard>
-                          </Pressable>
-
-                          {/* Detailed Summary Option */}
-                          <Pressable
-                            onPress={() => {
-                              Haptics.selectionAsync();
-                              onGenerateSummary("detailed");
-                            }}
-                            style={({ pressed }) => ({
-                              marginBottom: 16,
-                              opacity: pressed ? 0.7 : 1,
-                            })}
-                          >
-                            <LiquidGlassCard variant="catchup">
-                              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                                <Text style={{ fontSize: 28, marginRight: 12 }}>📋</Text>
-                                <Text
-                                  style={{
-                                    fontSize: 18,
-                                    fontWeight: "700",
-                                    color: "#FFFFFF",
-                                  }}
-                                >
-                                  Detailed Summary
-                                </Text>
-                              </View>
-                              <Text
-                                style={{
-                                  fontSize: 14,
-                                  color: "rgba(255, 255, 255, 0.75)",
-                                  lineHeight: 20,
-                                }}
-                              >
-                                25-30 second read • 4-5 bullet points{"\n"}
-                                Comprehensive overview with key decisions and actions
-                              </Text>
-                            </LiquidGlassCard>
-                          </Pressable>
                         </View>
                       ) : content ? (
                         <>
@@ -691,8 +594,45 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                             </LiquidGlassCard>
                           )}
 
-                          {/* Action Button */}
-                          <View style={{ marginTop: 24 }}>
+                          {/* Action Buttons */}
+                          <View style={{ marginTop: 24, gap: 12 }}>
+                            {/* Toggle Summary Type Button */}
+                            <Pressable
+                              onPress={handleToggleSummaryType}
+                              style={({ pressed }) => ({
+                                opacity: pressed ? 0.7 : 1,
+                              })}
+                            >
+                              <View
+                                style={{
+                                  paddingVertical: 14,
+                                  paddingHorizontal: 20,
+                                  borderRadius: 16,
+                                  backgroundColor: "rgba(255, 144, 82, 0.15)",
+                                  borderWidth: 1,
+                                  borderColor: "rgba(255, 144, 82, 0.3)",
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                <Text style={{ fontSize: 18 }}>
+                                  {isDetailedView ? "✨" : "📋"}
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 15,
+                                    fontWeight: "600",
+                                    color: "#FFB380",
+                                  }}
+                                >
+                                  {isDetailedView ? "Simplify" : "More Detail"}
+                                </Text>
+                              </View>
+                            </Pressable>
+
+                            {/* Got it Button */}
                             <LiquidGlassButton
                               onPress={handleClose}
                               variant="primary"
@@ -709,6 +649,116 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
               </View>
             </SafeAreaView>
           </Animated.View>
+
+          {/* First-time Preference Popup */}
+          {showPreferencePopup && (
+            <Animated.View
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                top: 0,
+                justifyContent: "center",
+                alignItems: "center",
+                backgroundColor: "rgba(0, 0, 0, 0.5)",
+              }}
+            >
+              <View
+                style={{
+                  marginHorizontal: 32,
+                  borderRadius: 24,
+                  overflow: "hidden",
+                }}
+              >
+                <BlurView intensity={90} tint="dark">
+                  <LinearGradient
+                    colors={[
+                      "rgba(255, 144, 82, 0.2)",
+                      "rgba(0, 0, 0, 0.8)",
+                    ]}
+                    style={{
+                      padding: 24,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ fontSize: 40, marginBottom: 16 }}>✨</Text>
+                    <Text
+                      style={{
+                        fontSize: 18,
+                        fontWeight: "700",
+                        color: "#FFFFFF",
+                        textAlign: "center",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Save as Default?
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        color: "rgba(255, 255, 255, 0.7)",
+                        textAlign: "center",
+                        marginBottom: 24,
+                        lineHeight: 20,
+                      }}
+                    >
+                      Make {currentSummaryType === "detailed" ? "detailed" : "concise"} summaries your default?{"\n"}
+                      You can change this later in Profile settings.
+                    </Text>
+
+                    <View style={{ flexDirection: "row", gap: 12, width: "100%" }}>
+                      <Pressable
+                        onPress={() => handleSavePreference(false)}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          paddingVertical: 14,
+                          borderRadius: 12,
+                          backgroundColor: pressed
+                            ? "rgba(255, 255, 255, 0.15)"
+                            : "rgba(255, 255, 255, 0.1)",
+                          alignItems: "center",
+                        })}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: "600",
+                            color: "rgba(255, 255, 255, 0.7)",
+                          }}
+                        >
+                          Not Now
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => handleSavePreference(true)}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          paddingVertical: 14,
+                          borderRadius: 12,
+                          backgroundColor: pressed
+                            ? "rgba(255, 144, 82, 0.6)"
+                            : "rgba(255, 144, 82, 0.4)",
+                          alignItems: "center",
+                        })}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: "600",
+                            color: "#FFFFFF",
+                          }}
+                        >
+                          Yes, Save It
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </LinearGradient>
+                </BlurView>
+              </View>
+            </Animated.View>
+          )}
         </BlurView>
       </Animated.View>
     </Modal>
@@ -716,4 +766,3 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
 };
 
 export default CatchUpModal;
-

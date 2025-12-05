@@ -148,55 +148,46 @@ catchup.post("/generate", zValidator("json", generateCatchUpRequestSchema), asyn
 
     // Generate summary based on type
     let systemPrompt = "";
-    if (summaryType === "quick") {
-      systemPrompt = `You are a hyper-concise conversation summarizer. Create a 15-20 second read (2-3 bullet points max):
+    if (summaryType === "concise") {
+      systemPrompt = `You're catching up a friend on what they missed in a group chat. Write a quick, natural summary that captures the main themes and topics discussed.
 
-• [Main topic/decision]
-• [Critical action item if any]
-• [Time-sensitive info if any]
+Style Guide:
+- Write like you're texting a friend: casual, warm, and natural
+- Match the tone/energy of the conversation (if it's playful, be playful; if serious, be more straightforward)
+- 2-4 bullet points max, each one sentence
+- Focus on the key themes, decisions, or things they'd actually want to know
+- Skip the small talk and "hi/bye" stuff
+- Use names when relevant (e.g., "Sarah's planning the party" not "Someone is planning something")
 
-Rules:
-- ONLY the most critical info
-- Skip small talk completely
-- One line per bullet
-- NO explanations or context`;
-    } else if (summaryType === "detailed") {
-      systemPrompt = `You are a concise conversation analyst. Create a 25-30 second read with 4-5 bullet points MAX:
-
-Format:
-• [Key decision/outcome]
-• [Important action item]
-• [Notable question/issue]
-• [Other critical info]
-
-Rules:
-- Bullet points only, no paragraphs
-- One clear point per line
-- Skip casual chat and minor details
-- Maximum 10-12 words per bullet`;
+Example output style:
+• Mike and Sarah are debating where to eat Friday - leaning toward that new Thai place
+• Everyone's hyped about the concert tickets going on sale tomorrow
+• Jake needs your opinion on the logo designs he shared`;
     } else {
-      // personalized
-      systemPrompt = `You are a personalized AI assistant for ${user.name}. Create an ULTRA-CONCISE summary (20-25 second read) in bullet point format.
+      // detailed
+      systemPrompt = `You're giving a friend a thorough catch-up on everything they missed in a group chat. Cover all the significant topics and discussions in detail.
 
-ONLY include bullets for:
-• Direct mentions of ${user.name} (questions, requests, tags)
-• Decisions that directly impact ${user.name}
-• Action items assigned to ${user.name}
-• Critical info ${user.name} must know
+Style Guide:
+- Write conversationally, like explaining to a friend what happened
+- Match the tone/energy of the conversation
+- 5-7 bullet points with more context and detail
+- Include: decisions made, questions asked, plans discussed, interesting moments
+- Mention who said what when it matters
+- Include any action items or things that need follow-up
+- Capture the vibe - if people were joking around or having a heated debate, convey that
 
-Rules:
-- 3-4 bullet points MAXIMUM
-- Start each bullet with action/context (e.g., "Sarah asked you about...", "Team decided...", "You were mentioned...")
-- 8-12 words per bullet
-- NO filler, NO small talk, NO general conversation
-- If nothing important for ${user.name}, return: "• No direct mentions or action items for you"`;
+Example output style:
+• The big thing: everyone's trying to nail down plans for Friday night - Mike really wants Thai food but Sarah's pushing for Italian. No decision yet but sounds like they're voting tomorrow
+• Jake dropped some logo designs in the chat and wants feedback by Wednesday - said he's leaning toward the blue one but wants other opinions
+• Random but funny: there was a whole side conversation about whether hot dogs are sandwiches (spoiler: no consensus reached)
+• Heads up: Emma mentioned the project deadline got moved up to next week`;
     }
 
     console.log(`[Catch-Up] Calling OpenAI with model: gpt-5-mini`);
     console.log(`[Catch-Up] Summary type: ${summaryType}`);
     console.log(`[Catch-Up] Conversation text length: ${conversationText.length} characters`);
     console.log(`[Catch-Up] System prompt length: ${systemPrompt.length} characters`);
-    console.log(`[Catch-Up] Token limit: ${summaryType === "quick" ? 600 : summaryType === "personalized" ? 800 : 1200}`);
+    console.log(`[Catch-Up] Token limit: ${summaryType === "concise" ? 800 : 1500}`);
 
     const response = await openai.chat.completions.create({
       model: "gpt-5-mini",
@@ -206,8 +197,8 @@ Rules:
       ],
       // GPT-5-mini does not support temperature parameter - it uses default temperature of 1
       // GPT-5-mini uses many tokens for internal reasoning (e.g., 512 reasoning tokens for ~25 output tokens)
-      // For ultra-concise summaries, we use lower token limits to encourage brevity
-      max_completion_tokens: summaryType === "quick" ? 600 : summaryType === "personalized" ? 800 : 1200,
+      // Concise summaries get fewer tokens, detailed summaries get more
+      max_completion_tokens: summaryType === "concise" ? 800 : 1500,
     });
 
     console.log(`[Catch-Up] ✅ OpenAI response received`);

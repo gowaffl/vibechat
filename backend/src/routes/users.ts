@@ -27,6 +27,8 @@ const formatUserResponse = (user: any) => ({
   image: user.image,
   birthdate: user.birthdate,
   hasCompletedOnboarding: user.hasCompletedOnboarding,
+  summaryPreference: user.summaryPreference || "concise",
+  hasSeenSummaryPreferencePrompt: user.hasSeenSummaryPreferencePrompt || false,
   createdAt: typeof user.createdAt === 'string' ? user.createdAt : new Date(user.createdAt).toISOString(),
   updatedAt: typeof user.updatedAt === 'string' ? user.updatedAt : new Date(user.updatedAt).toISOString(),
 });
@@ -70,7 +72,7 @@ users.post("/", zValidator("json", createUserRequestSchema), async (c) => {
 // PATCH /api/users/:id - Update user
 users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   const id = c.req.param("id");
-  const { name, bio, image, birthdate, hasCompletedOnboarding } = c.req.valid("json");
+  const { name, bio, image, birthdate, hasCompletedOnboarding, summaryPreference, hasSeenSummaryPreferencePrompt } = c.req.valid("json");
   const authHeader = c.req.header("Authorization");
   const token = authHeader?.replace("Bearer ", "");
 
@@ -80,6 +82,8 @@ users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   if (image !== undefined) updateData.image = image;
   if (birthdate !== undefined) updateData.birthdate = birthdate;
   if (hasCompletedOnboarding !== undefined) updateData.hasCompletedOnboarding = hasCompletedOnboarding;
+  if (summaryPreference !== undefined) updateData.summaryPreference = summaryPreference;
+  if (hasSeenSummaryPreferencePrompt !== undefined) updateData.hasSeenSummaryPreferencePrompt = hasSeenSummaryPreferencePrompt;
 
   // Use user-scoped client if token exists, otherwise fall back to db (admin)
   const client = token ? createUserClient(token) : db;
