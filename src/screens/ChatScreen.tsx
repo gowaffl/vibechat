@@ -45,6 +45,7 @@ import * as VideoThumbnails from "expo-video-thumbnails";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Markdown from "react-native-markdown-display";
 import { api } from "@/lib/api";
+import { extractFirstUrl } from "@/lib/url-utils";
 import { setActiveChatId } from "@/lib/notifications";
 import { BACKEND_URL } from "@/config";
 import { authClient, supabaseClient } from "@/lib/authClient";
@@ -60,7 +61,7 @@ import { MediaCarousel } from "@/components/MediaCarousel";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import AttachmentsMenu from "@/components/AttachmentsMenu";
 import type { RootStackScreenProps } from "@/navigation/types";
-import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, ThreadFilterRules, MessageTag, Event, UploadImageResponse, Poll, ImagePreviewResponse, GenerateImageResponse } from "@/shared/contracts";
+import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, ThreadFilterRules, MessageTag, Event, UploadImageResponse, Poll, ImagePreviewResponse, GenerateImageResponse, LinkPreview } from "@/shared/contracts";
 
 // AI Super Features imports
 import { CatchUpModal, CatchUpButton } from "@/components/CatchUp";
@@ -1536,6 +1537,12 @@ const ChatScreen = () => {
   const [eventButtonScale] = useState(new Animated.Value(1));
   const [eventButtonRotate] = useState(new Animated.Value(0));
 
+  // Input Link Preview state
+  const [inputLinkPreview, setInputLinkPreview] = useState<LinkPreview | null>(null);
+  const [isFetchingLinkPreview, setIsFetchingLinkPreview] = useState(false);
+  const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
+  const linkPreviewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Keyboard animation hooks - must be called early and consistently
   const keyboard = useAnimatedKeyboard();
   
@@ -1655,7 +1662,7 @@ const ChatScreen = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'message',
-          filter: `chatId=eq.${chatId}`,
+          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
           try {
@@ -1687,7 +1694,7 @@ const ChatScreen = () => {
           event: 'UPDATE',
           schema: 'public',
           table: 'message',
-          filter: `chatId=eq.${chatId}`,
+          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
           console.log('[Realtime] Message updated:', payload.new.id);
@@ -1715,7 +1722,7 @@ const ChatScreen = () => {
           event: 'DELETE',
           schema: 'public',
           table: 'message',
-          filter: `chatId=eq.${chatId}`,
+          filter: `"chatId"=eq.${chatId}`,
         },
         (payload) => {
           console.log('[Realtime] Message deleted:', payload.old.id);
@@ -1729,7 +1736,7 @@ const ChatScreen = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'reaction',
-          filter: `chatId=eq.${chatId}`,
+          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
            const msgId = payload.new.messageId;
@@ -1747,7 +1754,7 @@ const ChatScreen = () => {
           event: 'DELETE',
           schema: 'public',
           table: 'reaction',
-          filter: `chatId=eq.${chatId}`,
+          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
            const msgId = payload.old.messageId;
@@ -1759,7 +1766,12 @@ const ChatScreen = () => {
            } catch (e) { console.error(e); }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log(`[Realtime] Subscription status for chat:${chatId}:`, status);
+        if (err) {
+          console.error('[Realtime] Subscription error:', err);
+        }
+      });
 
     return () => {
       supabaseClient.removeChannel(channel);
@@ -2369,6 +2381,15 @@ const ChatScreen = () => {
     };
   }, [chatId]);
 
+  // Cleanup link preview timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (linkPreviewTimeoutRef.current) {
+        clearTimeout(linkPreviewTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Load catch-up dismiss state from AsyncStorage
   useEffect(() => {
     const loadDismissState = async () => {
@@ -2550,6 +2571,8 @@ const ChatScreen = () => {
       setReplyToMessage(null);
       setInputHeight(MIN_INPUT_HEIGHT);
       setMentionedUserIds([]);
+      setInputLinkPreview(null);
+      setInputPreviewUrl(null);
       
       // Re-enable auto-scroll to ensure the new message is visible
       isManualScrolling.current = false;
@@ -3403,6 +3426,8 @@ const ChatScreen = () => {
         setMessageText(""); // Clear input immediately
         clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
+        setInputLinkPreview(null);
+        setInputPreviewUrl(null);
 
         // If user has images selected, upload them first and use as references
         if (selectedImages.length > 0) {
@@ -3484,6 +3509,8 @@ const ChatScreen = () => {
         setMessageText(""); // Clear input immediately
         clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
+        setInputLinkPreview(null);
+        setInputPreviewUrl(null);
 
         // If user has images selected, upload the first one and use as reference
         if (selectedImages.length > 0) {
@@ -3568,6 +3595,8 @@ const ChatScreen = () => {
         setMessageText(""); // Clear input immediately
         clearDraftMessage(); // Clear draft immediately
         setReplyToMessage(null);
+        setInputLinkPreview(null);
+        setInputPreviewUrl(null);
         executeCustomCommandMutation.mutate({
           commandId: matchedCommand.id,
           userId: user.id,
@@ -3649,6 +3678,8 @@ const ChatScreen = () => {
         setMentionedUserIds([]);
         setInputHeight(MIN_INPUT_HEIGHT);
         setSelectedVibe(null);
+        setInputLinkPreview(null);
+        setInputPreviewUrl(null);
 
         // Send the user's message (optimistic update will show it immediately)
         console.log('[ChatScreen] Sending user message with vibeType:', currentVibe);
@@ -3691,6 +3722,8 @@ const ChatScreen = () => {
       setMentionedUserIds([]);
       setInputHeight(MIN_INPUT_HEIGHT);
       setSelectedVibe(null);
+      setInputLinkPreview(null);
+      setInputPreviewUrl(null);
       
       console.log('[ChatScreen] Sending regular message with vibeType:', currentVibe);
       sendMessageMutation.mutate({
@@ -4381,6 +4414,44 @@ const ChatScreen = () => {
         isTyping: false,
       }).catch((err) => console.error("Error clearing typing indicator:", err));
       lastTypingSentAt.current = 0;
+    }
+
+    // Detect URLs and fetch link preview with debounce
+    const detectedUrl = extractFirstUrl(text);
+    
+    // Clear any pending link preview fetch
+    if (linkPreviewTimeoutRef.current) {
+      clearTimeout(linkPreviewTimeoutRef.current);
+      linkPreviewTimeoutRef.current = null;
+    }
+    
+    if (detectedUrl) {
+      // Only fetch if URL has changed
+      if (detectedUrl !== inputPreviewUrl) {
+        // Debounce: wait 500ms after typing stops to fetch preview
+        linkPreviewTimeoutRef.current = setTimeout(async () => {
+          setIsFetchingLinkPreview(true);
+          setInputPreviewUrl(detectedUrl);
+          
+          try {
+            const preview = await api.post<LinkPreview>("/api/link-preview/fetch", { url: detectedUrl });
+            // Only set if the URL still matches (user might have changed input)
+            if (extractFirstUrl(messageText) === detectedUrl || detectedUrl === extractFirstUrl(text)) {
+              setInputLinkPreview(preview);
+            }
+          } catch (error) {
+            console.error("[ChatScreen] Failed to fetch link preview:", error);
+            // Clear preview on error
+            setInputLinkPreview(null);
+          } finally {
+            setIsFetchingLinkPreview(false);
+          }
+        }, 500);
+      }
+    } else {
+      // No URL in text, clear preview
+      setInputLinkPreview(null);
+      setInputPreviewUrl(null);
     }
   };
 
@@ -6285,6 +6356,65 @@ const ChatScreen = () => {
                 >
                   <X size={16} color="#FFFFFF" />
                 </Pressable>
+              </View>
+            )}
+            {/* Input Link Preview */}
+            {(inputLinkPreview || isFetchingLinkPreview) && (
+              <View
+                style={{
+                  marginBottom: 12,
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  backgroundColor: "rgba(255, 255, 255, 0.08)",
+                  borderWidth: 1,
+                  borderColor: "rgba(0, 122, 255, 0.3)",
+                }}
+              >
+                {isFetchingLinkPreview && !inputLinkPreview ? (
+                  <View
+                    style={{
+                      padding: 16,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <ActivityIndicator size="small" color="#007AFF" />
+                    <Text style={{ color: "#8E8E93", fontSize: 14 }}>
+                      Fetching link preview...
+                    </Text>
+                  </View>
+                ) : inputLinkPreview ? (
+                  <View style={{ position: "relative" }}>
+                    <LinkPreviewCard
+                      linkPreview={inputLinkPreview}
+                      isCurrentUser={true}
+                      isAI={false}
+                    />
+                    {/* Dismiss button */}
+                    <Pressable
+                      onPress={() => {
+                        setInputLinkPreview(null);
+                        setInputPreviewUrl(null);
+                        textInputRef.current?.focus();
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <X size={16} color="#FFFFFF" />
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             )}
             {/* Image Preview */}
