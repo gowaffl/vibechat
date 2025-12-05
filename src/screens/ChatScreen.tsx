@@ -1811,32 +1811,45 @@ const ChatScreen = () => {
            } catch (e) { console.error(e); }
         }
       )
-      .subscribe((status, err) => {
-        console.log(`[Realtime] Subscription status for chat:${chatId}:`, status);
-        if (err) {
-          console.error('[Realtime] Subscription error:', err);
-          // Retry on error paths to recover without user action
-          setTimeout(() => {
-            setRealtimeRetryCount((prev) => prev + 1);
-          }, 500);
-        }
-
-        if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          setTimeout(() => {
-            setRealtimeRetryCount((prev) => prev + 1);
-          }, 500);
-        }
-      });
+    // Track if we've successfully subscribed to prevent unnecessary retries
+    let isSubscribed = false;
+    let subscriptionTimeout: NodeJS.Timeout | null = null;
 
     // Safety net: if we don't get SUBSCRIBED within 5s, force a refetch and retry
-    const subscriptionTimeout = setTimeout(() => {
-      console.warn(`[Realtime] Subscription timeout for chat:${chatId}, forcing refetch + retry`);
-      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      setRealtimeRetryCount((prev) => prev + 1);
+    subscriptionTimeout = setTimeout(() => {
+      if (!isSubscribed) {
+        console.warn(`[Realtime] Subscription timeout for chat:${chatId}, forcing refetch + retry`);
+        queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+        setRealtimeRetryCount((prev) => prev + 1);
+      }
     }, 5000);
 
+    channel.subscribe((status, err) => {
+      console.log(`[Realtime] Subscription status for chat:${chatId}:`, status);
+      
+      if (status === 'SUBSCRIBED') {
+        isSubscribed = true;
+        // Clear the timeout since we're now subscribed
+        if (subscriptionTimeout) {
+          clearTimeout(subscriptionTimeout);
+          subscriptionTimeout = null;
+        }
+      } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+        // Only retry on actual errors, not on CLOSED (which happens during cleanup)
+        if (err) {
+          console.error('[Realtime] Subscription error:', err);
+        }
+        setTimeout(() => {
+          setRealtimeRetryCount((prev) => prev + 1);
+        }, 2000); // Longer delay to prevent rapid cycling
+      }
+      // Don't retry on CLOSED - it fires during normal cleanup
+    });
+
     return () => {
-      clearTimeout(subscriptionTimeout);
+      if (subscriptionTimeout) {
+        clearTimeout(subscriptionTimeout);
+      }
       supabaseClient.removeChannel(channel);
     };
   }, [chatId, queryClient, realtimeRetryCount]);

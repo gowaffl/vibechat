@@ -16,6 +16,20 @@ reactions.post("/", async (c) => {
     const body = await c.req.json();
     const validatedData = addReactionRequestSchema.parse(body);
 
+    // First, get the message to obtain the chatId
+    const { data: message, error: messageError } = await db
+      .from("message")
+      .select("chatId")
+      .eq("id", validatedData.messageId)
+      .single();
+
+    if (messageError || !message) {
+      console.error("[REACTIONS] Error fetching message:", messageError);
+      return c.json({ error: "Message not found" }, 404);
+    }
+
+    const chatId = message.chatId;
+
     // Check if user already reacted with this emoji
     const { data: existingReaction } = await db
       .from("reaction")
@@ -50,6 +64,7 @@ reactions.post("/", async (c) => {
         emoji: validatedData.emoji,
         userId: validatedData.userId,
         messageId: validatedData.messageId,
+        chatId: chatId,
       })
       .select()
       .single();
