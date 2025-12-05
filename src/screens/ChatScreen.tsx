@@ -5305,6 +5305,7 @@ const ChatScreen = () => {
       };
       
       // Determine bubble style - vibe takes precedence for styling
+      // Using hex colors for consistency (allows appending opacity suffix)
       const bubbleStyle = vibeConfig
         ? {
             backgroundColor: `${vibeConfig.color}20`, // 12% opacity
@@ -5325,37 +5326,51 @@ const ChatScreen = () => {
           }
         : {
             backgroundColor: "rgba(255, 255, 255, 0.15)",
-            borderColor: "rgba(255, 255, 255, 0.2)",
+            borderColor: "#FFFFFF", // White - opacity added via suffix in clip container
             shadowColor: "#000",
           };
 
       const bubbleContent = (
         <View
           style={{
+            // Shadow container - subtle glow effect
             ...borderRadiusStyle,
-            overflow: "hidden",
             shadowColor: bubbleStyle.shadowColor,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.4,
-            shadowRadius: 8,
-            elevation: 4,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 2,
             ...(isHighlighted && {
               shadowColor: "#FFD700",
-              shadowOpacity: 0.8,
-              shadowRadius: 16,
-              elevation: 8,
+              shadowOpacity: 0.5,
+              shadowRadius: 8,
+              elevation: 4,
             }),
           }}
         >
+          {/* Clip container - handles overflow clipping with border radius */}
+          <View
+            style={{
+              ...borderRadiusStyle,
+              overflow: "hidden",
+              // Very subtle border - vibes get more prominent border
+              borderWidth: isHighlighted ? 2 : vibeConfig ? 1 : 0.5,
+              borderColor: isHighlighted 
+                ? "#FFD700" 
+                : vibeConfig
+                  ? `${vibeConfig.color}60` // 38% opacity for vibes
+                  : isCurrentUser 
+                    ? "rgba(0, 122, 255, 0.3)" 
+                    : isAI 
+                      ? "rgba(20, 184, 166, 0.3)" 
+                      : "rgba(255, 255, 255, 0.15)",
+            }}
+          >
           {/* Liquid Glass Background */}
           <BlurView
             intensity={Platform.OS === "ios" ? 40 : 80}
             tint="dark"
             style={{
-              ...borderRadiusStyle,
-              overflow: "hidden",
-              borderWidth: isHighlighted ? 2 : 1,
-              borderColor: isHighlighted ? "#FFD700" : bubbleStyle.borderColor,
               backgroundColor: isHighlighted ? "rgba(255, 215, 0, 0.1)" : undefined,
             }}
           >
@@ -5758,6 +5773,7 @@ const ChatScreen = () => {
           )}
             </LinearGradient>
           </BlurView>
+          </View>
         </View>
       );
 
@@ -5814,8 +5830,8 @@ const ChatScreen = () => {
               userName={isAI ? aiName : (message.user?.name || "Unknown")} 
             />
           ) : (
-            // Placeholder to maintain alignment when avatar is hidden
-            <View style={{ width: 32, height: 32, marginRight: 8 }} />
+            // Placeholder to maintain alignment when avatar is hidden (34px matches ProfileImage default)
+            <View style={{ width: 34, height: 34, marginRight: 8 }} />
           )
         )}
 
