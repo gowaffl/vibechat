@@ -341,7 +341,7 @@ Respond naturally and concisely based on the conversation.`;
     ];
 
     // Set AI typing status BEFORE calling GPT
-    const aiName = aiFriend.name || "AI Friend";
+    // Note: aiName is already declared above (line ~216)
     setAITypingStatus(chatId, aiFriend.id, true, aiName, aiFriend.color || "#14B8A6");
     console.log(`[AI] 💬 AI typing indicator set for ${aiName}`);
 
