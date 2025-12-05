@@ -422,6 +422,7 @@ CREATE INDEX IF NOT EXISTS "event_response_eventId_idx" ON "event_response"("eve
 CREATE INDEX IF NOT EXISTS "event_response_userId_idx" ON "event_response"("userId");
 CREATE INDEX IF NOT EXISTS "media_reaction_messageId_idx" ON "media_reaction"("messageId");
 CREATE INDEX IF NOT EXISTS "media_reaction_userId_idx" ON "media_reaction"("userId");
+CREATE INDEX IF NOT EXISTS "idx_message_chatid_createdat" ON "message"("chatId", "createdAt" DESC);
 CREATE INDEX IF NOT EXISTS "conversation_summary_chatId_userId_idx" ON "conversation_summary"("chatId", "userId");
 CREATE INDEX IF NOT EXISTS "conversation_summary_expiresAt_idx" ON "conversation_summary"("expiresAt");
 

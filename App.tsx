@@ -2,10 +2,10 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, persistOptions } from "@/lib/queryClient";
 import RootStackNavigator from "@/navigation/RootNavigator";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { UserProvider } from "@/contexts/UserContext";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
@@ -157,7 +157,7 @@ export default function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
       <ToastProvider>
         <UserProvider>
           <KeyboardProvider>
@@ -191,6 +191,6 @@ export default function App() {
           </KeyboardProvider>
         </UserProvider>
       </ToastProvider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }

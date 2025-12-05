@@ -1,9 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Message } from "@shared/contracts";
+import type { Message, ImagePreviewResponse } from "@shared/contracts";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
-export function useReactor(chatId: string, userId: string) {
+export interface ReactorOptions {
+  onPreview?: (data: ImagePreviewResponse, type: "remix" | "meme") => void;
+}
+
+export function useReactor(chatId: string, userId: string, options?: ReactorOptions) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -43,22 +47,33 @@ export function useReactor(chatId: string, userId: string) {
     mutationFn: async ({
       messageId,
       remixPrompt,
+      preview = false,
     }: {
       messageId: string;
       remixPrompt: string;
+      preview?: boolean;
     }) => {
-      console.log("[Reactor] Remixing media:", messageId, "with prompt:", remixPrompt);
-      const result = await api.post<Message>("/api/reactor/remix", {
+      console.log("[Reactor] Remixing media:", messageId, "with prompt:", remixPrompt, "preview:", preview);
+      const result = await api.post<any>("/api/reactor/remix", {
         messageId,
         userId,
         chatId,
         remixPrompt,
+        preview,
       });
       console.log("[Reactor] Remix generated successfully, result:", result);
       return result;
     },
     onSuccess: (data) => {
       console.log("[Reactor] Remix success with data:", data);
+      
+      // If it's a preview, don't invalidate queries or show success toast yet
+      if (data && data.previewId) {
+        console.log("[Reactor] Preview received, waiting for user confirmation");
+        options?.onPreview?.(data as ImagePreviewResponse, "remix");
+        return;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       // Only show success alert if we actually got data back
       if (data && data.id) {
@@ -103,22 +118,33 @@ export function useReactor(chatId: string, userId: string) {
     mutationFn: async ({
       messageId,
       memePrompt,
+      preview = false,
     }: {
       messageId: string;
       memePrompt?: string;
+      preview?: boolean;
     }) => {
-      console.log("[Reactor] Creating meme from:", messageId, "prompt:", memePrompt);
-      const result = await api.post<Message>("/api/reactor/meme-from-media", {
+      console.log("[Reactor] Creating meme from:", messageId, "prompt:", memePrompt, "preview:", preview);
+      const result = await api.post<any>("/api/reactor/meme-from-media", {
         messageId,
         userId,
         chatId,
         memePrompt,
+        preview,
       });
       console.log("[Reactor] Meme generated successfully");
       return result;
     },
-    onSuccess: () => {
-      console.log("[Reactor] Meme success, invalidating queries");
+    onSuccess: (data) => {
+      console.log("[Reactor] Meme success, data:", data);
+      
+      // If it's a preview, don't invalidate queries or show success toast yet
+      if (data && data.previewId) {
+        console.log("[Reactor] Preview received, waiting for user confirmation");
+        options?.onPreview?.(data as ImagePreviewResponse, "meme");
+        return;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       showToast({ 
         title: "😂 Meme Ready!", 

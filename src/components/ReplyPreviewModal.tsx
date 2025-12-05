@@ -39,7 +39,9 @@ export const ReplyPreviewModal: React.FC<ReplyPreviewModalProps> = ({
     onClose();
   };
 
-  const renderMessageContent = (msg: Message, isReply: boolean) => {
+  const renderMessageContent = (msg: Message | undefined | null, isReply: boolean) => {
+    if (!msg) return null;
+
     const displayName = msg.aiFriendId
       ? msg.aiFriend?.name ||
         aiFriends.find((f) => f.id === msg.aiFriendId)?.name ||

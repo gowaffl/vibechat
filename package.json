@@ -38,11 +38,13 @@
     "@shopify/react-native-skia": "v2.0.3",
     "@supabase/supabase-js": "^2.84.0",
     "@tanstack/react-query": "5.90.2",
+    "@tanstack/react-query-persist-client": "^5.90.14",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "expo": "53.0.9",
     "expo-application": "~6.1.4",
     "expo-asset": "11.1.5",
+    "expo-audio": "~0.4.9",
     "expo-auth-session": "^6.0.3",
     "expo-av": "~15.1.4",
     "expo-background-fetch": "~13.1.5",
@@ -111,7 +113,7 @@
     "react-native-keyboard-controller": "^1.17.0",
     "react-native-maps": "^1.24.3",
     "react-native-markdown-display": "^7.0.2",
-    "react-native-mmkv": "^3.2.0",
+    "react-native-mmkv": "^3.3.3",
     "react-native-pager-view": "6.7.1",
     "react-native-reanimated": "3.17.4",
     "react-native-safe-area-context": "5.4.0",
@@ -127,8 +129,7 @@
     "victory-native": "^41.16.2",
     "zeego": "^3.0.6",
     "zod": "4.1.11",
-    "zustand": "^5.0.4",
-    "expo-audio": "~0.4.9"
+    "zustand": "^5.0.4"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

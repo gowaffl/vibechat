@@ -745,50 +745,13 @@ chats.get("/:id/messages", async (c) => {
   const chatId = c.req.param("id");
   const userId = c.req.query("userId");
 
-  console.log(`[Chats] Fetching messages for chat ${chatId}, user ${userId}`);
-  console.log(`[Chats] Connected to Supabase:`, {
-    url: db["supabaseUrl"] || "unknown",
-    hasServiceKey: !!db["supabaseKey"],
-    keyStart: (db["supabaseKey"] as string)?.substring(0, 20) + "..."
-  });
-
   if (!userId) {
     return c.json({ error: "userId is required" }, 400);
   }
 
-  // Debug: Test if service role can access the database at all
-  const { count: totalChats, error: debugError } = await db
-    .from("chat")
-    .select("*", { count: "exact", head: true });
-  console.log(`[Chats] Debug - Service role test: totalChats=${totalChats}, error=${debugError?.message}`);
-
-  // Debug: Check if this specific chat exists at all
-  const { data: chatTest, error: chatTestError } = await db
-    .from("chat")
-    .select("id, name, createdAt")
-    .eq("id", chatId)
-    .maybeSingle();
-  console.log(`[Chats] Chat existence test:`, { 
-    found: !!chatTest, 
-    chat: chatTest,
-    error: chatTestError?.message 
-  });
-
-  // Debug: Check if ANY membership exists for this chat
-  const { data: allMembers, error: allMembersError } = await db
-    .from("chat_member")
-    .select("userId, chatId")
-    .eq("chatId", chatId);
-  console.log(`[Chats] All members for chat ${chatId}:`, { 
-    count: allMembers?.length || 0,
-    members: allMembers,
-    error: allMembersError?.message 
-  });
-
   try {
     // Check if user is a member (with retry logic for connection issues)
-    console.log(`[Chats] Checking membership for chatId=${chatId}, userId=${userId}`);
-    const { data: membership, error: membershipError, status, statusText } = await executeWithRetry(async () => {
+    const { data: membership, error: membershipError } = await executeWithRetry(async () => {
       return await db
         .from("chat_member")
         .select("*")
@@ -797,23 +760,10 @@ chats.get("/:id/messages", async (c) => {
         .maybeSingle();
     });
 
-    console.log(`[Chats] Membership check result:`, { 
-      membership: !!membership, 
-      membershipData: membership,
-      error: membershipError?.message,
-      errorCode: membershipError?.code,
-      errorDetails: membershipError?.details,
-      status,
-      statusText,
-      chatId,
-      userId
-    });
-
     // If not a member, auto-add them and create a join message
     if (!membership) {
       // First check if the chat exists (with retry logic)
-      console.log(`[Chats] User not a member, checking if chat exists: ${chatId}`);
-      const { data: chatExists, error: chatCheckError, status: chatStatus, statusText: chatStatusText } = await executeWithRetry(async () => {
+      const { data: chatExists, error: chatCheckError } = await executeWithRetry(async () => {
         return await db
           .from("chat")
           .select("id")
@@ -821,18 +771,7 @@ chats.get("/:id/messages", async (c) => {
           .maybeSingle();
       });
 
-      console.log(`[Chats] Chat exists check:`, { 
-        chatExists: !!chatExists, 
-        chatData: chatExists,
-        error: chatCheckError?.message,
-        errorCode: chatCheckError?.code,
-        errorDetails: chatCheckError?.details,
-        status: chatStatus,
-        statusText: chatStatusText
-      });
-
       if (chatCheckError || !chatExists) {
-        console.error(`[Chats] Chat ${chatId} not found - returning 404`);
         return c.json({ error: "Chat not found" }, 404);
       }
 
@@ -870,20 +809,43 @@ chats.get("/:id/messages", async (c) => {
     const limit = parseInt(c.req.query("limit") || "100");
     const cursor = c.req.query("cursor"); // ISO date string for cursor-based pagination
     
-    // Build query with optional cursor
+    // Optimize: Fetch messages with all relations in a single query
     let query = db
       .from("message")
-      .select("*")
+      .select(`
+        *,
+        user:userId (*),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*),
+          aiFriend:aiFriendId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*),
+          mentionedBy:mentionedByUserId (*)
+        ),
+        tags:message_tag (*)
+      `)
       .eq("chatId", chatId)
-      .order("createdAt", { ascending: false })
-      .limit(limit + 1); // Fetch one extra to check if there are more
+      .order("createdAt", { ascending: true })
+      .limit(limit + 1);
     
-    // If cursor is provided, fetch messages older than cursor
     if (cursor) {
       query = query.lt("createdAt", cursor);
     }
     
     const { data: messagesData, error: messagesError } = await query;
+    
+    if (messagesError) {
+      console.error("[Chats] Error fetching messages:", messagesError);
+      return c.json({ error: "Failed to fetch messages" }, 500);
+    }
     
     // Check if there are more messages
     const hasMore = messagesData && messagesData.length > limit;
@@ -892,103 +854,8 @@ chats.get("/:id/messages", async (c) => {
       ? messages[messages.length - 1].createdAt 
       : null;
 
-    if (messagesError) {
-      console.error("[Chats] Error fetching messages:", messagesError);
-      return c.json({ error: "Failed to fetch messages" }, 500);
-    }
-
-    // Fetch all related data for messages
-    const messageIds = messages.map((m: any) => m.id);
-    const userIds = [...new Set(messages.map((m: any) => m.userId))];
-    const replyToIds = [...new Set(messages.filter((m: any) => m.replyToId).map((m: any) => m.replyToId))];
-    const aiFriendIds = [...new Set(messages.filter((m: any) => m.aiFriendId).map((m: any) => m.aiFriendId))];
-
-    // Fetch users
-    const { data: usersData } = await db
-      .from("user")
-      .select("*")
-      .in("id", userIds);
-    const users = usersData || [];
-    const userMap = new Map(users.map((u: any) => [u.id, u]));
-
-    // Fetch AI friends
-    const { data: aiFriendsData } = aiFriendIds.length > 0 ? await db
-      .from("ai_friend")
-      .select("*")
-      .in("id", aiFriendIds) : { data: [] };
-    const aiFriends = aiFriendsData || [];
-    const aiFriendMap = new Map(aiFriends.map((af: any) => [af.id, af]));
-
-    // Fetch replyTo messages
-    const { data: replyToMessagesData } = replyToIds.length > 0 ? await db
-      .from("message")
-      .select("*")
-      .in("id", replyToIds) : { data: [] };
-    const replyToMessages = replyToMessagesData || [];
-    const replyToMap = new Map(replyToMessages.map((m: any) => [m.id, m]));
-
-    // Fetch reactions
-    const { data: reactionsData } = messageIds.length > 0 ? await db
-      .from("reaction")
-      .select("*")
-      .in("messageId", messageIds) : { data: [] };
-    const reactions = reactionsData || [];
-
-    // Fetch reaction users
-    const reactionUserIds = [...new Set(reactions.map((r: any) => r.userId))];
-    const { data: reactionUsersData } = reactionUserIds.length > 0 ? await db
-      .from("user")
-      .select("*")
-      .in("id", reactionUserIds) : { data: [] };
-    const reactionUsers = reactionUsersData || [];
-    const reactionUserMap = new Map(reactionUsers.map((u: any) => [u.id, u]));
-
-    // Fetch mentions
-    const { data: mentionsData } = messageIds.length > 0 ? await db
-      .from("mention")
-      .select("*")
-      .in("messageId", messageIds) : { data: [] };
-    const mentions = mentionsData || [];
-
-    // Fetch mention users
-    const mentionUserIds = [...new Set([
-      ...mentions.map((m: any) => m.mentionedUserId),
-      ...mentions.map((m: any) => m.mentionedByUserId)
-    ])];
-    const { data: mentionUsersData } = mentionUserIds.length > 0 ? await db
-      .from("user")
-      .select("*")
-      .in("id", mentionUserIds) : { data: [] };
-    const mentionUsers = mentionUsersData || [];
-    const mentionUserMap = new Map(mentionUsers.map((u: any) => [u.id, u]));
-
-    // Group reactions and mentions by message
-    const reactionsByMessage = new Map();
-    reactions.forEach((r: any) => {
-      if (!reactionsByMessage.has(r.messageId)) {
-        reactionsByMessage.set(r.messageId, []);
-      }
-      reactionsByMessage.get(r.messageId).push(r);
-    });
-
-    const mentionsByMessage = new Map();
-    mentions.forEach((m: any) => {
-      if (!mentionsByMessage.has(m.messageId)) {
-        mentionsByMessage.set(m.messageId, []);
-      }
-      mentionsByMessage.get(m.messageId).push(m);
-    });
-
-    console.log(`[Chats] Successfully fetched ${messages.length} messages for chat ${chatId}`);
-
-    const formattedMessages = messages.reverse().map((msg: any) => {
-      const user = userMap.get(msg.userId);
-      const aiFriend = msg.aiFriendId ? aiFriendMap.get(msg.aiFriendId) : null;
-      const replyTo = msg.replyToId ? replyToMap.get(msg.replyToId) : null;
-      const msgReactions = reactionsByMessage.get(msg.id) || [];
-      const msgMentions = mentionsByMessage.get(msg.id) || [];
-
-      // Parse metadata if it's a string (from JSONB column)
+    const formattedMessages = messages.map((msg: any) => {
+      // Parse metadata if it's a string
       let parsedMetadata = msg.metadata;
       if (typeof msg.metadata === "string") {
         try {
@@ -999,147 +866,139 @@ chats.get("/:id/messages", async (c) => {
       }
 
       return {
-      id: msg.id,
-      content: msg.content,
-      messageType: msg.messageType as "text" | "image" | "voice" | "video",
-      imageUrl: msg.imageUrl,
-      imageDescription: msg.imageDescription,
-      voiceUrl: msg.voiceUrl,
-      voiceDuration: msg.voiceDuration,
-      eventId: msg.eventId,
-      pollId: msg.pollId,
-      userId: msg.userId,
-      chatId: msg.chatId,
-      replyToId: msg.replyToId,
-      vibeType: msg.vibeType || null,
-      metadata: parsedMetadata,
-      aiFriendId: msg.aiFriendId, // Include AI friend ID
-      aiFriend: aiFriend ? {
-        id: aiFriend.id,
-        name: aiFriend.name,
-        color: aiFriend.color,
-        personality: aiFriend.personality,
-        tone: aiFriend.tone,
-        engagementMode: aiFriend.engagementMode,
-        engagementPercent: aiFriend.engagementPercent,
-        chatId: aiFriend.chatId,
-        sortOrder: aiFriend.sortOrder,
-        createdAt: new Date(aiFriend.createdAt).toISOString(),
-        updatedAt: new Date(aiFriend.updatedAt).toISOString(),
-      } : null,
-      editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
-      isUnsent: msg.isUnsent,
-      editHistory: msg.editHistory,
-      user: user ? {
-        id: user.id,
-        name: user.name,
-        bio: user.bio,
-        image: user.image,
-        hasCompletedOnboarding: user.hasCompletedOnboarding,
-        createdAt: new Date(user.createdAt).toISOString(),
-        updatedAt: new Date(user.updatedAt).toISOString(),
-      } : null,
-      replyTo: replyTo ? {
-        id: replyTo.id,
-        content: replyTo.content,
-        messageType: replyTo.messageType as "text" | "image" | "voice" | "video",
-        imageUrl: replyTo.imageUrl,
-        imageDescription: replyTo.imageDescription,
-        voiceUrl: replyTo.voiceUrl,
-        voiceDuration: replyTo.voiceDuration,
-        userId: replyTo.userId,
-        chatId: replyTo.chatId,
-        replyToId: replyTo.replyToId,
-        aiFriendId: replyTo.aiFriendId, // Include AI friend ID for replied-to message
-        editedAt: replyTo.editedAt ? new Date(replyTo.editedAt).toISOString() : null,
-        isUnsent: replyTo.isUnsent,
-        editHistory: replyTo.editHistory,
-        user: userMap.get(replyTo.userId) ? {
-          id: userMap.get(replyTo.userId).id,
-          name: userMap.get(replyTo.userId).name,
-          bio: userMap.get(replyTo.userId).bio,
-          image: userMap.get(replyTo.userId).image,
-          hasCompletedOnboarding: userMap.get(replyTo.userId).hasCompletedOnboarding,
-          createdAt: new Date(userMap.get(replyTo.userId).createdAt).toISOString(),
-          updatedAt: new Date(userMap.get(replyTo.userId).updatedAt).toISOString(),
+        id: msg.id,
+        content: msg.content,
+        messageType: msg.messageType,
+        imageUrl: msg.imageUrl,
+        imageDescription: msg.imageDescription,
+        voiceUrl: msg.voiceUrl,
+        voiceDuration: msg.voiceDuration,
+        eventId: msg.eventId,
+        pollId: msg.pollId,
+        userId: msg.userId,
+        chatId: msg.chatId,
+        replyToId: msg.replyToId,
+        vibeType: msg.vibeType || null,
+        metadata: parsedMetadata,
+        aiFriendId: msg.aiFriendId,
+        aiFriend: msg.aiFriend ? {
+          id: msg.aiFriend.id,
+          name: msg.aiFriend.name,
+          color: msg.aiFriend.color,
+          personality: msg.aiFriend.personality,
+          tone: msg.aiFriend.tone,
+          engagementMode: msg.aiFriend.engagementMode,
+          engagementPercent: msg.aiFriend.engagementPercent,
+          chatId: msg.aiFriend.chatId,
+          sortOrder: msg.aiFriend.sortOrder,
+          createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
+          updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
         } : null,
-        // Include AI friend data for replied-to message
-        aiFriend: replyTo.aiFriendId && aiFriendMap.get(replyTo.aiFriendId) ? {
-          id: aiFriendMap.get(replyTo.aiFriendId).id,
-          name: aiFriendMap.get(replyTo.aiFriendId).name,
-          color: aiFriendMap.get(replyTo.aiFriendId).color,
-          personality: aiFriendMap.get(replyTo.aiFriendId).personality,
-          tone: aiFriendMap.get(replyTo.aiFriendId).tone,
-          engagementMode: aiFriendMap.get(replyTo.aiFriendId).engagementMode,
-          engagementPercent: aiFriendMap.get(replyTo.aiFriendId).engagementPercent,
-          chatId: aiFriendMap.get(replyTo.aiFriendId).chatId,
-          sortOrder: aiFriendMap.get(replyTo.aiFriendId).sortOrder,
-          createdAt: new Date(aiFriendMap.get(replyTo.aiFriendId).createdAt).toISOString(),
-          updatedAt: new Date(aiFriendMap.get(replyTo.aiFriendId).updatedAt).toISOString(),
+        editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
+        isUnsent: msg.isUnsent,
+        editHistory: msg.editHistory,
+        user: msg.user ? {
+          id: msg.user.id,
+          name: msg.user.name,
+          bio: msg.user.bio,
+          image: msg.user.image,
+          hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
+          createdAt: new Date(msg.user.createdAt).toISOString(),
+          updatedAt: new Date(msg.user.updatedAt).toISOString(),
         } : null,
-        createdAt: new Date(replyTo.createdAt).toISOString(),
-      } : null,
-      reactions: msgReactions.map((r: any) => {
-        const reactionUser = reactionUserMap.get(r.userId);
-        return {
+        replyTo: msg.replyTo ? {
+          id: msg.replyTo.id,
+          content: msg.replyTo.content,
+          messageType: msg.replyTo.messageType,
+          imageUrl: msg.replyTo.imageUrl,
+          imageDescription: msg.replyTo.imageDescription,
+          voiceUrl: msg.replyTo.voiceUrl,
+          voiceDuration: msg.replyTo.voiceDuration,
+          userId: msg.replyTo.userId,
+          chatId: msg.replyTo.chatId,
+          replyToId: msg.replyTo.replyToId,
+          aiFriendId: msg.replyTo.aiFriendId,
+          editedAt: msg.replyTo.editedAt ? new Date(msg.replyTo.editedAt).toISOString() : null,
+          isUnsent: msg.replyTo.isUnsent,
+          editHistory: msg.replyTo.editHistory,
+          user: msg.replyTo.user ? {
+            id: msg.replyTo.user.id,
+            name: msg.replyTo.user.name,
+            bio: msg.replyTo.user.bio,
+            image: msg.replyTo.user.image,
+            hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
+            createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
+            updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
+          } : null,
+          aiFriend: msg.replyTo.aiFriend ? {
+            id: msg.replyTo.aiFriend.id,
+            name: msg.replyTo.aiFriend.name,
+            color: msg.replyTo.aiFriend.color,
+            personality: msg.replyTo.aiFriend.personality,
+            tone: msg.replyTo.aiFriend.tone,
+            engagementMode: msg.replyTo.aiFriend.engagementMode,
+            engagementPercent: msg.replyTo.aiFriend.engagementPercent,
+            chatId: msg.replyTo.aiFriend.chatId,
+            sortOrder: msg.replyTo.aiFriend.sortOrder,
+            createdAt: new Date(msg.replyTo.aiFriend.createdAt).toISOString(),
+            updatedAt: new Date(msg.replyTo.aiFriend.updatedAt).toISOString(),
+          } : null,
+          createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+        } : null,
+        reactions: (msg.reactions || []).map((r: any) => ({
           id: r.id,
           emoji: r.emoji,
           userId: r.userId,
           messageId: r.messageId,
           createdAt: new Date(r.createdAt).toISOString(),
-          user: reactionUser ? {
-            id: reactionUser.id,
-            name: reactionUser.name,
-            bio: reactionUser.bio,
-            image: reactionUser.image,
-            hasCompletedOnboarding: reactionUser.hasCompletedOnboarding,
-            createdAt: new Date(reactionUser.createdAt).toISOString(),
-            updatedAt: new Date(reactionUser.updatedAt).toISOString(),
+          user: r.user ? {
+            id: r.user.id,
+            name: r.user.name,
+            bio: r.user.bio,
+            image: r.user.image,
+            hasCompletedOnboarding: r.user.hasCompletedOnboarding,
+            createdAt: new Date(r.user.createdAt).toISOString(),
+            updatedAt: new Date(r.user.updatedAt).toISOString(),
           } : null,
-        };
-      }),
-      mentions: msgMentions.map((mention: any) => {
-        const mentionedUser = mentionUserMap.get(mention.mentionedUserId);
-        const mentionedBy = mentionUserMap.get(mention.mentionedByUserId);
-        return {
+        })),
+        mentions: (msg.mentions || []).map((mention: any) => ({
           id: mention.id,
           messageId: mention.messageId,
           mentionedUserId: mention.mentionedUserId,
           mentionedByUserId: mention.mentionedByUserId,
           createdAt: new Date(mention.createdAt).toISOString(),
-          mentionedUser: mentionedUser ? {
-            id: mentionedUser.id,
-            name: mentionedUser.name,
-            bio: mentionedUser.bio,
-            image: mentionedUser.image,
-            hasCompletedOnboarding: mentionedUser.hasCompletedOnboarding,
-            createdAt: new Date(mentionedUser.createdAt).toISOString(),
-            updatedAt: new Date(mentionedUser.updatedAt).toISOString(),
+          mentionedUser: mention.mentionedUser ? {
+            id: mention.mentionedUser.id,
+            name: mention.mentionedUser.name,
+            bio: mention.mentionedUser.bio,
+            image: mention.mentionedUser.image,
+            hasCompletedOnboarding: mention.mentionedUser.hasCompletedOnboarding,
+            createdAt: new Date(mention.mentionedUser.createdAt).toISOString(),
+            updatedAt: new Date(mention.mentionedUser.updatedAt).toISOString(),
           } : null,
-          mentionedBy: mentionedBy ? {
-            id: mentionedBy.id,
-            name: mentionedBy.name,
-            bio: mentionedBy.bio,
-            image: mentionedBy.image,
-            hasCompletedOnboarding: mentionedBy.hasCompletedOnboarding,
-            createdAt: new Date(mentionedBy.createdAt).toISOString(),
-            updatedAt: new Date(mentionedBy.updatedAt).toISOString(),
+          mentionedBy: mention.mentionedBy ? {
+            id: mention.mentionedBy.id,
+            name: mention.mentionedBy.name,
+            bio: mention.mentionedBy.bio,
+            image: mention.mentionedBy.image,
+            hasCompletedOnboarding: mention.mentionedBy.hasCompletedOnboarding,
+            createdAt: new Date(mention.mentionedBy.createdAt).toISOString(),
+            updatedAt: new Date(mention.mentionedBy.updatedAt).toISOString(),
           } : null,
-        };
-      }),
-      linkPreview:
-        msg.linkPreviewUrl
-          ? {
-              url: msg.linkPreviewUrl,
-              title: msg.linkPreviewTitle,
-              description: msg.linkPreviewDescription,
-              image: msg.linkPreviewImage,
-              siteName: msg.linkPreviewSiteName,
-              favicon: msg.linkPreviewFavicon,
-            }
-          : null,
-      createdAt: new Date(msg.createdAt).toISOString(),
-    };
+        })),
+        linkPreview:
+          msg.linkPreviewUrl
+            ? {
+                url: msg.linkPreviewUrl,
+                title: msg.linkPreviewTitle,
+                description: msg.linkPreviewDescription,
+                image: msg.linkPreviewImage,
+                siteName: msg.linkPreviewSiteName,
+                favicon: msg.linkPreviewFavicon,
+              }
+            : null,
+        createdAt: new Date(msg.createdAt).toISOString(),
+      };
     });
 
     // HIGH-8: Return pagination info with messages

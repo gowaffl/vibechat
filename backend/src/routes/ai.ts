@@ -41,6 +41,7 @@ const generateImageRequestSchema = z.object({
   chatId: z.string(),
   aspectRatio: z.string().optional().default("1:1"),
   referenceImageUrls: z.array(z.string()).optional(), // Optional reference images to use as basis
+  preview: z.boolean().optional().default(false),
 });
 
 // Request schema for meme generation
@@ -49,6 +50,26 @@ const generateMemeRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   referenceImageUrl: z.string().optional(), // Optional reference image for meme
+  preview: z.boolean().optional().default(false),
+});
+
+// Request schema for confirming previewed image
+const confirmImageRequestSchema = z.object({
+  imageUrl: z.string(),
+  prompt: z.string(),
+  userId: z.string(),
+  chatId: z.string(),
+  type: z.enum(["image", "meme", "remix"]),
+  metadata: z.record(z.any()).optional(),
+});
+
+// Request schema for editing image
+const editImageRequestSchema = z.object({
+  originalImageUrl: z.string(),
+  editPrompt: z.string(),
+  userId: z.string(),
+  chatId: z.string(),
+  preview: z.boolean().optional().default(true),
 });
 
 // POST /api/ai/chat - Get AI response
@@ -448,7 +469,7 @@ Respond naturally and concisely based on the conversation.`;
 
 // POST /api/ai/generate-image - Generate image with Gemini 3 Pro Image Preview
 ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async (c) => {
-  const { prompt, userId, chatId, aspectRatio, referenceImageUrls } = c.req.valid("json");
+  const { prompt, userId, chatId, aspectRatio, referenceImageUrls, preview } = c.req.valid("json");
 
   try {
     const requestId = `img-${chatId}-${Date.now()}`;
@@ -698,6 +719,17 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
     console.log("[AI Image] Image saved successfully to Supabase Storage:", imageUrl);
 
+    // If preview mode, return without creating message
+    if (preview) {
+      const previewId = `prev-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      console.log("[AI Image] Returning preview response:", { imageUrl, previewId });
+      return c.json({
+        imageUrl,
+        previewId,
+        prompt
+      });
+    }
+
     // NOTE: No final check here because this is a USER-INITIATED command.
     // Users should be able to generate images even if AI just responded.
     // The lock ensures we don't interfere with ongoing AI responses.
@@ -745,7 +777,10 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
 
 // POST /api/ai/generate-meme - Generate meme with Gemini 3 Pro Image Preview
 ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (c) => {
-  const { prompt, userId, chatId, referenceImageUrl } = c.req.valid("json");
+  const body = c.req.valid("json");
+  const { prompt, userId, chatId, referenceImageUrl, preview } = body;
+
+  console.log("[AI Meme] Received request:", { prompt, userId, chatId, hasReference: !!referenceImageUrl, preview });
 
   try {
     const requestId = `meme-${chatId}-${Date.now()}`;
@@ -979,6 +1014,17 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
     console.log("[AI Meme] Meme saved successfully to Supabase Storage:", imageUrl);
 
+    // If preview mode, return without creating message
+    if (preview) {
+      const previewId = `prev-meme-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      console.log("[AI Meme] Returning preview response:", { imageUrl, previewId });
+      return c.json({
+        imageUrl,
+        previewId,
+        prompt
+      });
+    }
+
     // NOTE: No final check here because this is a USER-INITIATED command.
     // Users should be able to generate memes even if AI just responded.
     // The lock ensures we don't interfere with ongoing AI responses.
@@ -1021,6 +1067,211 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     }, 500);
   } finally {
     releaseAIResponseLock(chatId);
+  }
+});
+
+// POST /api/ai/confirm-image - Confirm and post a previewed image
+ai.post("/confirm-image", zValidator("json", confirmImageRequestSchema), async (c) => {
+  const { imageUrl, prompt, userId, chatId, type, metadata } = c.req.valid("json");
+
+  try {
+    console.log(`[AI Confirm] Confirming ${type} for chat ${chatId} by user ${userId}`);
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Prepare message data
+    const messageData: any = {
+      content: prompt,
+      messageType: "image",
+      imageUrl: imageUrl,
+      userId: userId,
+      chatId: chatId,
+      aiFriendId: null,
+    };
+
+    // Add metadata if present (e.g. for reactor)
+    if (metadata) {
+      // If it's a remix or meme from reactor, we might want to store that in metadata
+      // but for now, the message schema handles imageUrl and content.
+      // We can add reactor metadata if we want to track origin.
+      messageData.metadata = metadata;
+    }
+
+    // Create message
+    const { data: message, error: insertError } = await db
+      .from("message")
+      .insert(messageData)
+      .select()
+      .single();
+
+    if (insertError || !message) {
+      console.error("[AI Confirm] Failed to create message:", insertError);
+      return c.json({ error: "Failed to create message" }, 500);
+    }
+
+    console.log(`[AI Confirm] Message created successfully: ${message.id}`);
+
+    return c.json({
+      id: message.id,
+      content: message.content,
+      messageType: message.messageType,
+      imageUrl: message.imageUrl,
+      userId: message.userId,
+      chatId: message.chatId,
+      createdAt: message.createdAt,
+    });
+  } catch (error) {
+    console.error("[AI Confirm] Error confirming image:", error);
+    return c.json({ error: "Failed to confirm image" }, 500);
+  }
+});
+
+// POST /api/ai/edit-image - Edit/refine a generated image
+ai.post("/edit-image", zValidator("json", editImageRequestSchema), async (c) => {
+  const { originalImageUrl, editPrompt, userId, chatId, preview } = c.req.valid("json");
+
+  try {
+    const requestId = `edit-${chatId}-${Date.now()}`;
+    console.log(`[AI Edit] [${requestId}] Editing image for chat ${chatId}`);
+
+    // Verify user is a member
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check lock - though for edits we might be more lenient? 
+    // Stick to lock to prevent abuse/parallel heavy requests
+    if (!acquireAIResponseLock(chatId)) {
+       return c.json({
+        error: "AI is already responding to this chat. Please wait.",
+        blocked: true
+      }, 429);
+    }
+
+    // Fetch original image
+    let originalImageBase64: string;
+    let mimeType: string = "image/png";
+
+    try {
+      // Resolve path if local
+      const imagePath = originalImageUrl.startsWith('http') 
+        ? originalImageUrl
+        : `./uploads/${originalImageUrl.split('/uploads/')[1]}`;
+      
+      if (originalImageUrl.startsWith('http')) {
+        const imageResponse = await fetch(originalImageUrl);
+        if (!imageResponse.ok) throw new Error("Failed to fetch original image");
+        const buffer = await imageResponse.arrayBuffer();
+        originalImageBase64 = Buffer.from(buffer).toString('base64');
+        mimeType = imageResponse.headers.get('content-type') || "image/png";
+      } else {
+        const buffer = await fs.readFile(imagePath);
+        originalImageBase64 = buffer.toString('base64');
+        // Guess mime
+        if (imagePath.endsWith('.jpg')) mimeType = "image/jpeg";
+        else if (imagePath.endsWith('.webp')) mimeType = "image/webp";
+      }
+    } catch (e) {
+      console.error("[AI Edit] Failed to load original image:", e);
+      releaseAIResponseLock(chatId);
+      return c.json({ error: "Failed to load original image for editing" }, 400);
+    }
+
+    const parts = [
+      {
+        inlineData: {
+          mimeType: mimeType,
+          data: originalImageBase64
+        }
+      },
+      {
+        text: `Edit this image according to the following instruction: ${editPrompt}. Maintain the overall style and composition unless the instruction implies otherwise.`
+      }
+    ];
+
+    // Call Gemini
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': process.env.GOOGLE_API_KEY!,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: {
+            responseModalities: ["Image"],
+            imageConfig: { aspectRatio: "1:1" } // Default to square for now
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[AI Edit] API error:", errorText);
+      releaseAIResponseLock(chatId);
+      return c.json({ error: "Failed to edit image", details: errorText }, 500);
+    }
+
+    const data = await response.json();
+    const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+
+    if (!imagePart) {
+      releaseAIResponseLock(chatId);
+      return c.json({ error: "No image generated" }, 500);
+    }
+
+    const base64Image = imagePart.inlineData.data;
+    const filename = `edit-${Date.now()}.png`;
+    const buffer = Buffer.from(base64Image, 'base64');
+    const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
+
+    releaseAIResponseLock(chatId);
+
+    if (preview) {
+      const previewId = `prev-edit-${Date.now()}`;
+      return c.json({
+        imageUrl,
+        previewId,
+        prompt: editPrompt
+      });
+    }
+
+    // If not preview (direct confirm? probably not used directly often but good to have)
+    // ... create message logic similar to others ...
+    // For now, edit endpoint mainly implies preview per requirements ("Three options... Edit option... submit follow-up")
+    // The requirement says: "The user could then either try again or not... They should have an edit option... And then same thing happens when it finishes generating and comes back they should have the same three options."
+    // So it should behave like a preview.
+
+    return c.json({
+       imageUrl,
+       previewId: `direct-${Date.now()}`, // Fallback
+       prompt: editPrompt
+    });
+
+  } catch (error) {
+    console.error("[AI Edit] Error:", error);
+    releaseAIResponseLock(chatId);
+    return c.json({ error: "Failed to edit image" }, 500);
   }
 });
 

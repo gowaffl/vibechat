@@ -142,6 +142,188 @@ messages.get("/", async (c) => {
   return c.json(getMessagesResponseSchema.parse(formattedMessages));
 });
 
+// GET /api/messages/:id - Get a single message details
+messages.get("/:id", async (c) => {
+  const messageId = c.req.param("id");
+  
+  try {
+    const { data: msg, error } = await db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*),
+          aiFriend:aiFriendId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*),
+          mentionedBy:mentionedByUserId (*)
+        )
+      `)
+      .eq("id", messageId)
+      .single();
+
+    if (error || !msg) {
+      return c.json({ error: "Message not found" }, 404);
+    }
+
+    // Parse metadata
+    let parsedMetadata = msg.metadata;
+    if (typeof msg.metadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(msg.metadata);
+      } catch {
+        parsedMetadata = null;
+      }
+    }
+
+    const formattedMessage = {
+      id: msg.id,
+      content: msg.content,
+      messageType: msg.messageType,
+      imageUrl: msg.imageUrl,
+      imageDescription: msg.imageDescription,
+      voiceUrl: msg.voiceUrl,
+      voiceDuration: msg.voiceDuration,
+      eventId: msg.eventId,
+      pollId: msg.pollId,
+      userId: msg.userId,
+      chatId: msg.chatId,
+      replyToId: msg.replyToId,
+      vibeType: msg.vibeType || null,
+      metadata: parsedMetadata,
+      aiFriendId: msg.aiFriendId,
+      aiFriend: msg.aiFriend ? {
+        id: msg.aiFriend.id,
+        name: msg.aiFriend.name,
+        color: msg.aiFriend.color,
+        personality: msg.aiFriend.personality,
+        tone: msg.aiFriend.tone,
+        engagementMode: msg.aiFriend.engagementMode,
+        engagementPercent: msg.aiFriend.engagementPercent,
+        chatId: msg.aiFriend.chatId,
+        sortOrder: msg.aiFriend.sortOrder,
+        createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
+        updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
+      } : null,
+      editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
+      isUnsent: msg.isUnsent,
+      editHistory: msg.editHistory,
+      user: msg.user ? {
+        id: msg.user.id,
+        name: msg.user.name,
+        bio: msg.user.bio,
+        image: msg.user.image,
+        hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
+        createdAt: new Date(msg.user.createdAt).toISOString(),
+        updatedAt: new Date(msg.user.updatedAt).toISOString(),
+      } : null,
+      replyTo: msg.replyTo ? {
+        id: msg.replyTo.id,
+        content: msg.replyTo.content,
+        messageType: msg.replyTo.messageType,
+        imageUrl: msg.replyTo.imageUrl,
+        imageDescription: msg.replyTo.imageDescription,
+        voiceUrl: msg.replyTo.voiceUrl,
+        voiceDuration: msg.replyTo.voiceDuration,
+        userId: msg.replyTo.userId,
+        chatId: msg.replyTo.chatId,
+        replyToId: msg.replyTo.replyToId,
+        aiFriendId: msg.replyTo.aiFriendId,
+        editedAt: msg.replyTo.editedAt ? new Date(msg.replyTo.editedAt).toISOString() : null,
+        isUnsent: msg.replyTo.isUnsent,
+        editHistory: msg.replyTo.editHistory,
+        user: msg.replyTo.user ? {
+          id: msg.replyTo.user.id,
+          name: msg.replyTo.user.name,
+          bio: msg.replyTo.user.bio,
+          image: msg.replyTo.user.image,
+          hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
+          createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
+          updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
+        } : null,
+        aiFriend: msg.replyTo.aiFriend ? {
+          id: msg.replyTo.aiFriend.id,
+          name: msg.replyTo.aiFriend.name,
+          color: msg.replyTo.aiFriend.color,
+          personality: msg.replyTo.aiFriend.personality,
+          tone: msg.replyTo.aiFriend.tone,
+          engagementMode: msg.replyTo.aiFriend.engagementMode,
+          engagementPercent: msg.replyTo.aiFriend.engagementPercent,
+          chatId: msg.replyTo.aiFriend.chatId,
+          sortOrder: msg.replyTo.aiFriend.sortOrder,
+          createdAt: new Date(msg.replyTo.aiFriend.createdAt).toISOString(),
+          updatedAt: new Date(msg.replyTo.aiFriend.updatedAt).toISOString(),
+        } : null,
+        createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+      } : null,
+      reactions: (msg.reactions || []).map((r: any) => ({
+        id: r.id,
+        emoji: r.emoji,
+        userId: r.userId,
+        messageId: r.messageId,
+        createdAt: new Date(r.createdAt).toISOString(),
+        user: r.user ? {
+          id: r.user.id,
+          name: r.user.name,
+          bio: r.user.bio,
+          image: r.user.image,
+          hasCompletedOnboarding: r.user.hasCompletedOnboarding,
+          createdAt: new Date(r.user.createdAt).toISOString(),
+          updatedAt: new Date(r.user.updatedAt).toISOString(),
+        } : null,
+      })),
+      mentions: (msg.mentions || []).map((mention: any) => ({
+        id: mention.id,
+        messageId: mention.messageId,
+        mentionedUserId: mention.mentionedUserId,
+        mentionedByUserId: mention.mentionedByUserId,
+        createdAt: new Date(mention.createdAt).toISOString(),
+        mentionedUser: mention.mentionedUser ? {
+          id: mention.mentionedUser.id,
+          name: mention.mentionedUser.name,
+          bio: mention.mentionedUser.bio,
+          image: mention.mentionedUser.image,
+          hasCompletedOnboarding: mention.mentionedUser.hasCompletedOnboarding,
+          createdAt: new Date(mention.mentionedUser.createdAt).toISOString(),
+          updatedAt: new Date(mention.mentionedUser.updatedAt).toISOString(),
+        } : null,
+        mentionedBy: mention.mentionedBy ? {
+          id: mention.mentionedBy.id,
+          name: mention.mentionedBy.name,
+          bio: mention.mentionedBy.bio,
+          image: mention.mentionedBy.image,
+          hasCompletedOnboarding: mention.mentionedBy.hasCompletedOnboarding,
+          createdAt: new Date(mention.mentionedBy.createdAt).toISOString(),
+          updatedAt: new Date(mention.mentionedBy.updatedAt).toISOString(),
+        } : null,
+      })),
+      linkPreview: msg.linkPreviewUrl ? {
+        url: msg.linkPreviewUrl,
+        title: msg.linkPreviewTitle,
+        description: msg.linkPreviewDescription,
+        image: msg.linkPreviewImage,
+        siteName: msg.linkPreviewSiteName,
+        favicon: msg.linkPreviewFavicon,
+      } : null,
+      createdAt: new Date(msg.createdAt).toISOString(),
+    };
+
+    return c.json(formattedMessage);
+  } catch (error) {
+    console.error("[Messages] Error fetching message:", error);
+    return c.json({ error: "Failed to fetch message" }, 500);
+  }
+});
+
 // POST /api/messages - Send message
 messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
   const { content, messageType, imageUrl, voiceUrl, voiceDuration, userId, replyToId, mentionedUserIds } = c.req.valid("json");

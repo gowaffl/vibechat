@@ -449,6 +449,13 @@ Please respond according to the command instructions above.`;
         chatId: validatedData.chatId,
         replyToId: validatedData.replyToId,
         aiFriendId: null, // Custom commands don't have a specific AI friend
+        // Store slash command context for badge display
+        metadata: JSON.stringify({
+          slashCommand: {
+            command: customCommand.command,
+            prompt: validatedData.userMessage || undefined,
+          }
+        }),
       })
       .select("*")
       .single();
@@ -471,6 +478,16 @@ Please respond according to the command instructions above.`;
       });
     }
 
+    // Parse metadata back from JSON string for response
+    let parsedMetadata = aiMessage.metadata;
+    if (typeof aiMessage.metadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(aiMessage.metadata);
+      } catch {
+        parsedMetadata = null;
+      }
+    }
+
     const messageResponse: ExecuteCustomCommandResponse = {
       id: aiMessage.id,
       content: aiMessage.content,
@@ -480,6 +497,8 @@ Please respond according to the command instructions above.`;
       userId: aiMessage.userId, // User who submitted the command
       chatId: aiMessage.chatId,
       replyToId: aiMessage.replyToId,
+      vibeType: aiMessage.vibeType || null,
+      metadata: parsedMetadata, // Include slash command metadata
       user: null, // User object not fetched in this response
       replyTo: replyTo
         ? {

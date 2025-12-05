@@ -121,6 +121,11 @@ export const messageMetadataSchema = z.object({
   videoUrl: z.string().optional(), // URL for video file
   videoThumbnailUrl: z.string().optional(), // Generated thumbnail for video preview
   videoDuration: z.number().optional(), // Video duration in seconds
+  // Slash command context for custom commands
+  slashCommand: z.object({
+    command: z.string(), // e.g., "/roast"
+    prompt: z.string().optional(), // User's input after the command
+  }).optional(),
 }).passthrough(); // Allow additional fields
 export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
 
@@ -149,6 +154,7 @@ export const messageSchema: z.ZodType<{
   replyTo?: Message | null;
   reactions?: Reaction[];
   mentions?: Mention[];
+  tags?: MessageTag[];
   linkPreview?: LinkPreview | null;
   createdAt: string;
 }> = z.lazy(() =>
@@ -176,6 +182,7 @@ export const messageSchema: z.ZodType<{
     replyTo: messageSchema.nullable().optional(),
     reactions: z.array(reactionSchema).optional(),
     mentions: z.array(mentionSchema).optional(),
+    tags: z.array(messageTagSchema).optional(),
     linkPreview: linkPreviewSchema.nullable().optional(),
     createdAt: z.string(),
   })
@@ -408,9 +415,20 @@ export const generateImageRequestSchema = z.object({
   chatId: z.string(),
   aspectRatio: z.string().optional().default("1:1"),
   referenceImageUrls: z.array(z.string()).optional(), // Optional reference images (max 2) to use as basis
+  preview: z.boolean().optional().default(false),
 });
 export type GenerateImageRequest = z.infer<typeof generateImageRequestSchema>;
-export const generateImageResponseSchema = messageSchema;
+
+export const imagePreviewResponseSchema = z.object({
+  imageUrl: z.string(),
+  previewId: z.string(), // Unique ID for this preview session
+  prompt: z.string(),
+  metadata: z.record(z.any()).optional(),
+});
+export type ImagePreviewResponse = z.infer<typeof imagePreviewResponseSchema>;
+
+// Union type for response - either Message (if direct) or Preview
+export const generateImageResponseSchema = z.union([messageSchema, imagePreviewResponseSchema]);
 export type GenerateImageResponse = z.infer<typeof generateImageResponseSchema>;
 
 // POST /api/ai/generate-meme - Generate meme with NANO-BANANA
@@ -419,10 +437,36 @@ export const generateMemeRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   referenceImageUrl: z.string().optional(),
+  preview: z.boolean().optional().default(false),
 });
 export type GenerateMemeRequest = z.infer<typeof generateMemeRequestSchema>;
-export const generateMemeResponseSchema = messageSchema;
+export const generateMemeResponseSchema = z.union([messageSchema, imagePreviewResponseSchema]);
 export type GenerateMemeResponse = z.infer<typeof generateMemeResponseSchema>;
+
+// POST /api/ai/confirm-image - Confirm and post a previewed image
+export const confirmImageRequestSchema = z.object({
+  imageUrl: z.string(),
+  prompt: z.string(),
+  userId: z.string(),
+  chatId: z.string(),
+  type: z.enum(["image", "meme", "remix"]),
+  metadata: z.record(z.any()).optional(), // For reactor metadata
+});
+export type ConfirmImageRequest = z.infer<typeof confirmImageRequestSchema>;
+export const confirmImageResponseSchema = messageSchema;
+export type ConfirmImageResponse = z.infer<typeof confirmImageResponseSchema>;
+
+// POST /api/ai/edit-image - Edit/refine a generated image
+export const editImageRequestSchema = z.object({
+  originalImageUrl: z.string(),
+  editPrompt: z.string(),
+  userId: z.string(),
+  chatId: z.string(),
+  preview: z.boolean().optional().default(true),
+});
+export type EditImageRequest = z.infer<typeof editImageRequestSchema>;
+export const editImageResponseSchema = z.union([messageSchema, imagePreviewResponseSchema]);
+export type EditImageResponse = z.infer<typeof editImageResponseSchema>;
 
 // POST /api/ai/generate-group-avatar - Generate group avatar based on messages
 export const generateGroupAvatarRequestSchema = z.object({
@@ -1173,9 +1217,10 @@ export const remixMediaRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   remixPrompt: z.string(),
+  preview: z.boolean().optional().default(false),
 });
 export type RemixMediaRequest = z.infer<typeof remixMediaRequestSchema>;
-export const remixMediaResponseSchema = messageSchema; // Creates new message
+export const remixMediaResponseSchema = z.union([messageSchema, imagePreviewResponseSchema]);
 export type RemixMediaResponse = z.infer<typeof remixMediaResponseSchema>;
 
 // POST /api/reactor/meme-from-media - Create meme from media
@@ -1184,9 +1229,10 @@ export const createMemeFromMediaRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   memePrompt: z.string().optional(), // User's guidance on what the meme should say/be about
+  preview: z.boolean().optional().default(false),
 });
 export type CreateMemeFromMediaRequest = z.infer<typeof createMemeFromMediaRequestSchema>;
-export const createMemeFromMediaResponseSchema = messageSchema;
+export const createMemeFromMediaResponseSchema = z.union([messageSchema, imagePreviewResponseSchema]);
 export type CreateMemeFromMediaResponse = z.infer<typeof createMemeFromMediaResponseSchema>;
 
 // Smart Catch-Up APIs

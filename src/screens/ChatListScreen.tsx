@@ -305,8 +305,34 @@ const ChatListScreen = () => {
   React.useEffect(() => {
     if (chats) {
       chatIdsRef.current = new Set(chats.map((c) => c.id));
+      
+      // Prefetch messages for top 5 chats to ensure instant load
+      if (chats.length > 0 && user?.id) {
+        // Sort by last activity to get most relevant chats
+        const sortedChats = [...chats].sort((a, b) => {
+          const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+          const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+          return dateB - dateA;
+        });
+
+        const topChats = sortedChats.slice(0, 5);
+        
+        console.log(`[ChatList] Prefetching messages for top ${topChats.length} chats`);
+        
+        topChats.forEach((chat) => {
+          queryClient.prefetchQuery({
+            queryKey: ["messages", chat.id],
+            queryFn: async () => {
+              return await api.get(
+                `/api/chats/${chat.id}/messages?userId=${user.id}`
+              );
+            },
+            staleTime: 1000 * 60, // Consider fresh for 1 minute for prefetch purposes
+          });
+        });
+      }
     }
-  }, [chats]);
+  }, [chats, user?.id, queryClient]);
 
   // Auto-update on focus
   useFocusEffect(
@@ -362,6 +388,19 @@ const ChatListScreen = () => {
 
   const handleLongPress = (chat: ChatWithMetadata) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Prefetch messages on long press (high probability of opening)
+    if (user?.id) {
+      queryClient.prefetchQuery({
+        queryKey: ["messages", chat.id],
+        queryFn: async () => {
+          return await api.get(
+            `/api/chats/${chat.id}/messages?userId=${user.id}`
+          );
+        },
+      });
+    }
+    
     setContextMenuChat(chat);
     setShowContextMenu(true);
   };

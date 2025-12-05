@@ -121,13 +121,14 @@ reactor.post("/caption", zValidator("json", generateCaptionRequestSchema), async
 // POST /api/reactor/remix - Remix media with AI
 reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) => {
   try {
-    const { messageId, userId, chatId, remixPrompt } = c.req.valid("json");
+    const { messageId, userId, chatId, remixPrompt, preview } = c.req.valid("json");
 
     console.log("[Reactor] === Remix Request Received ===");
     console.log("[Reactor] Message ID:", messageId);
     console.log("[Reactor] User ID:", userId);
     console.log("[Reactor] Chat ID:", chatId);
     console.log("[Reactor] Remix Prompt:", remixPrompt);
+    console.log("[Reactor] Preview Mode:", preview);
 
     // Verify user is a member of the chat
     const { data: membership, error: membershipError } = await db
@@ -141,6 +142,7 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
       console.error("[Reactor] User not authorized for chat");
       return c.json({ error: "User not authorized" }, 403);
     }
+
 
     console.log("[Reactor] User authorization verified");
 
@@ -328,6 +330,22 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
       const savedImageUrl = await uploadFileToStorage(filename, buffer, "image/png");
       console.log("[Reactor] ✅ Image saved to Supabase Storage:", savedImageUrl);
 
+      // If preview mode, return without creating message
+      if (preview) {
+        const previewId = `prev-remix-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        console.log("[Reactor] Returning preview response:", { imageUrl: savedImageUrl, previewId });
+        return c.json({
+          imageUrl: savedImageUrl,
+          previewId,
+          prompt: remixPrompt,
+          metadata: {
+            originalMessageId: messageId,
+            reactionType: "remix",
+            model: "gemini-3-pro-image-preview"
+          }
+        });
+      }
+
       // Create new message with remixed image
       const { data: remixedMessage, error: remixError } = await db
         .from("message")
@@ -386,13 +404,14 @@ reactor.post("/remix", zValidator("json", remixMediaRequestSchema), async (c) =>
 // POST /api/reactor/meme-from-media - Create meme from media
 reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSchema), async (c) => {
   try {
-    const { messageId, userId, chatId, memePrompt } = c.req.valid("json");
+    const { messageId, userId, chatId, memePrompt, preview } = c.req.valid("json");
 
     console.log("[Reactor] === Meme Request Received ===");
     console.log("[Reactor] Message ID:", messageId);
     console.log("[Reactor] User ID:", userId);
     console.log("[Reactor] Chat ID:", chatId);
     console.log("[Reactor] Meme Prompt:", memePrompt);
+    console.log("[Reactor] Preview Mode:", preview);
 
     // Verify user is a member of the chat
     const { data: membership, error: membershipError } = await db
@@ -592,6 +611,23 @@ reactor.post("/meme-from-media", zValidator("json", createMemeFromMediaRequestSc
       const buffer = Buffer.from(base64Image, 'base64');
       const savedImageUrl = await uploadFileToStorage(filename, buffer, "image/png");
       console.log("[Reactor] Meme saved to Supabase Storage:", savedImageUrl);
+
+      // If preview mode, return without creating message
+      if (preview) {
+        const previewId = `prev-meme-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        console.log("[Reactor] Returning preview response:", { imageUrl: savedImageUrl, previewId });
+        return c.json({
+          imageUrl: savedImageUrl,
+          previewId,
+          prompt: fullMemePrompt, // Return the FULL prompt used
+          metadata: {
+            originalMessageId: messageId,
+            reactionType: "meme",
+            prompt: fullMemePrompt,
+            model: "gemini-3-pro-image-preview"
+          }
+        });
+      }
 
       // Create new message with meme
       const { data: memeMessage, error: memeError } = await db

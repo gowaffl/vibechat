@@ -47,7 +47,7 @@ import Markdown from "react-native-markdown-display";
 import { api } from "@/lib/api";
 import { setActiveChatId } from "@/lib/notifications";
 import { BACKEND_URL } from "@/config";
-import { authClient } from "@/lib/authClient";
+import { authClient, supabaseClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
@@ -60,7 +60,7 @@ import { MediaCarousel } from "@/components/MediaCarousel";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import AttachmentsMenu from "@/components/AttachmentsMenu";
 import type { RootStackScreenProps } from "@/navigation/types";
-import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, Event, UploadImageResponse, Poll } from "@/shared/contracts";
+import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, ThreadFilterRules, MessageTag, Event, UploadImageResponse, Poll, ImagePreviewResponse, GenerateImageResponse } from "@/shared/contracts";
 
 // AI Super Features imports
 import { CatchUpModal, CatchUpButton } from "@/components/CatchUp";
@@ -71,7 +71,7 @@ import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/componen
 import { CreateCustomCommandModal } from "@/components/CustomCommands";
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ReplyPreviewModal } from "@/components/ReplyPreviewModal";
-import { ReplyChip } from "@/components/ReplyChip";
+import { ImagePreviewModal } from "@/components/ImagePreviewModal";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
 import { ProfileImage } from "@/components/ProfileImage";
@@ -88,7 +88,6 @@ import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
-import { useToast } from "@/components/Toast";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
@@ -1431,7 +1430,6 @@ const ChatScreen = () => {
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
   const { user } = useUser();
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
   const colorScheme = useColorScheme();
 
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
@@ -1443,8 +1441,6 @@ const ChatScreen = () => {
   const isInputFocused = useRef(false);
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
   const isAtBottomRef = useRef(true); // Tracks if user is at bottom of list
-  const isHistoryLoadedRef = useRef(false); // Tracks if we have loaded older messages manually
-  const lastNewestMessageIdRef = useRef<string | null>(null); // Tracks the newest message ID to distinguish new messages from history
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [hasNewMessages, setHasNewMessages] = useState(false); // Tracks if there are new messages while scrolled up
   const [lastKnownLength, setLastKnownLength] = useState(0);
@@ -1528,6 +1524,12 @@ const ChatScreen = () => {
   const [mentionSearch, setMentionSearch] = useState("");
   const [mentionStartIndex, setMentionStartIndex] = useState<number>(-1);
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+
+  // Image Preview State
+  const [previewImage, setPreviewImage] = useState<ImagePreviewResponse | null>(null);
+  const [previewType, setPreviewType] = useState<"image" | "meme" | "remix">("image");
+  const [isConfirmingImage, setIsConfirmingImage] = useState(false);
+  const [isEditingImage, setIsEditingImage] = useState(false);
 
   // Event button animation state
   const [eventButtonScale] = useState(new Animated.Value(1));
@@ -1635,56 +1637,140 @@ const ChatScreen = () => {
       );
       return response;
     },
-    refetchInterval: 3000, // Poll every 3 seconds for new messages
+    // Realtime subscription is used instead of polling
     enabled: !!user?.id && !!chatId,
   });
 
-  // Reset pagination state when chat changes
+  // Realtime subscription for messages and reactions
   useEffect(() => {
-    setAllMessages([]);
-    setHasMoreMessages(false);
-    setNextCursor(null);
-    isHistoryLoadedRef.current = false;
-  }, [chatId]);
+    if (!chatId) return;
 
-  // Update messages state when data changes (handling polling without overwriting history)
+    console.log(`[Realtime] Subscribing to chat:${chatId}`);
+    const channel = supabaseClient.channel(`chat:${chatId}`)
+      // Listen for new messages
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message',
+          filter: `chatId=eq.${chatId}`,
+        },
+        async (payload) => {
+          try {
+            const newMessageId = payload.new.id;
+            console.log('[Realtime] New message received:', newMessageId);
+            
+            // Fetch single message from our new endpoint
+            const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
+
+            if (newMessage) {
+               setAllMessages(prev => {
+                 // Deduplicate
+                 if (prev.some(m => m.id === newMessage.id)) return prev;
+                 // Add to END (Ascending order: Oldest -> Newest)
+                 return [...prev, newMessage];
+               });
+            }
+          } catch (error) {
+            console.error('[Realtime] Error fetching new message:', error);
+            // Fallback
+            queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+          }
+        }
+      )
+      // Listen for message updates (edits)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'message',
+          filter: `chatId=eq.${chatId}`,
+        },
+        async (payload) => {
+          console.log('[Realtime] Message updated:', payload.new.id);
+          try {
+            // Fetch full message details (including tags for Smart Threads)
+            const updatedMsg = await api.get<Message>(`/api/messages/${payload.new.id}`);
+            if (updatedMsg) {
+              setAllMessages(prev => prev.map(m => 
+                m.id === payload.new.id ? updatedMsg : m
+              ));
+            }
+          } catch (error) {
+            console.error('[Realtime] Error fetching updated message:', error);
+            // Fallback to payload merge if fetch fails
+            setAllMessages(prev => prev.map(m => 
+              m.id === payload.new.id ? { ...m, ...payload.new } : m
+            ));
+          }
+        }
+      )
+      // Listen for message deletions
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'message',
+          filter: `chatId=eq.${chatId}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Message deleted:', payload.old.id);
+          setAllMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        }
+      )
+      // Listen for reactions
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'reaction',
+          filter: `chatId=eq.${chatId}`,
+        },
+        async (payload) => {
+           const msgId = payload.new.messageId;
+           try {
+             const updatedMsg = await api.get<Message>(`/api/messages/${msgId}`);
+             if (updatedMsg) {
+                setAllMessages(prev => prev.map(m => m.id === msgId ? updatedMsg : m));
+             }
+           } catch (e) { console.error(e); }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'reaction',
+          filter: `chatId=eq.${chatId}`,
+        },
+        async (payload) => {
+           const msgId = payload.old.messageId;
+           try {
+             const updatedMsg = await api.get<Message>(`/api/messages/${msgId}`);
+             if (updatedMsg) {
+                setAllMessages(prev => prev.map(m => m.id === msgId ? updatedMsg : m));
+             }
+           } catch (e) { console.error(e); }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, [chatId, queryClient]);
+
+  // Update messages state when data changes
   useEffect(() => {
     if (messageData) {
-      setAllMessages(prevMessages => {
-        const polledMessages = messageData.messages || [];
-        
-        // If we have no messages yet, or poll is empty, just take poll
-        if (prevMessages.length === 0 || polledMessages.length === 0) {
-          return polledMessages;
-        }
-
-        const lastPolledMsg = polledMessages[polledMessages.length - 1];
-        const lastPolledTime = new Date(lastPolledMsg.createdAt).getTime();
-
-        // Keep older messages that are strictly older than the polled chunk
-        // This preserves history while updating the head (recent messages)
-        const olderMessages = prevMessages.filter(m => {
-            const mTime = new Date(m.createdAt).getTime();
-            if (mTime < lastPolledTime) return true;
-            // Handle same timestamp edge case (rare)
-            if (mTime === lastPolledTime && m.id !== lastPolledMsg.id) {
-                 return !polledMessages.some(pm => pm.id === m.id);
-            }
-            return false;
-        });
-        
-        // Deduplicate to be safe
-        const uniqueOlder = olderMessages.filter(old => !polledMessages.some(newM => newM.id === old.id));
-
-        return [...polledMessages, ...uniqueOlder];
-      });
-
-      // Only update pagination cursor from poll if we haven't loaded history manually
-      // This prevents polling from resetting our deep scroll position
-      if (!isHistoryLoadedRef.current) {
-          setHasMoreMessages(messageData.hasMore || false);
-          setNextCursor(messageData.nextCursor || null);
-      }
+      setAllMessages(messageData.messages || []);
+      setHasMoreMessages(messageData.hasMore || false);
+      setNextCursor(messageData.nextCursor || null);
     }
   }, [messageData]);
 
@@ -1699,11 +1785,10 @@ const ChatScreen = () => {
       );
       
       if (response.messages && response.messages.length > 0) {
-        // Append older messages to the end of the array
-        setAllMessages(prev => [...prev, ...response.messages]);
+        // Prepend older messages to the START of the array (since we're keeping Ascending order in state)
+        setAllMessages(prev => [...response.messages, ...prev]);
         setHasMoreMessages(response.hasMore || false);
         setNextCursor(response.nextCursor || null);
-        isHistoryLoadedRef.current = true; // Mark history as loaded so polling doesn't reset cursor
       } else {
         setHasMoreMessages(false);
         setNextCursor(null);
@@ -1791,17 +1876,96 @@ const ChatScreen = () => {
     isGeneratingCaption,
     isCreatingMeme,
     isRemixing,
-  } = useReactor(chatId || "", user?.id || "");
+  } = useReactor(chatId || "", user?.id || "", {
+    onPreview: (data, type) => {
+      console.log("[ChatScreen] Reactor preview received:", type);
+      setPreviewImage(data);
+      setPreviewType(type);
+    }
+  });
   const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
   const { data: threadMessages, isLoading: isLoadingThreadMessages, error: threadMessagesError } = useThreadMessages(currentThreadId, user?.id || "");
+
+  // Client-side message filtering for Smart Threads
+  const filterMessages = useCallback((msgs: Message[], thread: Thread) => {
+    const rules = thread.filterRules;
+    if (!rules) return msgs;
+
+    try {
+      // Parse rules if they are a string (from DB)
+      const parsedRules = typeof rules === 'string' ? JSON.parse(rules) : rules;
+      
+      return msgs.filter(msg => {
+        // 1. Keywords (Content search)
+        if (parsedRules.keywords && parsedRules.keywords.length > 0) {
+          const contentLower = msg.content.toLowerCase();
+          const matchesKeyword = parsedRules.keywords.some((k: string) => contentLower.includes(k.toLowerCase()));
+          if (!matchesKeyword) return false;
+        }
+
+        // 2. People (Sender)
+        if (parsedRules.people && parsedRules.people.length > 0) {
+          if (!parsedRules.people.includes(msg.userId)) return false;
+        }
+
+        // 3. Date Range
+        if (parsedRules.dateRange) {
+          const msgDate = new Date(msg.createdAt).getTime();
+          if (parsedRules.dateRange.start && msgDate < new Date(parsedRules.dateRange.start).getTime()) return false;
+          if (parsedRules.dateRange.end && msgDate > new Date(parsedRules.dateRange.end).getTime()) return false;
+        }
+
+        // 4. AI Tags (Topics, Entities, Sentiment)
+        const hasTopicRules = (parsedRules.topics?.length ?? 0) > 0;
+        const hasEntityRules = (parsedRules.entities?.length ?? 0) > 0;
+        const hasSentimentRules = !!parsedRules.sentiment;
+
+        if (hasTopicRules || hasEntityRules || hasSentimentRules) {
+          // If message has no tags but rules require them, exclude it
+          if (!msg.tags || msg.tags.length === 0) return false;
+
+          // Check Topics
+          if (hasTopicRules) {
+              const hasTopic = msg.tags.some(t => t.tagType === 'topic' && parsedRules.topics!.includes(t.tagValue));
+              if (!hasTopic) return false;
+          }
+
+          // Check Entities
+          if (hasEntityRules) {
+              const hasEntity = msg.tags.some(t => t.tagType === 'entity' && parsedRules.entities!.includes(t.tagValue));
+              if (!hasEntity) return false;
+          }
+
+          // Check Sentiment
+          if (hasSentimentRules) {
+               const hasSentiment = msg.tags.some(t => t.tagType === 'sentiment' && t.tagValue === parsedRules.sentiment);
+               if (!hasSentiment) return false;
+          }
+        }
+
+        return true;
+      });
+    } catch (e) {
+      console.error("Error filtering messages:", e);
+      return msgs;
+    }
+  }, []);
 
   // Define active messages based on thread view or main chat
   const activeMessages = useMemo(() => {
     if (currentThreadId) {
+      // Optimization: Try filtering client-side first for instant switch
+      const currentThread = threads?.find(t => t.id === currentThreadId);
+      
+      if (currentThread && messages.length > 0) {
+         const filtered = filterMessages(messages, currentThread);
+         console.log(`[ChatScreen] Client-side filtered ${filtered.length} messages for thread ${currentThread.name}`);
+         return filtered;
+      }
       return threadMessages || [];
     }
     return messages;
-  }, [currentThreadId, threadMessages, messages]);
+  }, [currentThreadId, threadMessages, messages, threads, filterMessages]);
 
   // Sync reactor processing state with AI typing indicator
   const wasRemixingRef = React.useRef(false);
@@ -2303,7 +2467,7 @@ const ChatScreen = () => {
       }
       console.error("Error sending message:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ title: "Error", message: "Failed to send message. Please try again.", type: "error" });
+      Alert.alert("Error", "Failed to send message. Please try again.");
     },
     onSuccess: (newMessage) => {
       // Smoothly replace optimistic message with real one from server
@@ -2371,11 +2535,7 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("[ChatScreen] Error adding reaction:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ 
-        title: "Error", 
-        message: error?.message || "Failed to add reaction", 
-        type: "error" 
-      });
+      Alert.alert("Error", error?.message || "Failed to add reaction");
     },
   });
 
@@ -2390,11 +2550,7 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error deleting message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ 
-        title: "Error", 
-        message: error?.message || "Failed to delete message", 
-        type: "error" 
-      });
+      Alert.alert("Error", error?.message || "Failed to delete message");
     },
   });
 
@@ -2414,11 +2570,7 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error editing message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ 
-        title: "Error", 
-        message: error?.message || "Failed to edit message", 
-        type: "error" 
-      });
+      Alert.alert("Error", error?.message || "Failed to edit message");
     },
   });
 
@@ -2435,11 +2587,7 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error unsending message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ 
-        title: "Error", 
-        message: error?.message || "Failed to unsend message", 
-        type: "error" 
-      });
+      Alert.alert("Error", error?.message || "Failed to unsend message");
     },
   });
 
@@ -2456,16 +2604,11 @@ const ChatScreen = () => {
       queryClient.invalidateQueries({ queryKey: ["customCommands", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowCreateCustomCommand(false);
-      showToast({ title: "Success", message: "Custom slash command created!", type: "success" });
     },
     onError: (error: any) => {
       console.error("Error creating custom command:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ 
-        title: "Error", 
-        message: error?.message || "Failed to create custom command", 
-        type: "error" 
-      });
+      Alert.alert("Error", error?.message || "Failed to create custom command");
     },
   });
 
@@ -2495,11 +2638,7 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("Error creating AI friend:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ 
-        title: "Error", 
-        message: error?.message || "Failed to create AI friend", 
-        type: "error" 
-      });
+      Alert.alert("Error", error?.message || "Failed to create AI friend");
     },
   });
 
@@ -2554,40 +2693,32 @@ const ChatScreen = () => {
         console.log("[ChatScreen] Using reference images:", data.referenceImageUrls);
       }
 
-      const message = await api.post<Message>("/api/ai/generate-image", {
+      const result = await api.post<GenerateImageResponse>("/api/ai/generate-image", {
         prompt: data.prompt,
         userId: data.userId,
         chatId: chatId,
         aspectRatio: data.aspectRatio || "1:1",
         referenceImageUrls: data.referenceImageUrls,
+        preview: true, // Enable preview mode
       });
 
-      return message;
+      return result;
     },
     onMutate: () => {
       setIsAITyping(true);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show AI typing indicator for image generation
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 200);
-      });
-      */
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+    onSuccess: (data) => {
       setIsAITyping(false);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show generated image
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 300);
-      });
-      */
+      
+      // Check if it's a preview or a direct message
+      if ('previewId' in data) {
+        console.log("[ChatScreen] Image preview received:", data.previewId);
+        setPreviewImage(data as ImagePreviewResponse);
+        setPreviewType("image");
+      } else {
+        // Direct message (fallback or if preview=false)
+        queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+      }
     },
     onError: (error: any) => {
       setIsAITyping(false);
@@ -2609,9 +2740,64 @@ const ChatScreen = () => {
           ]
         );
       } else {
-        showToast({ title: "Error", message: "Failed to generate image. Please try again.", type: "error" });
+        Alert.alert("Error", "Failed to generate image. Please try again.");
       }
     },
+  });
+
+  // Confirm Image Mutation
+  const confirmImageMutation = useMutation({
+    mutationFn: async (data: { 
+      imageUrl: string; 
+      prompt: string; 
+      userId: string; 
+      chatId: string; 
+      type: "image" | "meme" | "remix";
+      metadata?: any;
+    }) => {
+      return await api.post<Message>("/api/ai/confirm-image", data);
+    },
+    onMutate: () => {
+      setIsConfirmingImage(true);
+    },
+    onSuccess: () => {
+      setIsConfirmingImage(false);
+      setPreviewImage(null); // Close modal
+      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+    },
+    onError: (error) => {
+      setIsConfirmingImage(false);
+      console.error("[ChatScreen] Failed to confirm image:", error);
+      Alert.alert("Error", "Failed to send image. Please try again.");
+    }
+  });
+
+  // Edit Image Mutation (Refinement)
+  const editImageMutation = useMutation({
+    mutationFn: async (data: { 
+      previousImageUrl: string; 
+      editPrompt: string; 
+      userId: string; 
+      chatId: string; 
+      type: "image" | "meme" | "remix";
+    }) => {
+      return await api.post<ImagePreviewResponse>("/api/ai/edit-image", data);
+    },
+    onMutate: () => {
+      setIsEditingImage(true);
+    },
+    onSuccess: (data) => {
+      setIsEditingImage(false);
+      // Update the preview with the new image
+      if (data && data.imageUrl) {
+        setPreviewImage(data);
+      }
+    },
+    onError: (error) => {
+      setIsEditingImage(false);
+      console.error("[ChatScreen] Failed to edit image:", error);
+      Alert.alert("Error", "Failed to update image. Please try again.");
+    }
   });
 
   // Meme generation mutation
@@ -2623,39 +2809,30 @@ const ChatScreen = () => {
         console.log("[ChatScreen] Using reference image:", data.referenceImageUrl);
       }
 
-      const message = await api.post<Message>("/api/ai/generate-meme", {
+      const result = await api.post<GenerateImageResponse>("/api/ai/generate-meme", {
         prompt: data.prompt,
         userId: data.userId,
         chatId: data.chatId,
         referenceImageUrl: data.referenceImageUrl,
+        preview: true, // Enable preview mode
       });
 
-      return message;
+      return result;
     },
     onMutate: () => {
       setIsAITyping(true);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show AI typing indicator for meme generation
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 200);
-      });
-      */
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages"] });
+    onSuccess: (data) => {
       setIsAITyping(false);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show generated meme
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 300);
-      });
-      */
+      
+      // Check if it's a preview or a direct message
+      if ('previewId' in data) {
+        console.log("[ChatScreen] Meme preview received:", data.previewId);
+        setPreviewImage(data as ImagePreviewResponse);
+        setPreviewType("meme");
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["messages"] });
+      }
     },
     onError: (error: any) => {
       setIsAITyping(false);
@@ -2677,7 +2854,7 @@ const ChatScreen = () => {
           ]
         );
       } else {
-        showToast({ title: "Error", message: "Failed to generate meme. Please try again.", type: "error" });
+        Alert.alert("Error", "Failed to generate meme. Please try again.");
       }
     },
   });
@@ -2734,7 +2911,7 @@ const ChatScreen = () => {
           ]
         );
       } else {
-        showToast({ title: "Error", message: "Failed to execute custom command. Please try again.", type: "error" });
+        Alert.alert("Error", "Failed to execute custom command. Please try again.");
       }
     },
   });
@@ -2815,7 +2992,7 @@ const ChatScreen = () => {
       }
     } catch (error) {
       console.error("Error taking photo:", error);
-      showToast({ title: "Error", message: "Failed to take photo", type: "error" });
+      Alert.alert("Error", "Failed to take photo");
     }
   };
 
@@ -2871,7 +3048,7 @@ const ChatScreen = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      showToast({ title: "Error", message: "Failed to pick image", type: "error" });
+      Alert.alert("Error", "Failed to pick image");
     }
   };
 
@@ -2946,7 +3123,7 @@ const ChatScreen = () => {
       setSelectedImages([]);
     } catch (error) {
       console.error("Error uploading image:", error);
-      showToast({ title: "Error", message: "Failed to upload image", type: "error" });
+      Alert.alert("Error", "Failed to upload image");
     } finally {
       setIsUploadingImage(false);
     }
@@ -2973,7 +3150,7 @@ const ChatScreen = () => {
       }
     } catch (error) {
       console.error("Error picking video:", error);
-      showToast({ title: "Error", message: "Failed to pick video", type: "error" });
+      Alert.alert("Error", "Failed to pick video");
     }
   };
 
@@ -3067,7 +3244,7 @@ const ChatScreen = () => {
       setSelectedVideo(null);
     } catch (error) {
       console.error("Error uploading video:", error);
-      showToast({ title: "Error", message: "Failed to upload video", type: "error" });
+      Alert.alert("Error", "Failed to upload video");
     } finally {
       setIsUploadingVideo(false);
     }
@@ -3129,7 +3306,7 @@ const ChatScreen = () => {
     } catch (error) {
       console.error("[ChatScreen] Error uploading voice message:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ title: "Error", message: "Failed to upload voice message. Please try again.", type: "error" });
+      Alert.alert("Error", "Failed to upload voice message. Please try again.");
     } finally {
       setIsUploadingVoice(false);
     }
@@ -3214,7 +3391,7 @@ const ChatScreen = () => {
             setSelectedImages([]);
           } catch (error) {
             console.error("[ChatScreen /image] ❌ Error uploading reference images:", error);
-            showToast({ title: "Error", message: "Failed to upload reference images", type: "error" });
+            Alert.alert("Error", "Failed to upload reference images");
           } finally {
             setIsUploadingImage(false);
           }
@@ -3281,7 +3458,7 @@ const ChatScreen = () => {
             setSelectedImages([]);
           } catch (error) {
             console.error("Error uploading reference image:", error);
-            showToast({ title: "Error", message: "Failed to upload reference image", type: "error" });
+            Alert.alert("Error", "Failed to upload reference image");
           } finally {
             setIsUploadingImage(false);
           }
@@ -3424,7 +3601,7 @@ const ChatScreen = () => {
         console.log('[ChatScreen] AI chat mutation called');
       } catch (error) {
         console.error('[ChatScreen] ERROR during AI message flow:', error);
-        showToast({ title: "Error", message: `Failed to send AI message: ${error}`, type: "error" });
+        Alert.alert('Error', `Failed to send AI message: ${error}`);
       }
       return; // Don't continue to regular message sending
 
@@ -3534,7 +3711,7 @@ const ChatScreen = () => {
     if (message.content) {
       await Clipboard.setStringAsync(message.content);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({ message: "Message copied to clipboard", type: "info" });
+      Alert.alert("Copied", "Message copied to clipboard");
     }
   };
 
@@ -3979,11 +4156,11 @@ const ChatScreen = () => {
         await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
       }
 
-      showToast({ title: "Success", message: `${imageMessages.length} image(s) saved to your library!`, type: "success" });
+      Alert.alert("Success", `${imageMessages.length} image(s) saved to your library!`);
       cancelImageSelectionMode();
     } catch (error) {
       console.error("Error saving images:", error);
-      showToast({ title: "Error", message: "Failed to save images", type: "error" });
+      Alert.alert("Error", "Failed to save images");
     }
   };
 
@@ -3995,7 +4172,7 @@ const ChatScreen = () => {
       // Check if sharing is available
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        showToast({ title: "Error", message: "Sharing is not available on this device", type: "error" });
+        Alert.alert("Error", "Sharing is not available on this device");
         return;
       }
 
@@ -4020,7 +4197,7 @@ const ChatScreen = () => {
       } else {
         // For multiple images, share the first one with a note
         await Sharing.shareAsync(fileUris[0]);
-        showToast({ title: "Note", message: "Multiple images selected. Some platforms may only share the first image.", type: "info" });
+        Alert.alert("Note", "Multiple images selected. Some platforms may only share the first image.");
       }
 
       cancelImageSelectionMode();
@@ -4246,24 +4423,9 @@ const ChatScreen = () => {
   // Auto-scroll logic and New Message detection
   useEffect(() => {
     if (activeMessages && activeMessages.length > 0) {
-      // Handle initial load separately
-      if (lastKnownLength === 0) {
-         // Initial load
-         requestAnimationFrame(() => {
-            scrollToBottom(false);
-         });
-         lastNewestMessageIdRef.current = activeMessages[0]?.id;
-         setLastKnownLength(activeMessages.length);
-         return;
-      }
-
       const isNewMessage = activeMessages.length > lastKnownLength;
-      const newestMessageId = activeMessages[0]?.id;
-      // It's a new incoming message if length increased AND the newest message ID is different
-      // (meaning the new items were added to the start/bottom of list)
-      const isNewIncoming = isNewMessage && newestMessageId !== lastNewestMessageIdRef.current;
       
-      if (isNewIncoming) {
+      if (isNewMessage) {
         if (isAtBottomRef.current) {
           // User is at bottom.
           // Inverted list automatically shows new items at the bottom (index 0).
@@ -4273,9 +4435,14 @@ const ChatScreen = () => {
           setShowScrollToBottom(true);
           setHasNewMessages(true); // Mark that there are NEW unread messages
         }
+      } else if (lastKnownLength === 0) {
+         // Initial load
+         // Ensure we start at the bottom
+         requestAnimationFrame(() => {
+            scrollToBottom(false);
+         });
       }
       
-      lastNewestMessageIdRef.current = newestMessageId;
       setLastKnownLength(activeMessages.length);
     }
   }, [activeMessages, lastKnownLength, scrollToBottom]);
@@ -4605,25 +4772,7 @@ const ChatScreen = () => {
     );
   }, []);
 
-  // Calculate displayData with typing indicators (memoized for renderMessage access)
-  const displayDataMemo = useMemo(() => {
-    // Reverse activeMessages for inverted list (Newest at index 0/Bottom)
-    const data: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages].reverse();
-
-    // Add AI typing indicator if AI is typing (only in main chat, not in threads)
-    if (isAITyping && !currentThreadId) {
-      data.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
-    }
-
-    // Add user typing indicator if users are typing (only in main chat, not in threads)
-    if (typingUsers.length > 0 && !currentThreadId) {
-      data.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
-    }
-    
-    return data;
-  }, [activeMessages, isAITyping, currentThreadId, typingUsers]);
-
-  const renderMessage = useCallback(({ item, index }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }, index: number }) => {
+  const renderMessage = useCallback(({ item }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } }) => {
     // Check if this is the AI typing indicator
     if ('isTyping' in item && item.isTyping) {
       return <AITypingIndicator 
@@ -4638,167 +4787,6 @@ const ChatScreen = () => {
     }
 
     const message = item as Message;
-
-    // Logic for grouping consecutive messages from the same user
-    const prevMessage = displayDataMemo[index + 1]; // Older message (visually above)
-    const nextMessage = displayDataMemo[index - 1]; // Newer message (visually below)
-
-    const isSameUserAsOlder = prevMessage && !('isTyping' in prevMessage) && !('isUserTyping' in prevMessage) && (prevMessage as Message).messageType !== 'system' && 
-      (prevMessage as Message).userId === message.userId && 
-      ((prevMessage as Message).userId !== null || (prevMessage as Message).aiFriendId === message.aiFriendId);
-
-    const isSameUserAsNewer = nextMessage && !('isTyping' in nextMessage) && !('isUserTyping' in nextMessage) && (nextMessage as Message).messageType !== 'system' && 
-      (nextMessage as Message).userId === message.userId && 
-      ((nextMessage as Message).userId !== null || (nextMessage as Message).aiFriendId === message.aiFriendId);
-
-    // Show name only if it's the first message in the group (visually top / older)
-    const showName = !isSameUserAsOlder;
-    // Show avatar only if it's the last message in the group (visually bottom / newer)
-    const showAvatar = !isSameUserAsNewer;
-    // Reduce margin to older message (visually top) if it's the same user
-    const shouldReduceTopMargin = isSameUserAsOlder;
-    
-    // Increase margin to newer message (visually bottom) if the next message is from a different user
-    // This ensures the "end" of a group has normal spacing before the next person speaks
-    const shouldIncreaseBottomMargin = !isSameUserAsNewer;
-
-    // EXTRA CHECK: If the *previous* message (visually above/older) was the end of a group, 
-    // we need to make sure *this* message (start of new group) has top margin.
-    // However, in inverted list, margin-bottom on the *older* message pushes the *newer* message away.
-    // So `shouldIncreaseBottomMargin` on the OLDER message is what creates the gap.
-    // We just need to make sure our logic is sound.
-
-    // Let's simplify:
-    // If same user as older -> mb-0.5 (tight with message above)
-    // If different user as older -> mb-3 (gap with message above) -- wait, this is wrong for inverted list?
-    
-    // RE-THINKING FOR INVERTED LIST:
-    // FlatList is inverted.
-    // Item 0 is at the BOTTOM of the screen (Newest).
-    // Item 1 is ABOVE Item 0 (Older).
-    
-    // Render order: Item 0, Item 1, Item 2...
-    // Visual stack (Top to Bottom):
-    // Item 2 (Oldest)
-    // Item 1
-    // Item 0 (Newest)
-
-    // We are applying `marginBottom` to the item container.
-    // In a standard View (flex-direction: column), marginBottom pushes the NEXT element down.
-    // But inside an INVERTED FlatList?
-    // Inverted FlatList usually just flips the scaleY or renders items in reverse order visually.
-    // If it renders Item 0 at the bottom, and Item 1 above it...
-    // Does margin-bottom on Item 1 push Item 0 down? Or does it create space *below* Item 1?
-    // Visually: [Item 1] -> space -> [Item 0]
-    // If Item 1 has marginBottom, that space is *below* Item 1, so yes, between 1 and 0.
-
-    // So:
-    // `prevMessage` is `displayDataMemo[index + 1]` -> OLDER (Visually ABOVE)
-    // `nextMessage` is `displayDataMemo[index - 1]` -> NEWER (Visually BELOW)
-
-    // If I am Item 1.
-    // `isSameUserAsOlder` checks Item 2 (Above me).
-    // `isSameUserAsNewer` checks Item 0 (Below me).
-
-    // If I am the BOTTOM of a group (Item 1, and Item 0 is different user):
-    // `isSameUserAsNewer` is FALSE.
-    // I want a gap BELOW me.
-    // So `marginBottom` should be LARGE (mb-3).
-
-    // If I am the MIDDLE of a group (Item 1, and Item 0 is same user):
-    // `isSameUserAsNewer` is TRUE.
-    // I want NO gap BELOW me (tight).
-    // So `marginBottom` should be SMALL (mb-0.5).
-
-    // Wait, my previous logic was:
-    // `shouldReduceTopMargin = isSameUserAsOlder` -> controls TOP margin?
-    // `shouldIncreaseBottomMargin = !isSameUserAsNewer` -> controls BOTTOM margin?
-    
-    // The code uses: `className={... mb-... ...}`
-    // This applies MARGIN BOTTOM.
-    
-    // So we are ONLY controlling the space BELOW the message (visually).
-    // Visually BELOW = Towards the NEWER message (Item 0).
-
-    // So:
-    // If `isSameUserAsNewer` (Next/Below message is me) -> mb-0.5 (Tight)
-    // If `!isSameUserAsNewer` (Next/Below message is different OR null) -> mb-3 (Gap)
-
-    // Let's look at the current code again:
-    // `${shouldReduceTopMargin ? 'mb-0.5' : (shouldIncreaseBottomMargin ? 'mb-3' : 'mb-3')}`
-    
-    // `shouldReduceTopMargin` = `isSameUserAsOlder` (Visually ABOVE is same)
-    // If TRUE (Same above) -> mb-0.5.
-    // This sets the margin BELOW THIS MESSAGE to 0.5?
-    // NO. `mb-` sets margin-bottom.
-    // If `isSameUserAsOlder` is true, that means *I* am the 2nd, 3rd, etc message in a group.
-    // The message visually ABOVE me is same user.
-    // Why would we set *my* bottom margin based on the guy *above* me?
-    
-    // AH! The logic is inverted because I might be thinking about `marginTop` behavior?
-    // In a normal list (Top->Bottom):
-    // Item 1 (Top) -> mb-? -> Item 2 (Bottom)
-    // If Item 1 & 2 are same -> Item 1 gets small mb.
-    
-    // In our INVERTED list:
-    // Item 0 (Bottom/Newest)
-    // Item 1 (Top/Older)
-    // FlatList renders them.
-    
-    // If `isSameUserAsNewer` is true (I am Item 1, Item 0 is me):
-    // I (Item 1) am visually ABOVE Item 0.
-    // I need small margin-bottom so Item 0 is close to me.
-    
-    // So the condition for `mb-0.5` should be `isSameUserAsNewer`.
-    
-    // Current code:
-    // `shouldReduceTopMargin` is `isSameUserAsOlder`.
-    // If `isSameUserAsOlder` -> mb-0.5.
-    // This means: If the guy ABOVE me is me, I set MY bottom margin to small.
-    // That implies I want the guy BELOW me to be close? That makes no sense unless everyone is me.
-    
-    // SCENARIO:
-    // Item 2 (User A)
-    // Item 1 (User A)
-    // Item 0 (User B)
-    
-    // Item 1 analysis:
-    // `isSameUserAsOlder` (Item 2) = TRUE.
-    // Current code sets `mb-0.5`.
-    // So Item 1 has small bottom margin.
-    // Result: Item 1 sits close to Item 0 (User B).
-    // ERROR: User A (Item 1) should have GAP before User B (Item 0).
-    
-    // CORRECTION:
-    // We need to check `isSameUserAsNewer` to determine OUR bottom margin.
-    
-    // Logic:
-    // If `isSameUserAsNewer` (Visually below is same) -> `mb-0.5`
-    // Else -> `mb-3`
-    
-    // What about the top margin?
-    // We generally don't use margin-top in lists, we rely on the previous item's margin-bottom.
-    // EXCEPT... if we are the very top item? No, inverted list handles that.
-    
-    // So, the `className` should be:
-    // `isSameUserAsNewer ? 'mb-0.5' : 'mb-3'`
-    
-    // Let's check the inverse case:
-    // Item 1 (User A)
-    // Item 0 (User A)
-    
-    // Item 1:
-    // `isSameUserAsNewer` (Item 0) = TRUE.
-    // Result: `mb-0.5`.
-    // Visual: Item 1 close to Item 0. CORRECT.
-    
-    // Item 0:
-    // `isSameUserAsNewer` (null/future) = FALSE.
-    // Result: `mb-3`.
-    // Visual: Gap after last message. CORRECT.
-
-    const marginBottomClass = isSameUserAsNewer ? 'mb-0.5' : 'mb-3';
-
     const isCurrentUser = message.userId === user?.id;
     // AI messages have userId: null and aiFriendId set
     const isAI = !!(message.aiFriendId && message.userId === null);
@@ -4817,7 +4805,13 @@ const ChatScreen = () => {
     const isVideo = message.messageType === "video";
     
     // Check for multi-image message (mediaUrls in metadata)
-    const metadata = message.metadata as { mediaUrls?: string[]; videoUrl?: string; videoThumbnailUrl?: string | null; videoDuration?: number } | null;
+    const metadata = message.metadata as { 
+      mediaUrls?: string[]; 
+      videoUrl?: string; 
+      videoThumbnailUrl?: string | null; 
+      videoDuration?: number;
+      slashCommand?: { command: string; prompt?: string };
+    } | null;
     const mediaUrls = metadata?.mediaUrls || [];
     const hasMultipleImages = isImage && mediaUrls.length > 1;
     const messageTime = new Date(message.createdAt).toLocaleTimeString([], {
@@ -4978,19 +4972,6 @@ const ChatScreen = () => {
       const messageVibe = message.vibeType;
       const vibeConfig = messageVibe ? VIBE_CONFIG[messageVibe] : null;
       
-      // Dynamic border radius for grouped messages
-      const borderRadiusStyle = isCurrentUser ? {
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: isSameUserAsOlder ? 4 : 20,
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: isSameUserAsNewer ? 4 : 20,
-      } : {
-        borderTopLeftRadius: isSameUserAsOlder ? 4 : 20,
-        borderTopRightRadius: 20,
-        borderBottomLeftRadius: isSameUserAsNewer ? 4 : 20,
-        borderBottomRightRadius: 20,
-      };
-
       // Determine bubble style - vibe takes precedence for styling
       const bubbleStyle = vibeConfig
         ? {
@@ -5019,7 +5000,7 @@ const ChatScreen = () => {
       const bubbleContent = (
         <View
           style={{
-            ...borderRadiusStyle,
+            borderRadius: 20,
             overflow: "hidden",
             shadowColor: bubbleStyle.shadowColor,
             shadowOffset: { width: 0, height: 4 },
@@ -5039,7 +5020,7 @@ const ChatScreen = () => {
             intensity={Platform.OS === "ios" ? 40 : 80}
             tint="dark"
             style={{
-              ...borderRadiusStyle,
+              borderRadius: 20,
               overflow: "hidden",
               borderWidth: isHighlighted ? 2 : 1,
               borderColor: isHighlighted ? "#FFD700" : bubbleStyle.borderColor,
@@ -5072,6 +5053,48 @@ const ChatScreen = () => {
               end={{ x: 1, y: 1 }}
               style={{ flex: 1 }}
             >
+          {/* Slash Command Badge */}
+          {metadata?.slashCommand && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 10,
+              paddingTop: 8,
+              paddingBottom: 4,
+            }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 6,
+                gap: 4,
+              }}>
+                <Text style={{
+                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                  fontSize: 11,
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontWeight: '600',
+                }}>
+                  {metadata.slashCommand.command}
+                </Text>
+                {metadata.slashCommand.prompt && (
+                  <Text 
+                    style={{
+                      fontSize: 11,
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      maxWidth: 150,
+                    }} 
+                    numberOfLines={1} 
+                    ellipsizeMode="tail"
+                  >
+                    {metadata.slashCommand.prompt}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
           {/* Voice Message */}
           {isVoice && message.voiceUrl ? (
             <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
@@ -5421,7 +5444,7 @@ const ChatScreen = () => {
     return (
       <Reanimated.View
         entering={FadeInUp.duration(300)}
-        className={`${marginBottomClass} flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
+        className={`mb-3 flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
         style={{
           paddingHorizontal: 4,
           alignItems: "flex-start",
@@ -5452,21 +5475,16 @@ const ChatScreen = () => {
 
         {/* Profile Photo for others */}
         {!isCurrentUser && (
-          showAvatar ? (
-            <ProfileImage 
-              imageUri={isAI ? null : message.user?.image} 
-              isAI={isAI} 
-              userName={isAI ? aiName : (message.user?.name || "Unknown")} 
-            />
-          ) : (
-             // Placeholder to keep alignment when avatar is hidden
-            <View style={{ width: 34, marginRight: 8 }} />
-          )
+          <ProfileImage 
+            imageUri={isAI ? null : message.user?.image} 
+            isAI={isAI} 
+            userName={isAI ? aiName : (message.user?.name || "Unknown")} 
+          />
         )}
 
         {/* Message Content */}
         <View style={{ flex: 1, alignItems: isCurrentUser ? "flex-end" : "flex-start" }}>
-          {!isCurrentUser && showName && (
+          {!isCurrentUser && (
             <Text
               className="text-xs font-medium mb-1 ml-2"
               style={{ color: isAI ? aiColor : "#6B7280", fontSize: 13, fontWeight: isAI ? "600" : "500" }}
@@ -5475,17 +5493,63 @@ const ChatScreen = () => {
             </Text>
           )}
           {/* Reply Preview - Full Width */}
-          {message.replyTo && (
-            <ReplyChip
-              replyToMessage={message.replyTo}
-              replyMessage={message}
-              isCurrentUser={isCurrentUser}
-              aiFriends={aiFriends}
-              onPress={(original, reply) => {
-                setReplyPreviewModal({ original, reply });
-              }}
-            />
-          )}
+          {message.replyTo && (() => {
+            const replyToMessage = message.replyTo;
+            const replyTapGesture = Gesture.Tap()
+              .onEnd(() => {
+                runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
+                runOnJS(setReplyPreviewModal)({ original: replyToMessage, reply: message });
+              });
+
+            return (
+              <GestureDetector gesture={replyTapGesture}>
+                <Reanimated.View
+                  style={{
+                    marginLeft: isCurrentUser ? 0 : 4,
+                    marginRight: isCurrentUser ? 4 : 0,
+                    marginBottom: 4,
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: 12,
+                    backgroundColor: "rgba(255, 255, 255, 0.08)",
+                    borderLeftWidth: 3,
+                    borderLeftColor: isCurrentUser ? "#007AFF" : "#8E8E93",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    maxWidth: "100%",
+                    alignSelf: isCurrentUser ? "flex-end" : "flex-start",
+                  }}
+                >
+                  <Text style={{ fontSize: 12, color: isCurrentUser ? "#60A5FA" : "#9CA3AF", fontWeight: "600" }} numberOfLines={1}>
+                    {replyToMessage?.aiFriendId
+                      ? (replyToMessage?.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage?.aiFriendId)?.name || "AI Friend")
+                      : (replyToMessage?.user?.name || "Unknown User")}
+                  </Text>
+                  
+                  {replyToMessage?.messageType === "image" ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                      {replyToMessage?.imageUrl && (
+                        <Image
+                          source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
+                          style={{ width: 36, height: 36, borderRadius: 6, marginRight: 6 }}
+                          contentFit="cover"
+                        />
+                      )}
+                      <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>Photo</Text>
+                    </View>
+                  ) : (
+                    <Text
+                      style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", flex: 1 }}
+                      numberOfLines={1}
+                    >
+                      {replyToMessage?.content}
+                    </Text>
+                  )}
+                </Reanimated.View>
+              </GestureDetector>
+            );
+          })()}
           {/* Message Bubble with Long Press or Selection */}
           <View style={{ maxWidth: "85%", alignSelf: isCurrentUser ? "flex-end" : "flex-start" }}>
           <SwipeableMessage
@@ -5592,7 +5656,6 @@ const ChatScreen = () => {
     toggleBookmark,
     // LOW-21: Crisis message detection
     isCrisisMessage,
-    displayDataMemo,
   ]);
 
   if (isLoading) {
@@ -5616,8 +5679,21 @@ const ChatScreen = () => {
     willShowEmptyIfNoMatches: currentThreadId && threadMessages !== undefined && threadMessages.length === 0
   });
   
-  // Combine messages with typing indicators - Removed old definition in favor of displayDataMemo
-  // const displayData = ...
+  // Combine messages with typing indicators
+  // Backend returns Oldest-First (Ascending)
+  // Inverted FlashList needs Newest-First (Newest at index 0) to render at bottom
+  // So we MUST reverse the array here.
+  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages].reverse();
+
+  // Add AI typing indicator if AI is typing (only in main chat, not in threads)
+  if (isAITyping && !currentThreadId) {
+    displayData.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
+  }
+
+  // Add user typing indicator if users are typing (only in main chat, not in threads)
+  if (typingUsers.length > 0 && !currentThreadId) {
+    displayData.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
+  }
   
   // Get current thread info for display
   const currentThread = threads?.find(t => t.id === currentThreadId);
@@ -5723,7 +5799,7 @@ const ChatScreen = () => {
       >
         <AnimatedFlashList
           ref={flatListRef}
-          data={displayDataMemo}
+          data={displayData}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           renderItem={renderMessage as any}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -7809,11 +7885,44 @@ const ChatScreen = () => {
           anchorPosition={sendButtonPosition}
         />
         <ReplyPreviewModal
-          key={replyPreviewModal ? `${replyPreviewModal.original.id}-${replyPreviewModal.reply.id}` : "closed"}
+          key={replyPreviewModal?.reply?.id || "closed"}
           visible={!!replyPreviewModal}
           message={replyPreviewModal}
           onClose={() => setReplyPreviewModal(null)}
-          aiFriends={aiFriends || []}
+          aiFriends={aiFriends}
+        />
+
+        {/* Image Preview Modal for AI generations */}
+        <ImagePreviewModal
+          visible={!!previewImage}
+          imageUrl={previewImage?.imageUrl || null}
+          initialPrompt={previewImage?.prompt || ""}
+          previewType={previewType}
+          isProcessing={isConfirmingImage || isEditingImage}
+          onAccept={() => {
+            if (previewImage) {
+              confirmImageMutation.mutate({
+                imageUrl: previewImage.imageUrl,
+                prompt: previewImage.prompt,
+                userId: user?.id || "",
+                chatId,
+                type: previewType,
+                metadata: previewImage.metadata,
+              });
+            }
+          }}
+          onEdit={(newPrompt) => {
+            if (previewImage) {
+              editImageMutation.mutate({
+                previousImageUrl: previewImage.imageUrl,
+                editPrompt: newPrompt,
+                userId: user?.id || "",
+                chatId,
+                type: previewType,
+              });
+            }
+          }}
+          onCancel={() => setPreviewImage(null)}
         />
       </View>
     );
