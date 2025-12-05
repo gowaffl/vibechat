@@ -709,6 +709,7 @@ export const sendChatMessageRequestSchema = z.object({
   userId: z.string(),
   replyToId: z.string().optional(),
   vibeType: vibeTypeSchema.nullable().optional(),
+  mentionedUserIds: z.array(z.string()).optional(),
   metadata: messageMetadataSchema.optional(), // For multi-image and video data
 });
 export type SendChatMessageRequest = z.infer<typeof sendChatMessageRequestSchema>;

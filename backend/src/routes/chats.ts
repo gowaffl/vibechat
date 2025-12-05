@@ -22,9 +22,36 @@ import { z } from "zod";
 
 const chats = new Hono<AppType>();
 
-// In-memory typing indicator store: chatId -> { userId -> timestamp }
+// In-memory typing indicator store: chatId -> { oderId -> timestamp }
 const typingIndicators = new Map<string, Map<string, number>>();
-const TYPING_TIMEOUT = 3000; // 3 seconds
+const TYPING_TIMEOUT = 3000; // 3 seconds for users
+
+// Separate store for AI friend typing: chatId -> { aiFriendId -> { timestamp, name, color } }
+interface AITypingInfo {
+  timestamp: number;
+  name: string;
+  color: string;
+}
+const aiTypingIndicators = new Map<string, Map<string, AITypingInfo>>();
+const AI_TYPING_TIMEOUT = 60000; // 60 seconds for AI (can take longer to respond)
+
+// Helper to set AI typing status (exported for use in other routes)
+export function setAITypingStatus(chatId: string, aiFriendId: string, isTyping: boolean, name?: string, color?: string): void {
+  if (!aiTypingIndicators.has(chatId)) {
+    aiTypingIndicators.set(chatId, new Map());
+  }
+  const chatAITypers = aiTypingIndicators.get(chatId)!;
+
+  if (isTyping && name) {
+    chatAITypers.set(aiFriendId, {
+      timestamp: Date.now(),
+      name: name,
+      color: color || "#14B8A6",
+    });
+  } else {
+    chatAITypers.delete(aiFriendId);
+  }
+}
 
 // GET /api/chats - Get all chats for a user
 chats.get("/", async (c) => {
@@ -1088,6 +1115,55 @@ chats.post("/:id/messages", async (c) => {
       }
     }
 
+    // Create mention records if any users were mentioned
+    let mentions: any[] = [];
+    if (validated.mentionedUserIds && validated.mentionedUserIds.length > 0) {
+      console.log(`[@] Creating ${validated.mentionedUserIds.length} mention(s) for message ${message.id}`);
+      
+      // Insert mentions
+      const { error: mentionError } = await db
+        .from("mention")
+        .insert(
+          validated.mentionedUserIds.map(mentionedUserId => ({
+            messageId: message.id,
+            mentionedUserId,
+            mentionedByUserId: validated.userId,
+          }))
+        );
+      
+      if (mentionError) {
+        console.error("[Chats] Error creating mentions:", mentionError);
+      }
+      
+      // Fetch the created mentions with user data
+      const { data: createdMentions } = await db
+        .from("mention")
+        .select("*")
+        .eq("messageId", message.id);
+      
+      if (createdMentions) {
+        mentions = await Promise.all(createdMentions.map(async (mention: any) => {
+          const { data: mentionedUser } = await db
+            .from("user")
+            .select("*")
+            .eq("id", mention.mentionedUserId)
+            .single();
+          
+          const { data: mentionedBy } = await db
+            .from("user")
+            .select("*")
+            .eq("id", mention.mentionedByUserId)
+            .single();
+          
+          return {
+            ...mention,
+            mentionedUser,
+            mentionedBy,
+          };
+        }));
+      }
+    }
+
     // Auto-tag message for smart threads (fire-and-forget, immediate)
     // This ensures real-time tagging for background AI processing
     if (message.content && message.content.trim().length > 0) {
@@ -1224,6 +1300,33 @@ chats.post("/:id/messages", async (c) => {
         createdAt: new Date(replyTo.createdAt).toISOString(),
       } : null,
       reactions: [],
+      mentions: mentions.map((mention) => ({
+        id: mention.id,
+        messageId: mention.messageId,
+        mentionedUserId: mention.mentionedUserId,
+        mentionedByUserId: mention.mentionedByUserId,
+        createdAt: new Date(mention.createdAt).toISOString(),
+        mentionedUser: mention.mentionedUser ? {
+          id: mention.mentionedUser.id,
+          phone: mention.mentionedUser.phone,
+          name: mention.mentionedUser.name,
+          bio: mention.mentionedUser.bio,
+          image: mention.mentionedUser.image,
+          hasCompletedOnboarding: mention.mentionedUser.hasCompletedOnboarding,
+          createdAt: new Date(mention.mentionedUser.createdAt).toISOString(),
+          updatedAt: new Date(mention.mentionedUser.updatedAt).toISOString(),
+        } : undefined,
+        mentionedBy: mention.mentionedBy ? {
+          id: mention.mentionedBy.id,
+          phone: mention.mentionedBy.phone,
+          name: mention.mentionedBy.name,
+          bio: mention.mentionedBy.bio,
+          image: mention.mentionedBy.image,
+          hasCompletedOnboarding: mention.mentionedBy.hasCompletedOnboarding,
+          createdAt: new Date(mention.mentionedBy.createdAt).toISOString(),
+          updatedAt: new Date(mention.mentionedBy.updatedAt).toISOString(),
+        } : undefined,
+      })),
       linkPreview: null,
       createdAt: new Date(message.createdAt).toISOString(),
     });
@@ -1482,15 +1585,22 @@ chats.post("/:id/read-receipts", async (c) => {
   }
 });
 
-// POST /api/chats/:id/typing - Set typing indicator
+// POST /api/chats/:id/typing - Set typing indicator (supports both users and AI friends)
 chats.post("/:id/typing", async (c) => {
   try {
     const chatId = c.req.param("id");
     const body = await c.req.json();
-    const { userId, isTyping } = body;
+    const { userId, aiFriendId, isTyping, aiFriendName, aiFriendColor } = body;
 
+    // Handle AI friend typing
+    if (aiFriendId) {
+      setAITypingStatus(chatId, aiFriendId, isTyping, aiFriendName, aiFriendColor);
+      return c.json({ success: true });
+    }
+
+    // Handle user typing (original behavior)
     if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
+      return c.json({ error: "userId or aiFriendId is required" }, 400);
     }
 
     // Get or create typing map for this chat
@@ -1522,30 +1632,49 @@ chats.post("/:id/typing", async (c) => {
   }
 });
 
-// GET /api/chats/:id/typing - Get typing users
+// GET /api/chats/:id/typing - Get typing users and AI friends
 chats.get("/:id/typing", async (c) => {
   try {
     const chatId = c.req.param("id");
     const currentUserId = c.req.query("userId");
-
-    const chatTypers = typingIndicators.get(chatId);
-    if (!chatTypers || chatTypers.size === 0) {
-      return c.json({ typingUsers: [] });
-    }
-
-    // Clean up expired typing indicators
     const now = Date.now();
+
+    // Get active user typers
+    const chatTypers = typingIndicators.get(chatId);
     const activeTypers: string[] = [];
-    for (const [userId, timestamp] of chatTypers.entries()) {
-      if (now - timestamp > TYPING_TIMEOUT) {
-        chatTypers.delete(userId);
-      } else if (userId !== currentUserId) {
-        // Don't include current user in typing list
-        activeTypers.push(userId);
+    
+    if (chatTypers && chatTypers.size > 0) {
+      for (const [userId, timestamp] of chatTypers.entries()) {
+        if (now - timestamp > TYPING_TIMEOUT) {
+          chatTypers.delete(userId);
+        } else if (userId !== currentUserId) {
+          activeTypers.push(userId);
+        }
       }
     }
 
-    // Fetch user names for active typers
+    // Get active AI typers
+    const chatAITypers = aiTypingIndicators.get(chatId);
+    const activeAITypers: { id: string; name: string; color: string }[] = [];
+    
+    if (chatAITypers && chatAITypers.size > 0) {
+      for (const [aiFriendId, info] of chatAITypers.entries()) {
+        if (now - info.timestamp > AI_TYPING_TIMEOUT) {
+          chatAITypers.delete(aiFriendId);
+        } else {
+          activeAITypers.push({
+            id: aiFriendId,
+            name: info.name,
+            color: info.color,
+          });
+        }
+      }
+    }
+
+    // Build response
+    const typingUsers: { id: string; name: string; isAI?: boolean; color?: string }[] = [];
+
+    // Fetch user names for active user typers
     if (activeTypers.length > 0) {
       const { data: usersData } = await db
         .from("user")
@@ -1553,15 +1682,25 @@ chats.get("/:id/typing", async (c) => {
         .in("id", activeTypers);
       const users = usersData || [];
 
-      const typingUsers = users.map((u: any) => ({
-        id: u.id,
-        name: u.name,
-      }));
-
-      return c.json({ typingUsers });
+      for (const u of users) {
+        typingUsers.push({
+          id: u.id,
+          name: u.name,
+        });
+      }
     }
 
-    return c.json({ typingUsers: [] });
+    // Add AI friends to typing list
+    for (const ai of activeAITypers) {
+      typingUsers.push({
+        id: ai.id,
+        name: ai.name,
+        isAI: true,
+        color: ai.color,
+      });
+    }
+
+    return c.json({ typingUsers });
   } catch (error) {
     console.error("[Chats] Error getting typing users:", error);
     return c.json({ error: "Failed to get typing users" }, 500);

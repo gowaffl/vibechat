@@ -23,6 +23,7 @@ import {
   filterAIOutput,
   logSafetyEvent,
 } from "./content-safety";
+import { setAITypingStatus } from "../routes/chats";
 
 // Subscription reference to keep connection alive
 let engagementSubscription: RealtimeChannel | null = null;
@@ -269,6 +270,10 @@ Respond naturally to what's happening in the conversation. Keep it brief and rea
       { type: "code_interpreter", container: { type: "auto" } },
     ];
 
+    // Set AI typing status BEFORE calling GPT
+    setAITypingStatus(chatId, aiFriendId, true, aiName, aiFriend.color || "#14B8A6");
+    console.log(`[AI Engagement] [${requestId}] 💬 AI typing indicator set for ${aiName}`);
+
     console.log("[AI Engagement] Calling GPT-5.1 Responses API with hosted tools...");
     const response = await executeGPT51Response({
       systemPrompt,
@@ -341,9 +346,15 @@ Respond naturally to what's happening in the conversation. Keep it brief and rea
     // Update last response time for this friend/chat
     await updateLastResponseTime(chatId, aiFriendId);
 
+    // Clear AI typing status after message is saved
+    setAITypingStatus(chatId, aiFriendId, false);
+    console.log(`[AI Engagement] [${requestId}] 💬 AI typing indicator cleared for ${aiName}`);
+
     console.log(`[AI Engagement] AI response saved for chat ${chatId}`);
   } catch (error) {
     console.error("[AI Engagement] Error generating AI response:", error);
+    // Clear typing status on error as well
+    setAITypingStatus(chatId, aiFriendId, false);
   } finally {
     await releaseAIResponseLock(chatId);
   }

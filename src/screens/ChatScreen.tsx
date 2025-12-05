@@ -1688,7 +1688,16 @@ const ChatScreen = () => {
           
           try {
             const newMessageId = payload.new.id;
-            console.log('[Realtime] New message received:', newMessageId);
+            const isAIMessage = !payload.new.userId && payload.new.aiFriendId;
+            console.log('[Realtime] New message received:', newMessageId, isAIMessage ? '(AI)' : '(User)');
+            
+            // If this is an AI message, clear the AI typing indicator immediately
+            // This ensures seamless transition: typing indicator -> message appears
+            if (isAIMessage) {
+              console.log('[Realtime] Clearing AI typing indicator for AI message');
+              setIsAITyping(false);
+              setTypingAIFriend(null);
+            }
             
             // Fetch single message from our new endpoint
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
@@ -2370,14 +2379,37 @@ const ChatScreen = () => {
   console.log("[Smart Replies Frontend] Current smart replies:", smartReplies);
 
 
-  // Fetch typing users for this chat
+  // Fetch typing users for this chat (includes both users and AI friends)
   useQuery({
     queryKey: ["typing", chatId],
     queryFn: async () => {
-      const response = await api.get<{ typingUsers: { id: string; name: string }[] }>(
+      const response = await api.get<{ typingUsers: { id: string; name: string; isAI?: boolean; color?: string }[] }>(
         `/api/chats/${chatId}/typing?userId=${user?.id}`
       );
-      setTypingUsers(response.typingUsers || []);
+      const typers = response.typingUsers || [];
+      
+      // Separate AI typers from human typers
+      const humanTypers = typers.filter(t => !t.isAI);
+      const aiTypers = typers.filter(t => t.isAI);
+      
+      // Update human typing users
+      setTypingUsers(humanTypers);
+      
+      // Update AI typing status
+      if (aiTypers.length > 0) {
+        const aiTyper = aiTypers[0]; // Show first AI friend typing
+        setIsAITyping(true);
+        setTypingAIFriend({
+          id: aiTyper.id,
+          name: aiTyper.name,
+          color: aiTyper.color || "#14B8A6",
+        } as AIFriend);
+      } else {
+        // Only clear if there are no AI typers - don't clear on every poll
+        // The realtime handler will clear when the message arrives
+        // This prevents flickering between polls
+      }
+      
       return response;
     },
     refetchInterval: 1000, // Poll every 1 second
@@ -2774,38 +2806,20 @@ const ChatScreen = () => {
     mutationFn: (data: AiChatRequest) =>
       api.post<AiChatResponse>("/api/ai/chat", data),
     onMutate: (data) => {
-      // Show typing indicator when AI starts processing
+      // Show typing indicator immediately for responsive UI
+      // Backend will also set typing status, and realtime handler will clear it when message arrives
       setIsAITyping(true);
       // Set which AI friend is typing
       const typingFriend = aiFriends.find(f => f.id === data.aiFriendId) || aiFriends[0];
       setTypingAIFriend(typingFriend || null);
-      
-      // Auto-scroll removed per user request
-      /*
-      // Immediately scroll to show AI typing indicator
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 200);
-      });
-      */
     },
     onSuccess: () => {
+      // Don't clear typing indicator here - realtime handler will clear it when message arrives
+      // This ensures seamless transition from typing indicator to message
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      setIsAITyping(false);
-      setTypingAIFriend(null);
-      
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show AI's response
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 300);
-      });
-      */
     },
     onError: () => {
+      // Only clear on error since message won't arrive via realtime
       setIsAITyping(false);
       setTypingAIFriend(null);
     },
@@ -2832,24 +2846,26 @@ const ChatScreen = () => {
       return result;
     },
     onMutate: () => {
+      // Show typing indicator immediately for responsive UI
       setIsAITyping(true);
     },
     onSuccess: (data) => {
-      setIsAITyping(false);
-      
-      // Check if it's a preview or a direct message
+      // Don't clear typing indicator here - realtime handler will clear it when message arrives
+      // For preview mode, clear since no message is created yet
       if ('previewId' in data) {
+        setIsAITyping(false);
         console.log("[ChatScreen] Image preview received:", data.previewId);
         const previewData = data as ImagePreviewResponse;
         setPreviewImage(previewData);
         setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("image");
       } else {
-        // Direct message (fallback or if preview=false)
+        // Direct message - realtime will handle clearing
         queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       }
     },
     onError: (error: any) => {
+      // Only clear on error since message won't arrive via realtime
       setIsAITyping(false);
       console.error("[ChatScreen] Image generation error:", error);
       
@@ -2955,23 +2971,26 @@ const ChatScreen = () => {
       return result;
     },
     onMutate: () => {
+      // Show typing indicator immediately for responsive UI
       setIsAITyping(true);
     },
     onSuccess: (data) => {
-      setIsAITyping(false);
-      
-      // Check if it's a preview or a direct message
+      // Don't clear typing indicator here - realtime handler will clear it when message arrives
+      // For preview mode, clear since no message is created yet
       if ('previewId' in data) {
+        setIsAITyping(false);
         console.log("[ChatScreen] Meme preview received:", data.previewId);
         const previewData = data as ImagePreviewResponse;
         setPreviewImage(previewData);
         setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("meme");
       } else {
+        // Direct message - realtime will handle clearing
         queryClient.invalidateQueries({ queryKey: ["messages"] });
       }
     },
     onError: (error: any) => {
+      // Only clear on error since message won't arrive via realtime
       setIsAITyping(false);
       console.error("[ChatScreen] Meme generation error:", error);
       
@@ -3001,31 +3020,15 @@ const ChatScreen = () => {
     mutationFn: (data: ExecuteCustomCommandRequest) =>
       api.post<Message>("/api/custom-commands/execute", data),
     onMutate: () => {
+      // Show typing indicator immediately for responsive UI
       setIsAITyping(true);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show AI typing indicator for custom command
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 200);
-      });
-      */
     },
     onSuccess: () => {
+      // Don't clear typing indicator here - realtime handler will clear it when message arrives
       queryClient.invalidateQueries({ queryKey: ["messages"] });
-      setIsAITyping(false);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show custom command response
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 300);
-      });
-      */
     },
     onError: (error: any) => {
+      // Only clear on error since message won't arrive via realtime
       setIsAITyping(false);
       console.error("[ChatScreen] Custom command execution error:", error);
       

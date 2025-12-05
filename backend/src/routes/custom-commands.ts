@@ -25,6 +25,7 @@ import {
   filterAIOutput,
   logSafetyEvent,
 } from "../services/content-safety";
+import { setAITypingStatus } from "./chats";
 
 const app = new Hono<AppType>();
 
@@ -349,6 +350,21 @@ app.post("/execute", async (c) => {
       },
     ];
 
+    // Get AI friend for this chat (for typing indicator)
+    const { data: aiFriendForCommand } = await db
+      .from("ai_friend")
+      .select("id, name, color")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
+
+    // Set AI typing status BEFORE executing command
+    if (aiFriendForCommand) {
+      setAITypingStatus(chatId, aiFriendForCommand.id, true, aiFriendForCommand.name || "AI", aiFriendForCommand.color || "#14B8A6");
+      console.log(`[CustomCommands] 💬 AI typing indicator set for ${aiFriendForCommand.name}`);
+    }
+
     // Get safety system prompt based on user age (CRIT-1/3)
     const safetyInstructions = getSafetySystemPrompt(userAgeContext.isMinor);
 
@@ -524,6 +540,12 @@ Please respond according to the command instructions above.`;
         : null,
       createdAt: new Date(aiMessage.createdAt).toISOString(),
     };
+
+    // Clear AI typing status after message is saved
+    if (aiFriendForCommand) {
+      setAITypingStatus(chatId, aiFriendForCommand.id, false);
+      console.log(`[CustomCommands] 💬 AI typing indicator cleared for ${aiFriendForCommand.name}`);
+    }
 
     return c.json(messageResponse);
   } catch (error) {

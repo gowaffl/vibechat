@@ -23,6 +23,7 @@ import {
   filterAIOutput,
   logSafetyEvent,
 } from "../services/content-safety";
+import { setAITypingStatus } from "./chats";
 
 const ai = new Hono<AppType>();
 
@@ -339,6 +340,11 @@ Respond naturally and concisely based on the conversation.`;
       { type: "code_interpreter", container: { type: "auto" } },
     ];
 
+    // Set AI typing status BEFORE calling GPT
+    const aiName = aiFriend.name || "AI Friend";
+    setAITypingStatus(chatId, aiFriend.id, true, aiName, aiFriend.color || "#14B8A6");
+    console.log(`[AI] 💬 AI typing indicator set for ${aiName}`);
+
     // MED-19: Enhanced logging and error handling for AI response
     const startTime = Date.now();
     console.log(`[AI] Calling GPT-5.1 Responses API for chat ${chatId}, user ${userId}`);
@@ -430,6 +436,10 @@ Respond naturally and concisely based on the conversation.`;
       });
     }
 
+    // Clear AI typing status after message is saved
+    setAITypingStatus(chatId, aiFriend.id, false);
+    console.log(`[AI] 💬 AI typing indicator cleared for ${aiName}`);
+
     // Return the AI message
     // Note: userId is null for AI messages - frontend will use aiFriendId to display correct AI info
     return c.json({
@@ -454,6 +464,11 @@ Respond naturally and concisely based on the conversation.`;
     if (error && typeof error === 'object' && 'response' in error) {
       const apiError = error as any;
       console.error("[AI] API Error response:", JSON.stringify(apiError.response, null, 2));
+    }
+
+    // Clear AI typing status on error
+    if (aiFriendId) {
+      setAITypingStatus(chatId, aiFriendId, false);
     }
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -504,6 +519,21 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Get AI friend for this chat (for typing indicator)
+    const { data: aiFriendForTyping } = await db
+      .from("ai_friend")
+      .select("id, name, color")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
+
+    // Set AI typing status BEFORE generating image
+    if (aiFriendForTyping) {
+      setAITypingStatus(chatId, aiFriendForTyping.id, true, aiFriendForTyping.name || "AI", aiFriendForTyping.color || "#14B8A6");
+      console.log(`[AI Image] 💬 AI typing indicator set for ${aiFriendForTyping.name}`);
     }
 
     console.log("[AI Image] Generating image with Gemini 3 Pro Image Preview:", prompt);
@@ -754,6 +784,12 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       return c.json({ error: "Failed to create message" }, 500);
     }
 
+    // Clear AI typing status after message is saved
+    if (aiFriendForTyping) {
+      setAITypingStatus(chatId, aiFriendForTyping.id, false);
+      console.log(`[AI Image] 💬 AI typing indicator cleared for ${aiFriendForTyping.name}`);
+    }
+
     return c.json({
       id: message.id,
       content: message.content,
@@ -812,6 +848,21 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Get AI friend for this chat (for typing indicator)
+    const { data: aiFriendForMeme } = await db
+      .from("ai_friend")
+      .select("id, name, color")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
+
+    // Set AI typing status BEFORE generating meme
+    if (aiFriendForMeme) {
+      setAITypingStatus(chatId, aiFriendForMeme.id, true, aiFriendForMeme.name || "AI", aiFriendForMeme.color || "#14B8A6");
+      console.log(`[AI Meme] 💬 AI typing indicator set for ${aiFriendForMeme.name}`);
     }
 
     console.log("[AI Meme] Generating meme with Gemini 3 Pro Image Preview:", prompt);
@@ -1047,6 +1098,12 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     if (insertError || !message) {
       console.error("[AI Meme] Failed to create message:", insertError);
       return c.json({ error: "Failed to create message" }, 500);
+    }
+
+    // Clear AI typing status after message is saved
+    if (aiFriendForMeme) {
+      setAITypingStatus(chatId, aiFriendForMeme.id, false);
+      console.log(`[AI Meme] 💬 AI typing indicator cleared for ${aiFriendForMeme.name}`);
     }
 
     return c.json({
