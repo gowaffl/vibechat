@@ -7946,13 +7946,13 @@ const ChatScreen = () => {
                 userId: user?.id || "",
                 chatId,
                 type: previewType,
-                metadata: {
+                metadata: JSON.stringify({
                   ...previewImage.metadata,
                   // Add slash command badge for AI-generated images/memes
                   slashCommand: {
                     command: `/${previewType}`, // "/image", "/meme", or "/remix"
                   },
-                },
+                }),
               });
             }
           }}

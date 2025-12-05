@@ -450,7 +450,7 @@ export const confirmImageRequestSchema = z.object({
   userId: z.string(),
   chatId: z.string(),
   type: z.enum(["image", "meme", "remix"]),
-  metadata: z.any().optional(), // For reactor metadata and slash command badges
+  metadata: z.string().optional(), // JSON stringified metadata
 });
 export type ConfirmImageRequest = z.infer<typeof confirmImageRequestSchema>;
 export const confirmImageResponseSchema = messageSchema;

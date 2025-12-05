@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, ChevronDown, ChevronUp, Bell, BellOff } from "lucide-react-native";
+import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, Bell, BellOff } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -191,7 +191,6 @@ const GroupSettingsScreen = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showPhotoGallery, setShowPhotoGallery] = useState(false);
   const [showLinksCollection, setShowLinksCollection] = useState(false);
-  const [isAiFriendSectionExpanded, setIsAiFriendSectionExpanded] = useState(false);
   const [galleryViewerImage, setGalleryViewerImage] = useState<{
     url: string;
     senderName: string;
@@ -1401,121 +1400,97 @@ const GroupSettingsScreen = () => {
             >
               {/* Header with + button */}
               <View className="flex-row items-center justify-between mb-3">
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setIsAiFriendSectionExpanded(!isAiFriendSectionExpanded);
-                  }}
-                  className="flex-row items-center flex-1"
-                >
+                <View className="flex-row items-center">
                   <Sparkles size={18} color="#34C759" />
                   <Text className="text-sm font-semibold ml-2" style={{ color: "#34C759" }}>
                     AI FRIENDS
                   </Text>
-                </Pressable>
-                <View className="flex-row items-center gap-2">
-                  <Pressable
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      handleCreateAIFriend();
-                    }}
+                </View>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    handleCreateAIFriend();
+                  }}
+                >
+                  <View
                     style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: "rgba(52, 199, 89, 0.2)",
+                      backgroundColor: "rgba(52, 199, 89, 0.15)",
+                      padding: 8,
+                      borderRadius: 12,
                       borderWidth: 1,
-                      borderColor: "#34C759",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      borderColor: "rgba(52, 199, 89, 0.3)",
                     }}
                   >
                     <Plus size={16} color="#34C759" />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setIsAiFriendSectionExpanded(!isAiFriendSectionExpanded);
-                    }}
-                  >
-                    {isAiFriendSectionExpanded ? (
-                      <ChevronUp size={20} color="#34C759" />
-                    ) : (
-                      <ChevronDown size={20} color="#34C759" />
-                    )}
-                  </Pressable>
-                </View>
+                  </View>
+                </Pressable>
               </View>
 
-              {isAiFriendSectionExpanded && (
-                <>
-                  {/* AI Friend Selector Dropdown - Only show if 2+ friends */}
-                  {aiFriends.length > 1 && (
-                    <View className="mb-4">
-                      <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
-                        Select AI Friend
-                      </Text>
-                      <View
+              {/* AI Friend Selector Dropdown - Only show if 2+ friends */}
+              {aiFriends.length > 1 && (
+                <View className="mb-4">
+                  <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                    Select AI Friend
+                  </Text>
+                  <View
+                    style={{
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      borderWidth: 1,
+                      borderColor: "rgba(52, 199, 89, 0.3)",
+                    }}
+                  >
+                    {aiFriends.map((friend, index) => (
+                      <Pressable
+                        key={friend.id}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedAiFriendId(friend.id);
+                        }}
                         style={{
-                          borderRadius: 12,
-                          overflow: "hidden",
-                          backgroundColor: "rgba(255, 255, 255, 0.05)",
-                          borderWidth: 1,
-                          borderColor: "rgba(52, 199, 89, 0.3)",
+                          padding: 12,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          backgroundColor: selectedAiFriendId === friend.id
+                            ? "rgba(52, 199, 89, 0.15)"
+                            : "transparent",
+                          borderTopWidth: index > 0 ? 1 : 0,
+                          borderTopColor: "rgba(255, 255, 255, 0.1)",
                         }}
                       >
-                        {aiFriends.map((friend, index) => (
-                          <Pressable
-                            key={friend.id}
-                            onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              setSelectedAiFriendId(friend.id);
-                            }}
+                        <View className="flex-row items-center flex-1">
+                          {/* Color indicator */}
+                          <View
                             style={{
-                              padding: 12,
-                              flexDirection: "row",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              backgroundColor: selectedAiFriendId === friend.id
-                                ? "rgba(52, 199, 89, 0.15)"
-                                : "transparent",
-                              borderTopWidth: index > 0 ? 1 : 0,
-                              borderTopColor: "rgba(255, 255, 255, 0.1)",
+                              width: 12,
+                              height: 12,
+                              borderRadius: 6,
+                              backgroundColor: friend.color,
+                              marginRight: 10,
+                            }}
+                          />
+                          <Text
+                            style={{
+                              color: selectedAiFriendId === friend.id ? "#34C759" : "#FFFFFF",
+                              fontSize: 15,
+                              fontWeight: selectedAiFriendId === friend.id ? "600" : "500",
                             }}
                           >
-                            <View className="flex-row items-center flex-1">
-                              {/* Color indicator */}
-                              <View
-                                style={{
-                                  width: 12,
-                                  height: 12,
-                                  borderRadius: 6,
-                                  backgroundColor: friend.color,
-                                  marginRight: 10,
-                                }}
-                              />
-                              <Text
-                                style={{
-                                  color: selectedAiFriendId === friend.id ? "#34C759" : "#FFFFFF",
-                                  fontSize: 15,
-                                  fontWeight: selectedAiFriendId === friend.id ? "600" : "500",
-                                }}
-                              >
-                                {friend.name}
-                              </Text>
-                            </View>
-                            {selectedAiFriendId === friend.id && (
-                              <Check size={18} color="#34C759" />
-                            )}
-                          </Pressable>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                </>
+                            {friend.name}
+                          </Text>
+                        </View>
+                        {selectedAiFriendId === friend.id && (
+                          <Check size={18} color="#34C759" />
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
               )}
 
-              {isAiFriendSectionExpanded && selectedAiFriendId && (
+              {selectedAiFriendId && (
                 <>
                   {/* AI Friend Name */}
                   <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>

@@ -1101,8 +1101,8 @@ ai.post("/confirm-image", zValidator("json", confirmImageRequestSchema), async (
 
     // Add metadata if present (e.g. for reactor, slash command badges)
     if (metadata) {
-      // Stringify metadata for database storage
-      messageData.metadata = JSON.stringify(metadata);
+      // Metadata is already stringified from the client
+      messageData.metadata = metadata;
     }
 
     // Create message
