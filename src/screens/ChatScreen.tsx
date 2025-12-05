@@ -1650,6 +1650,8 @@ const ChatScreen = () => {
   });
 
   // Realtime subscription for messages and reactions
+  // NOTE: We don't use filters because Supabase Realtime doesn't support camelCase column names
+  // in filter strings. Instead, we filter client-side in the callback (like ChatListScreen does).
   useEffect(() => {
     if (!chatId) return;
 
@@ -1662,9 +1664,11 @@ const ChatScreen = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'message',
-          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
+          // Client-side filter: only process messages for this chat
+          if (payload.new.chatId !== chatId) return;
+          
           try {
             const newMessageId = payload.new.id;
             console.log('[Realtime] New message received:', newMessageId);
@@ -1694,9 +1698,11 @@ const ChatScreen = () => {
           event: 'UPDATE',
           schema: 'public',
           table: 'message',
-          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
+          // Client-side filter: only process messages for this chat
+          if (payload.new.chatId !== chatId) return;
+          
           console.log('[Realtime] Message updated:', payload.new.id);
           try {
             // Fetch full message details (including tags for Smart Threads)
@@ -1722,9 +1728,11 @@ const ChatScreen = () => {
           event: 'DELETE',
           schema: 'public',
           table: 'message',
-          filter: `"chatId"=eq.${chatId}`,
         },
         (payload) => {
+          // Client-side filter: only process messages for this chat
+          if (payload.old.chatId !== chatId) return;
+          
           console.log('[Realtime] Message deleted:', payload.old.id);
           setAllMessages(prev => prev.filter(m => m.id !== payload.old.id));
         }
@@ -1736,9 +1744,11 @@ const ChatScreen = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'reaction',
-          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
+           // Client-side filter: only process reactions for this chat
+           if (payload.new.chatId !== chatId) return;
+           
            const msgId = payload.new.messageId;
            try {
              const updatedMsg = await api.get<Message>(`/api/messages/${msgId}`);
@@ -1754,9 +1764,11 @@ const ChatScreen = () => {
           event: 'DELETE',
           schema: 'public',
           table: 'reaction',
-          filter: `"chatId"=eq.${chatId}`,
         },
         async (payload) => {
+           // Client-side filter: only process reactions for this chat
+           if (payload.old.chatId !== chatId) return;
+           
            const msgId = payload.old.messageId;
            try {
              const updatedMsg = await api.get<Message>(`/api/messages/${msgId}`);
@@ -4925,7 +4937,27 @@ const ChatScreen = () => {
     );
   }, []);
 
-  const renderMessage = useCallback(({ item }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } }) => {
+  // Memoized displayData for message grouping (accessible in renderMessage)
+  const displayDataMemo = useMemo(() => {
+    // Backend returns Newest-First (Descending): [Newest, ..., Oldest]
+    // Inverted FlashList renders index 0 at bottom
+    // So newest (index 0) appears at bottom - no reverse needed!
+    const data: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
+
+    // Add AI typing indicator if AI is typing (only in main chat, not in threads)
+    if (isAITyping && !currentThreadId) {
+      data.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
+    }
+
+    // Add user typing indicator if users are typing (only in main chat, not in threads)
+    if (typingUsers.length > 0 && !currentThreadId) {
+      data.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
+    }
+
+    return data;
+  }, [activeMessages, isAITyping, currentThreadId, typingUsers]);
+
+  const renderMessage = useCallback(({ item, index }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }; index: number }) => {
     // Check if this is the AI typing indicator
     if ('isTyping' in item && item.isTyping) {
       return <AITypingIndicator 
@@ -4944,6 +4976,35 @@ const ChatScreen = () => {
     // AI messages have userId: null and aiFriendId set
     const isAI = !!(message.aiFriendId && message.userId === null);
     const isSystem = message.messageType === "system" || message.userId === "system";
+
+    // Message grouping logic for consecutive messages from same sender
+    const prevMessage = displayDataMemo[index + 1]; // Older message (visually above in inverted list)
+    const nextMessage = displayDataMemo[index - 1]; // Newer message (visually below in inverted list)
+
+    // Check if previous message is from same sender (handles both users and AI friends)
+    const isSameUserAsOlder = prevMessage && 
+      !('isTyping' in prevMessage) && 
+      !('isUserTyping' in prevMessage) && 
+      (prevMessage as Message).messageType !== 'system' &&
+      (prevMessage as Message).userId !== 'system' &&
+      (prevMessage as Message).userId === message.userId && 
+      ((prevMessage as Message).userId !== null || (prevMessage as Message).aiFriendId === message.aiFriendId);
+
+    // Check if next message is from same sender
+    const isSameUserAsNewer = nextMessage && 
+      !('isTyping' in nextMessage) && 
+      !('isUserTyping' in nextMessage) && 
+      (nextMessage as Message).messageType !== 'system' &&
+      (nextMessage as Message).userId !== 'system' &&
+      (nextMessage as Message).userId === message.userId && 
+      ((nextMessage as Message).userId !== null || (nextMessage as Message).aiFriendId === message.aiFriendId);
+
+    // Show name only if it's the first message in the group (visually top / older)
+    const showName = !isSameUserAsOlder;
+    // Show avatar only if it's the last message in the group (visually bottom / newer)
+    const showAvatar = !isSameUserAsNewer;
+    // Determine margin class based on grouping
+    const marginBottomClass = isSameUserAsNewer ? 'mb-0.5' : 'mb-3';
     
     // Get AI friend information if this is an AI message
     // Use the aiFriendId to look up from the aiFriends list
@@ -5125,6 +5186,20 @@ const ChatScreen = () => {
       const messageVibe = message.vibeType;
       const vibeConfig = messageVibe ? VIBE_CONFIG[messageVibe] : null;
       
+      // Dynamic border radius for grouped messages
+      // Inner corners (4px) where messages connect, outer corners (20px) at boundaries
+      const borderRadiusStyle = isCurrentUser ? {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: isSameUserAsOlder ? 4 : 20,
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: isSameUserAsNewer ? 4 : 20,
+      } : {
+        borderTopLeftRadius: isSameUserAsOlder ? 4 : 20,
+        borderTopRightRadius: 20,
+        borderBottomLeftRadius: isSameUserAsNewer ? 4 : 20,
+        borderBottomRightRadius: 20,
+      };
+      
       // Determine bubble style - vibe takes precedence for styling
       const bubbleStyle = vibeConfig
         ? {
@@ -5153,7 +5228,7 @@ const ChatScreen = () => {
       const bubbleContent = (
         <View
           style={{
-            borderRadius: 20,
+            ...borderRadiusStyle,
             overflow: "hidden",
             shadowColor: bubbleStyle.shadowColor,
             shadowOffset: { width: 0, height: 4 },
@@ -5173,7 +5248,7 @@ const ChatScreen = () => {
             intensity={Platform.OS === "ios" ? 40 : 80}
             tint="dark"
             style={{
-              borderRadius: 20,
+              ...borderRadiusStyle,
               overflow: "hidden",
               borderWidth: isHighlighted ? 2 : 1,
               borderColor: isHighlighted ? "#FFD700" : bubbleStyle.borderColor,
@@ -5597,7 +5672,7 @@ const ChatScreen = () => {
     return (
       <Reanimated.View
         entering={FadeInUp.duration(300)}
-        className={`mb-3 flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
+        className={`${marginBottomClass} flex-row ${isCurrentUser ? "justify-end" : "justify-start"}`}
         style={{
           paddingHorizontal: 4,
           alignItems: "flex-start",
@@ -5626,18 +5701,24 @@ const ChatScreen = () => {
           </Pressable>
         )}
 
-        {/* Profile Photo for others */}
+        {/* Profile Photo for others - only show on last message of group */}
         {!isCurrentUser && (
-          <ProfileImage 
-            imageUri={isAI ? null : message.user?.image} 
-            isAI={isAI} 
-            userName={isAI ? aiName : (message.user?.name || "Unknown")} 
-          />
+          showAvatar ? (
+            <ProfileImage 
+              imageUri={isAI ? null : message.user?.image} 
+              isAI={isAI} 
+              userName={isAI ? aiName : (message.user?.name || "Unknown")} 
+            />
+          ) : (
+            // Placeholder to maintain alignment when avatar is hidden
+            <View style={{ width: 32, height: 32, marginRight: 8 }} />
+          )
         )}
 
         {/* Message Content */}
         <View style={{ flex: 1, alignItems: isCurrentUser ? "flex-end" : "flex-start" }}>
-          {!isCurrentUser && (
+          {/* Name - only show on first message of group */}
+          {!isCurrentUser && showName && (
             <Text
               className="text-xs font-medium mb-1 ml-2"
               style={{ color: isAI ? aiColor : "#6B7280", fontSize: 13, fontWeight: isAI ? "600" : "500" }}
@@ -5809,6 +5890,8 @@ const ChatScreen = () => {
     toggleBookmark,
     // LOW-21: Crisis message detection
     isCrisisMessage,
+    // Message grouping data
+    displayDataMemo,
   ]);
 
   if (isLoading) {
@@ -5834,22 +5917,6 @@ const ChatScreen = () => {
   
   // Check if smart replies are visible (for dynamic bottom padding)
   const areSmartRepliesVisible = smartReplies.length > 0 && !messageText && selectedImages.length === 0 && !replyToMessage;
-  
-  // Combine messages with typing indicators
-  // Backend returns Newest-First (Descending): [Newest, ..., Oldest]
-  // Inverted FlashList renders index 0 at bottom
-  // So newest (index 0) appears at bottom - no reverse needed!
-  let displayData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
-
-  // Add AI typing indicator if AI is typing (only in main chat, not in threads)
-  if (isAITyping && !currentThreadId) {
-    displayData.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
-  }
-
-  // Add user typing indicator if users are typing (only in main chat, not in threads)
-  if (typingUsers.length > 0 && !currentThreadId) {
-    displayData.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
-  }
   
   // Get current thread info for display
   const currentThread = threads?.find(t => t.id === currentThreadId);
@@ -5955,7 +6022,7 @@ const ChatScreen = () => {
       >
         <AnimatedFlashList
           ref={flatListRef}
-          data={displayData}
+          data={displayDataMemo}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           renderItem={renderMessage as any}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

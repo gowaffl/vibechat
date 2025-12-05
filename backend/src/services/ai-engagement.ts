@@ -259,9 +259,9 @@ Friends in chat: ${participantList}${personalityInstruction}${toneInstruction}
 ${earlierContextText ? `Earlier:\n${earlierContextText}\n\n` : ""}Right now:
 ${recentContextText}
 
-Should you jump in? If yes, what would you naturally say as a friend? Keep it brief and real.`;
+Respond naturally to what's happening in the conversation. Keep it brief and real.`;
 
-    const userInput = `Based on the conversation, should you respond? If yes, say something brief and natural. If not, stay quiet.`;
+    const userInput = `What would you naturally say here? Keep it brief and conversational.`;
 
     const tools: any[] = [
       { type: "web_search" },
