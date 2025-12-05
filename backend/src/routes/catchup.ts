@@ -83,13 +83,14 @@ catchup.post("/generate", zValidator("json", generateCatchUpRequestSchema), asyn
         }
       } else {
         // If no read receipt, get last 50 messages
-        const { data: allMessages = [] } = await db
+        const { data: allMessagesData } = await db
           .from("message")
           .select("createdAt")
           .eq("chatId", chatId)
           .order("createdAt", { ascending: false })
           .limit(50);
-
+        
+        const allMessages = allMessagesData || [];
         if (allMessages.length > 0) {
           const lastMessage = allMessages[allMessages.length - 1];
           if (lastMessage) {
@@ -105,9 +106,11 @@ catchup.post("/generate", zValidator("json", generateCatchUpRequestSchema), asyn
     }
 
     // Fetch messages to summarize
-    const { data: messagesData = [], error: messagesError } = await query
+    const { data: messagesDataRaw, error: messagesError } = await query
       .order("createdAt", { ascending: true })
       .limit(100);
+    
+    const messagesData = messagesDataRaw || [];
 
     if (messagesError) {
       console.error("[Catch-Up] Error fetching messages:", messagesError);
@@ -116,10 +119,11 @@ catchup.post("/generate", zValidator("json", generateCatchUpRequestSchema), asyn
 
     // Fetch users for messages
     const userIds = [...new Set(messagesData.map((m: any) => m.userId))];
-    const { data: users = [] } = userIds.length > 0 ? await db
+    const { data: usersData } = userIds.length > 0 ? await db
       .from("user")
       .select("*")
       .in("id", userIds) : { data: [] };
+    const users = usersData || [];
     const userMap = new Map(users.map((u: any) => [u.id, u]));
 
     // Attach user data to messages
@@ -240,16 +244,17 @@ Example output style:
       }
     }
 
-    // Limit based on summary type - personalized should be most concise
-    const maxKeyPoints = summaryType === "personalized" ? 4 : summaryType === "quick" ? 3 : 5;
+    // Limit based on summary type - concise should be more brief
+    const maxKeyPoints = summaryType === "concise" ? 4 : 7;
     const limitedKeyPoints = keyPoints.slice(0, maxKeyPoints);
 
     // Find highlights (messages with most engagement)
     const messageIds = messages.map((m: any) => m.id);
-    const { data: reactions = [] } = messageIds.length > 0 ? await db
+    const { data: reactionsData } = messageIds.length > 0 ? await db
       .from("reaction")
       .select("messageId")
       .in("messageId", messageIds) : { data: [] };
+    const reactions = reactionsData || [];
 
     // Count reactions per message
     const reactionCounts = new Map<string, number>();
