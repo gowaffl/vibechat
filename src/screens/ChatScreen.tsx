@@ -1751,6 +1751,7 @@ const ChatScreen = () => {
           console.log('[Realtime] Message updated:', payload.new.id);
           try {
             // Fetch full message details (including tags for Smart Threads)
+            // IMPORTANT: Always fetch from API to get decrypted content
             const updatedMsg = await api.get<Message>(`/api/messages/${payload.new.id}`);
             if (updatedMsg) {
               setAllMessages(prev => prev.map(m => 
@@ -1759,10 +1760,8 @@ const ChatScreen = () => {
             }
           } catch (error) {
             console.error('[Realtime] Error fetching updated message:', error);
-            // Fallback to payload merge if fetch fails
-            setAllMessages(prev => prev.map(m => 
-              m.id === payload.new.id ? { ...m, ...payload.new } : m
-            ));
+            // Note: We intentionally do NOT use payload.new as fallback because
+            // it contains encrypted content. The message will be updated on next fetch.
           }
         }
       )
@@ -2768,10 +2767,9 @@ const ChatScreen = () => {
       });
       */
     },
-    onSettled: () => {
-      // Always refetch after error or success to ensure cache is correct
-      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-    },
+    // Note: Removed onSettled invalidation - it caused encrypted messages to briefly show
+    // by triggering an unnecessary refetch after the optimistic update was already applied.
+    // The realtime subscription handles keeping the cache in sync with the server.
   });
 
   // Reaction mutation

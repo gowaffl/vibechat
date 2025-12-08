@@ -17,18 +17,22 @@ interface RateLimitConfig {
 }
 
 // Default configurations for different endpoint types
+// Note: Limits are per-user (when userId is available) or per-IP
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
-  // Default rate limit
-  default: { windowMs: 60000, maxRequests: 100 },  // 100 req/min
+  // Default rate limit - increased to handle app startup burst
+  default: { windowMs: 60000, maxRequests: 200 },  // 200 req/min
   
   // Heavy endpoints (AI, image generation)
-  heavy: { windowMs: 60000, maxRequests: 20 },     // 20 req/min
+  heavy: { windowMs: 60000, maxRequests: 30 },     // 30 req/min
   
-  // Light endpoints (typing, health)
-  light: { windowMs: 60000, maxRequests: 300 },    // 300 req/min
+  // Light endpoints (typing, health, unread counts)
+  light: { windowMs: 60000, maxRequests: 600 },    // 600 req/min (10/sec)
   
   // Auth endpoints (stricter to prevent brute force)
-  auth: { windowMs: 60000, maxRequests: 10 },      // 10 req/min
+  auth: { windowMs: 60000, maxRequests: 15 },      // 15 req/min
+  
+  // Message endpoints - higher limit for active chats
+  messages: { windowMs: 60000, maxRequests: 300 }, // 300 req/min
 };
 
 // In-memory store: key -> RateLimitEntry
@@ -81,9 +85,19 @@ function getRateLimitType(path: string): keyof typeof RATE_LIMITS {
     return "auth";
   }
   
-  // Light endpoints (typing is now via Realtime, but keep for backward compat)
-  if (path.includes("/typing") || path.includes("/health")) {
+  // Light endpoints (high-frequency reads)
+  if (
+    path.includes("/typing") || 
+    path.includes("/health") ||
+    path.includes("/unread-counts") ||
+    path.includes("/presence")
+  ) {
     return "light";
+  }
+  
+  // Message endpoints - higher limit for active chat usage
+  if (path.includes("/messages") || path.match(/\/chats\/[^/]+\/messages/)) {
+    return "messages";
   }
   
   return "default";

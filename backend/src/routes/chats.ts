@@ -148,7 +148,7 @@ chats.get("/", async (c) => {
       .in("id", chatIds);
     const chats = chatsData || [];
 
-    // Fetch last messages for each chat
+    // Fetch last messages for each chat and decrypt them
     const lastMessages = await Promise.all(
       chatIds.map(async (chatId: string) => {
         const { data } = await client
@@ -157,7 +157,13 @@ chats.get("/", async (c) => {
           .eq("chatId", chatId)
           .order("createdAt", { ascending: false })
           .limit(1);
-        return { chatId, message: data?.[0] || null };
+        
+        // Decrypt message if it exists and is encrypted
+        if (data && data.length > 0) {
+          const decryptedMessages = await decryptMessages(data);
+          return { chatId, message: decryptedMessages[0] || null };
+        }
+        return { chatId, message: null };
       })
     );
 
