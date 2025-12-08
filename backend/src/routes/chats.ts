@@ -1149,7 +1149,7 @@ chats.post("/:id/messages", async (c) => {
       .eq("id", message.userId)
       .single();
 
-    // Fetch replyTo if exists
+    // Fetch replyTo if exists and decrypt if encrypted
     let replyTo = null;
     if (message.replyToId) {
       const { data: replyToMsg } = await db
@@ -1159,15 +1159,18 @@ chats.post("/:id/messages", async (c) => {
         .single();
       
       if (replyToMsg) {
+        // Decrypt replyTo content if encrypted
+        const [decryptedReplyTo] = await decryptMessages([replyToMsg]);
+        
         const { data: replyToUser } = await db
           .from("user")
           .select("*")
-          .eq("id", replyToMsg.userId)
+          .eq("id", decryptedReplyTo.userId)
           .single();
         
         if (replyToUser) {
           replyTo = {
-            ...replyToMsg,
+            ...decryptedReplyTo,
             user: replyToUser,
           };
         }
@@ -1314,9 +1317,10 @@ chats.post("/:id/messages", async (c) => {
       }
     }
 
+    // IMPORTANT: Return the original content from request, not message.content which is encrypted
     return c.json({
       id: message.id,
-      content: message.content,
+      content: validated.content || "", // Use original content, not encrypted message.content
       messageType: message.messageType as "text" | "image" | "voice" | "video",
       imageUrl: message.imageUrl,
       imageDescription: message.imageDescription,

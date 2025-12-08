@@ -2713,17 +2713,17 @@ const ChatScreen = () => {
       // Smoothly replace optimistic message with real one from server
       const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
       if (currentData?.messages) {
-        // Remove the specific optimistic message by its ID and add the real one
-        // This prevents issues when sending multiple messages rapidly
-        const withoutOptimistic = currentData.messages.filter(m => 
-          m.id !== context?.optimisticId && !m.id.startsWith('optimistic-')
+        // Remove the specific optimistic message by its ID
+        // ALSO remove any existing message with the same ID (from Realtime)
+        // We ALWAYS prefer the POST response because it has guaranteed plaintext content
+        const withoutOptimisticOrExisting = currentData.messages.filter(m => 
+          m.id !== context?.optimisticId && 
+          !m.id.startsWith('optimistic-') &&
+          m.id !== newMessage.id  // Remove any Realtime-added version
         );
         
-        // Deduplicate: ensure we don't add the message if it was already added via realtime
-        const messageExists = withoutOptimistic.some(m => m.id === newMessage.id);
-        const updatedMessages = messageExists 
-          ? withoutOptimistic 
-          : [newMessage, ...withoutOptimistic];
+        // Always add the API response (it has the original plaintext content)
+        const updatedMessages = [newMessage, ...withoutOptimisticOrExisting];
           
         queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
