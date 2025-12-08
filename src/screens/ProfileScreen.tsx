@@ -385,20 +385,22 @@ const ProfileScreen = () => {
               >
                 {user?.image && !imageLoadError ? (
                   <ExpoImage
-                    source={{ uri: getFullImageUrl(user.image) }}
-                    className="w-32 h-32 rounded-full"
+                    source={getFullImageUrl(user.image)}
+                    style={{
+                      width: 128,
+                      height: 128,
+                      borderRadius: 64,
+                    }}
                     contentFit="cover"
                     onError={(error: any) => {
                       console.error("[ProfileScreen] Image load error:", error);
                       console.error("[ProfileScreen] Original image URL:", user.image);
                       console.error("[ProfileScreen] Transformed URL:", getFullImageUrl(user.image));
-                      // Set error state to show fallback avatar
                       setImageLoadError(true);
                     }}
                     onLoad={() => {
                       console.log("[ProfileScreen] Image loaded successfully!");
                       console.log("[ProfileScreen] Image URL:", getFullImageUrl(user.image));
-                      // Reset error state on successful load
                       setImageLoadError(false);
                     }}
                   />

@@ -7,6 +7,7 @@ import {
   deleteReactionResponseSchema,
 } from "../../../shared/contracts";
 import { formatTimestamp } from "../utils/supabase-helpers";
+import { sendPushNotification } from "../services/push-notifications";
 
 const reactions = new Hono<AppType>();
 
@@ -74,7 +75,7 @@ reactions.post("/", async (c) => {
       return c.json({ error: "Failed to add reaction" }, 500);
     }
 
-    // Fetch user data
+    // Fetch user data (reactor)
     const { data: user, error: userError } = await db
       .from("user")
       .select("*")
@@ -84,6 +85,48 @@ reactions.post("/", async (c) => {
     if (userError) {
       console.error("[REACTIONS] Error fetching user:", userError);
     }
+
+    // Send push notification to the message author (if not reacting to own message)
+    // Fire-and-forget: non-blocking
+    Promise.resolve().then(async () => {
+      try {
+        // Get the full message to find the author
+        const { data: fullMessage } = await db
+          .from("message")
+          .select("userId, chatId")
+          .eq("id", validatedData.messageId)
+          .single();
+
+        if (!fullMessage || !fullMessage.userId) {
+          return; // AI message or missing author, skip notification
+        }
+
+        // Don't notify if user reacted to their own message
+        if (fullMessage.userId === validatedData.userId) {
+          return;
+        }
+
+        // Get chat info
+        const { data: chat } = await db
+          .from("chat")
+          .select("name")
+          .eq("id", fullMessage.chatId)
+          .single();
+
+        // Send notification
+        await sendPushNotification({
+          userId: fullMessage.userId, // Message author
+          chatId: fullMessage.chatId,
+          chatName: chat?.name || "Chat",
+          senderName: user?.name || "Someone",
+          messagePreview: `reacted ${reaction.emoji} to your message`,
+        });
+
+        console.log(`[REACTIONS] Sent notification for reaction ${reaction.emoji} by ${user?.name} on message ${validatedData.messageId}`);
+      } catch (error) {
+        console.error("[REACTIONS] Error sending reaction notification:", error);
+      }
+    });
 
     return c.json({
       id: reaction.id,
