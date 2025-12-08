@@ -1617,15 +1617,20 @@ chats.post("/:id/read-receipts", async (c) => {
     }
 
     // Create read receipts for the identified messages
+    // Use upsert with onConflict to handle race conditions gracefully
     const { error: insertError } = await client
       .from("read_receipt")
-      .insert(
+      .upsert(
         idsToMark.map((messageId: string) => ({
           userId,
           chatId,
           messageId,
           readAt: new Date().toISOString()
-        }))
+        })),
+        { 
+          onConflict: 'userId,chatId,messageId',
+          ignoreDuplicates: true 
+        }
       );
 
     if (insertError) {

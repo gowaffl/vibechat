@@ -48,3 +48,6 @@ backend/generated/
 .env.production.local
 .env.local
 .env
+
+# Cursor file
+.Cursor/

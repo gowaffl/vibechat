@@ -1915,9 +1915,31 @@ const ChatScreen = () => {
   }, [chatId, queryClient, realtimeRetryCount, user?.id]);
 
   // Update messages state when data changes
+  // IMPORTANT: We merge rather than replace to preserve optimistic messages
   useEffect(() => {
     if (messageData) {
-      setAllMessages(messageData.messages || []);
+      setAllMessages(prev => {
+        const newMessages = messageData.messages || [];
+        
+        // If we have no previous messages, just use the new ones
+        if (prev.length === 0) {
+          return newMessages;
+        }
+        
+        // Preserve any optimistic messages (they have IDs starting with 'optimistic-')
+        const optimisticMessages = prev.filter(m => m.id.startsWith('optimistic-'));
+        
+        // If no optimistic messages, safe to replace entirely
+        if (optimisticMessages.length === 0) {
+          return newMessages;
+        }
+        
+        // Merge: keep optimistic messages at the front, then add new messages that aren't duplicates
+        const newMessageIds = new Set(newMessages.map(m => m.id));
+        const keptOptimistic = optimisticMessages.filter(m => !newMessageIds.has(m.id));
+        
+        return [...keptOptimistic, ...newMessages];
+      });
       setHasMoreMessages(messageData.hasMore || false);
       setNextCursor(messageData.nextCursor || null);
     }
