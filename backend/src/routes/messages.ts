@@ -21,18 +21,29 @@ import { tagMessage } from "../services/message-tagger";
 
 const messages = new Hono<AppType>();
 
-// GET /api/messages - Get all messages
+// GET /api/messages - Get all messages (optimized single query with all relations)
 messages.get("/", async (c) => {
+  // Optimized: Single query with all relations - eliminates N+1 problem
   const { data: allMessages, error } = await db
     .from("message")
     .select(`
       *,
-      user:user!message_userId_fkey(*),
-      replyTo:message(
+      user:userId (*),
+      aiFriend:aiFriendId (*),
+      replyTo:replyToId (
         *,
-        user:user!message_userId_fkey(*)
+        user:userId (*),
+        aiFriend:aiFriendId (*)
       ),
-      reactions:reaction(*)
+      reactions:reaction (
+        *,
+        user:userId (*)
+      ),
+      mentions:mention (
+        *,
+        mentionedUser:mentionedUserId (*),
+        mentionedBy:mentionedByUserId (*)
+      )
     `)
     .order("createdAt", { ascending: true })
     .limit(100);
@@ -42,61 +53,17 @@ messages.get("/", async (c) => {
     return c.json({ error: "Failed to fetch messages" }, 500);
   }
 
-  const formattedMessages = await Promise.all(allMessages.map(async (msg: any) => {
-    // Fetch user for this message
-    const { data: user } = await db
-      .from("user")
-      .select("*")
-      .eq("id", msg.userId)
-      .single();
-
-    // Fetch replyTo message if exists
-    let replyTo = null;
-    if (msg.replyToId) {
-      const { data: replyToMsg } = await db
-        .from("message")
-        .select("*")
-        .eq("id", msg.replyToId)
-        .single();
-      
-      if (replyToMsg) {
-        const { data: replyToUser } = await db
-          .from("user")
-          .select("*")
-          .eq("id", replyToMsg.userId)
-          .single();
-        
-        replyTo = replyToUser ? {
-          id: replyToMsg.id,
-          content: replyToMsg.content,
-          messageType: replyToMsg.messageType,
-          imageUrl: replyToMsg.imageUrl,
-          imageDescription: replyToMsg.imageDescription,
-          userId: replyToMsg.userId,
-          chatId: replyToMsg.chatId,
-          replyToId: replyToMsg.replyToId,
-          editedAt: replyToMsg.editedAt ? new Date(replyToMsg.editedAt).toISOString() : null,
-          isUnsent: replyToMsg.isUnsent,
-          editHistory: replyToMsg.editHistory,
-          createdAt: new Date(replyToMsg.createdAt).toISOString(),
-          user: {
-            id: replyToUser.id,
-            name: replyToUser.name,
-            bio: replyToUser.bio,
-            image: replyToUser.image,
-            hasCompletedOnboarding: replyToUser.hasCompletedOnboarding,
-            createdAt: new Date(replyToUser.createdAt).toISOString(),
-            updatedAt: new Date(replyToUser.updatedAt).toISOString(),
-          },
-        } : null;
+  // Format messages synchronously (no additional queries needed)
+  const formattedMessages = allMessages.map((msg: any) => {
+    // Parse metadata
+    let parsedMetadata = msg.metadata;
+    if (typeof msg.metadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(msg.metadata);
+      } catch {
+        parsedMetadata = null;
       }
     }
-
-    // Fetch reactions for this message
-    const { data: reactions = [] } = await db
-      .from("reaction")
-      .select("*")
-      .eq("messageId", msg.id);
 
     return {
       id: msg.id,
@@ -104,9 +71,16 @@ messages.get("/", async (c) => {
       messageType: msg.messageType,
       imageUrl: msg.imageUrl,
       imageDescription: msg.imageDescription,
+      voiceUrl: msg.voiceUrl,
+      voiceDuration: msg.voiceDuration,
+      eventId: msg.eventId,
+      pollId: msg.pollId,
       userId: msg.userId,
       chatId: msg.chatId,
       replyToId: msg.replyToId,
+      vibeType: msg.vibeType || null,
+      metadata: parsedMetadata,
+      aiFriendId: msg.aiFriendId,
       editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
       isUnsent: msg.isUnsent,
       editHistory: msg.editHistory,
@@ -119,27 +93,243 @@ messages.get("/", async (c) => {
         siteName: msg.linkPreviewSiteName,
         favicon: msg.linkPreviewFavicon,
       } : null,
-      user: user ? {
-        id: user.id,
-        name: user.name,
-        bio: user.bio,
-        image: user.image,
-        hasCompletedOnboarding: user.hasCompletedOnboarding,
-        createdAt: new Date(user.createdAt).toISOString(),
-        updatedAt: new Date(user.updatedAt).toISOString(),
+      user: msg.user ? {
+        id: msg.user.id,
+        name: msg.user.name,
+        bio: msg.user.bio,
+        image: msg.user.image,
+        hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
+        createdAt: new Date(msg.user.createdAt).toISOString(),
+        updatedAt: new Date(msg.user.updatedAt).toISOString(),
       } : null,
-      replyTo,
-      reactions: reactions.map((reaction: any) => ({
+      aiFriend: msg.aiFriend ? {
+        id: msg.aiFriend.id,
+        name: msg.aiFriend.name,
+        color: msg.aiFriend.color,
+        personality: msg.aiFriend.personality,
+        tone: msg.aiFriend.tone,
+        engagementMode: msg.aiFriend.engagementMode,
+        engagementPercent: msg.aiFriend.engagementPercent,
+        chatId: msg.aiFriend.chatId,
+        sortOrder: msg.aiFriend.sortOrder,
+        createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
+        updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
+      } : null,
+      replyTo: msg.replyTo ? {
+        id: msg.replyTo.id,
+        content: msg.replyTo.content,
+        messageType: msg.replyTo.messageType,
+        imageUrl: msg.replyTo.imageUrl,
+        imageDescription: msg.replyTo.imageDescription,
+        userId: msg.replyTo.userId,
+        chatId: msg.replyTo.chatId,
+        replyToId: msg.replyTo.replyToId,
+        aiFriendId: msg.replyTo.aiFriendId,
+        editedAt: msg.replyTo.editedAt ? new Date(msg.replyTo.editedAt).toISOString() : null,
+        isUnsent: msg.replyTo.isUnsent,
+        editHistory: msg.replyTo.editHistory,
+        createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+        user: msg.replyTo.user ? {
+          id: msg.replyTo.user.id,
+          name: msg.replyTo.user.name,
+          bio: msg.replyTo.user.bio,
+          image: msg.replyTo.user.image,
+          hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
+          createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
+          updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
+        } : null,
+        aiFriend: msg.replyTo.aiFriend ? {
+          id: msg.replyTo.aiFriend.id,
+          name: msg.replyTo.aiFriend.name,
+          color: msg.replyTo.aiFriend.color,
+        } : null,
+      } : null,
+      reactions: (msg.reactions || []).map((reaction: any) => ({
         id: reaction.id,
         emoji: reaction.emoji,
         userId: reaction.userId,
         messageId: reaction.messageId,
+        chatId: reaction.chatId,
         createdAt: new Date(reaction.createdAt).toISOString(),
+        user: reaction.user ? {
+          id: reaction.user.id,
+          name: reaction.user.name,
+          image: reaction.user.image,
+        } : null,
+      })),
+      mentions: (msg.mentions || []).map((mention: any) => ({
+        id: mention.id,
+        messageId: mention.messageId,
+        mentionedUserId: mention.mentionedUserId,
+        mentionedByUserId: mention.mentionedByUserId,
+        createdAt: new Date(mention.createdAt).toISOString(),
+        mentionedUser: mention.mentionedUser ? {
+          id: mention.mentionedUser.id,
+          name: mention.mentionedUser.name,
+          image: mention.mentionedUser.image,
+        } : null,
       })),
     };
-  }));
+  });
 
   return c.json(getMessagesResponseSchema.parse(formattedMessages));
+});
+
+// POST /api/messages/batch - Get multiple messages by IDs (for gap recovery and batch fetching)
+messages.post("/batch", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { messageIds } = body as { messageIds: string[] };
+    
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return c.json({ error: "messageIds array is required" }, 400);
+    }
+    
+    // Limit batch size to prevent abuse
+    if (messageIds.length > 100) {
+      return c.json({ error: "Maximum 100 messages per batch request" }, 400);
+    }
+    
+    const { data: messages, error } = await db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*),
+          aiFriend:aiFriendId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*),
+          mentionedBy:mentionedByUserId (*)
+        )
+      `)
+      .in("id", messageIds);
+    
+    if (error) {
+      console.error("[Messages] Error batch fetching messages:", error);
+      return c.json({ error: "Failed to fetch messages" }, 500);
+    }
+    
+    const formattedMessages = (messages || []).map((msg: any) => {
+      let parsedMetadata = msg.metadata;
+      if (typeof msg.metadata === "string") {
+        try {
+          parsedMetadata = JSON.parse(msg.metadata);
+        } catch {
+          parsedMetadata = null;
+        }
+      }
+      
+      return {
+        id: msg.id,
+        content: msg.content,
+        messageType: msg.messageType,
+        imageUrl: msg.imageUrl,
+        imageDescription: msg.imageDescription,
+        voiceUrl: msg.voiceUrl,
+        voiceDuration: msg.voiceDuration,
+        eventId: msg.eventId,
+        pollId: msg.pollId,
+        userId: msg.userId,
+        chatId: msg.chatId,
+        replyToId: msg.replyToId,
+        vibeType: msg.vibeType || null,
+        metadata: parsedMetadata,
+        aiFriendId: msg.aiFriendId,
+        editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
+        isUnsent: msg.isUnsent,
+        editHistory: msg.editHistory,
+        createdAt: new Date(msg.createdAt).toISOString(),
+        linkPreview: msg.linkPreviewUrl ? {
+          url: msg.linkPreviewUrl,
+          title: msg.linkPreviewTitle,
+          description: msg.linkPreviewDescription,
+          image: msg.linkPreviewImage,
+          siteName: msg.linkPreviewSiteName,
+          favicon: msg.linkPreviewFavicon,
+        } : null,
+        user: msg.user ? {
+          id: msg.user.id,
+          name: msg.user.name,
+          bio: msg.user.bio,
+          image: msg.user.image,
+          hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
+          createdAt: new Date(msg.user.createdAt).toISOString(),
+          updatedAt: new Date(msg.user.updatedAt).toISOString(),
+        } : null,
+        aiFriend: msg.aiFriend ? {
+          id: msg.aiFriend.id,
+          name: msg.aiFriend.name,
+          color: msg.aiFriend.color,
+          personality: msg.aiFriend.personality,
+          tone: msg.aiFriend.tone,
+          engagementMode: msg.aiFriend.engagementMode,
+          engagementPercent: msg.aiFriend.engagementPercent,
+          chatId: msg.aiFriend.chatId,
+          sortOrder: msg.aiFriend.sortOrder,
+          createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
+          updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
+        } : null,
+        replyTo: msg.replyTo ? {
+          id: msg.replyTo.id,
+          content: msg.replyTo.content,
+          messageType: msg.replyTo.messageType,
+          imageUrl: msg.replyTo.imageUrl,
+          userId: msg.replyTo.userId,
+          chatId: msg.replyTo.chatId,
+          aiFriendId: msg.replyTo.aiFriendId,
+          createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+          user: msg.replyTo.user ? {
+            id: msg.replyTo.user.id,
+            name: msg.replyTo.user.name,
+            image: msg.replyTo.user.image,
+          } : null,
+          aiFriend: msg.replyTo.aiFriend ? {
+            id: msg.replyTo.aiFriend.id,
+            name: msg.replyTo.aiFriend.name,
+            color: msg.replyTo.aiFriend.color,
+          } : null,
+        } : null,
+        reactions: (msg.reactions || []).map((reaction: any) => ({
+          id: reaction.id,
+          emoji: reaction.emoji,
+          userId: reaction.userId,
+          messageId: reaction.messageId,
+          chatId: reaction.chatId,
+          createdAt: new Date(reaction.createdAt).toISOString(),
+          user: reaction.user ? {
+            id: reaction.user.id,
+            name: reaction.user.name,
+            image: reaction.user.image,
+          } : null,
+        })),
+        mentions: (msg.mentions || []).map((mention: any) => ({
+          id: mention.id,
+          messageId: mention.messageId,
+          mentionedUserId: mention.mentionedUserId,
+          createdAt: new Date(mention.createdAt).toISOString(),
+          mentionedUser: mention.mentionedUser ? {
+            id: mention.mentionedUser.id,
+            name: mention.mentionedUser.name,
+            image: mention.mentionedUser.image,
+          } : null,
+        })),
+      };
+    });
+    
+    return c.json({ messages: formattedMessages });
+  } catch (error) {
+    console.error("[Messages] Error in batch endpoint:", error);
+    return c.json({ error: "Failed to batch fetch messages" }, 500);
+  }
 });
 
 // GET /api/messages/:id - Get a single message details

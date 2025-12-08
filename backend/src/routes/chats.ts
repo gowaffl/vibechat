@@ -22,7 +22,7 @@ import { z } from "zod";
 
 const chats = new Hono<AppType>();
 
-// In-memory typing indicator store: chatId -> { oderId -> timestamp }
+// In-memory typing indicator store: chatId -> { userId -> timestamp }
 const typingIndicators = new Map<string, Map<string, number>>();
 const TYPING_TIMEOUT = 3000; // 3 seconds for users
 
@@ -35,7 +35,52 @@ interface AITypingInfo {
 const aiTypingIndicators = new Map<string, Map<string, AITypingInfo>>();
 const AI_TYPING_TIMEOUT = 60000; // 60 seconds for AI (can take longer to respond)
 
+// TTL-based cleanup for typing indicator Maps to prevent memory leaks
+// Runs every 30 seconds to clean up expired entries and empty chat maps
+const CLEANUP_INTERVAL = 30000; // 30 seconds
+setInterval(() => {
+  const now = Date.now();
+  let cleanedUsers = 0;
+  let cleanedAI = 0;
+  let removedChats = 0;
+  
+  // Clean up user typing indicators
+  for (const [chatId, chatTypers] of typingIndicators.entries()) {
+    for (const [userId, timestamp] of chatTypers.entries()) {
+      if (now - timestamp > TYPING_TIMEOUT) {
+        chatTypers.delete(userId);
+        cleanedUsers++;
+      }
+    }
+    // Remove empty chat maps to free memory
+    if (chatTypers.size === 0) {
+      typingIndicators.delete(chatId);
+      removedChats++;
+    }
+  }
+  
+  // Clean up AI typing indicators
+  for (const [chatId, chatAITypers] of aiTypingIndicators.entries()) {
+    for (const [aiFriendId, info] of chatAITypers.entries()) {
+      if (now - info.timestamp > AI_TYPING_TIMEOUT) {
+        chatAITypers.delete(aiFriendId);
+        cleanedAI++;
+      }
+    }
+    // Remove empty chat maps to free memory
+    if (chatAITypers.size === 0) {
+      aiTypingIndicators.delete(chatId);
+    }
+  }
+  
+  // Only log if cleanup actually did something
+  if (cleanedUsers > 0 || cleanedAI > 0 || removedChats > 0) {
+    console.log(`[TypingCleanup] Cleaned ${cleanedUsers} user indicators, ${cleanedAI} AI indicators, removed ${removedChats} empty chat maps`);
+  }
+}, CLEANUP_INTERVAL);
+
 // Helper to set AI typing status (exported for use in other routes)
+// Also broadcasts via Supabase Realtime so clients receive updates instantly
 export function setAITypingStatus(chatId: string, aiFriendId: string, isTyping: boolean, name?: string, color?: string): void {
   if (!aiTypingIndicators.has(chatId)) {
     aiTypingIndicators.set(chatId, new Map());
@@ -51,6 +96,24 @@ export function setAITypingStatus(chatId: string, aiFriendId: string, isTyping: 
   } else {
     chatAITypers.delete(aiFriendId);
   }
+  
+  // Broadcast AI typing status via Supabase Realtime
+  // This replaces the need for clients to poll the typing endpoint
+  db.channel(`chat:${chatId}`)
+    .send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: {
+        isAI: true,
+        aiFriendId,
+        aiFriendName: name || 'AI Friend',
+        aiFriendColor: color || '#14B8A6',
+        isTyping,
+      },
+    })
+    .catch((err: Error) => {
+      console.error(`[Chats] Error broadcasting AI typing status:`, err);
+    });
 }
 
 // GET /api/chats - Get all chats for a user
@@ -223,6 +286,7 @@ chats.post("/", async (c) => {
 
 // GET /api/chats/unread-counts - Get unread message counts for all user's chats
 // IMPORTANT: This route must come BEFORE /:id route to avoid matching "unread-counts" as a chat ID
+// OPTIMIZED: Uses single database function instead of N+1 queries (2N queries -> 1 query)
 chats.get("/unread-counts", async (c) => {
   try {
     const userId = c.req.query("userId");
@@ -231,59 +295,20 @@ chats.get("/unread-counts", async (c) => {
       return c.json({ error: "userId is required" }, 400);
     }
 
-    const token = c.req.header("Authorization")?.replace("Bearer ", "");
-    const client = token ? createUserClient(token) : db;
+    // Use optimized database function that calculates all unread counts in a single query
+    // This replaces the previous N+1 pattern that was causing 400ms+ response times
+    const { data, error } = await db.rpc("get_unread_counts", { p_user_id: userId });
 
-    // Get all chats the user is a member of
-    const { data: memberships, error: memberError } = await client
-      .from("chat_member")
-      .select("chatId")
-      .eq("userId", userId);
-
-    if (memberError) {
-      console.error("[Chats] Error fetching memberships:", memberError);
+    if (error) {
+      console.error("[Chats] Error getting unread counts:", error);
       return c.json({ error: "Failed to get unread counts" }, 500);
     }
 
-    const chatIds = (memberships || []).map((m: any) => m.chatId);
-
-    // For each chat, count unread messages
-    const unreadCounts = await Promise.all(
-      chatIds.map(async (chatId: string) => {
-        // Get all messages in this chat (excluding current user and system messages)
-        const { data: messagesData } = await client
-          .from("message")
-          .select("id")
-          .eq("chatId", chatId)
-          .neq("userId", userId)
-          .neq("messageType", "system");
-
-        const messages = messagesData || [];
-        const messageIds = messages.map((m: any) => m.id);
-
-        if (messageIds.length === 0) {
-          return { chatId, unreadCount: 0 };
-        }
-
-        // Count messages that don't have a read receipt from this user
-        const { data: readReceiptsData } = await client
-          .from("read_receipt")
-          .select("messageId")
-          .eq("userId", userId)
-          .eq("chatId", chatId)
-          .in("messageId", messageIds);
-
-        const readReceipts = readReceiptsData || [];
-
-        const readMessageIdSet = new Set(readReceipts.map((r: any) => r.messageId));
-        const unreadCount = messageIds.filter((id) => !readMessageIdSet.has(id)).length;
-
-        return {
-          chatId,
-          unreadCount,
-        };
-      })
-    );
+    // Transform to expected format (chatId instead of chat_id)
+    const unreadCounts = (data || []).map((row: { chat_id: string; unread_count: number }) => ({
+      chatId: row.chat_id,
+      unreadCount: Number(row.unread_count),
+    }));
 
     return c.json(unreadCounts);
   } catch (error) {
@@ -835,6 +860,7 @@ chats.get("/:id/messages", async (c) => {
     // HIGH-8: Support pagination for message history
     const limit = parseInt(c.req.query("limit") || "100");
     const cursor = c.req.query("cursor"); // ISO date string for cursor-based pagination
+    const since = c.req.query("since"); // ISO date string for gap recovery (fetch messages AFTER this timestamp)
     
     // Optimize: Fetch messages with all relations in a single query
     let query = db
@@ -859,12 +885,23 @@ chats.get("/:id/messages", async (c) => {
         ),
         tags:message_tag (*)
       `)
-      .eq("chatId", chatId)
-      .order("createdAt", { ascending: false })
-      .limit(limit + 1);
+      .eq("chatId", chatId);
     
-    if (cursor) {
-      query = query.lt("createdAt", cursor);
+    // If 'since' is provided, fetch messages AFTER that timestamp (for gap recovery)
+    // Otherwise, use standard descending order with cursor pagination
+    if (since) {
+      query = query
+        .gt("createdAt", since)
+        .order("createdAt", { ascending: true }) // Oldest first for recovery
+        .limit(limit);
+    } else {
+      query = query
+        .order("createdAt", { ascending: false })
+        .limit(limit + 1);
+      
+      if (cursor) {
+        query = query.lt("createdAt", cursor);
+      }
     }
     
     const { data: messagesData, error: messagesError } = await query;
@@ -874,12 +911,24 @@ chats.get("/:id/messages", async (c) => {
       return c.json({ error: "Failed to fetch messages" }, 500);
     }
     
-    // Check if there are more messages
-    const hasMore = messagesData && messagesData.length > limit;
-    const messages = (messagesData || []).slice(0, limit); // Remove the extra item
-    const nextCursor = hasMore && messages.length > 0 
-      ? messages[messages.length - 1].createdAt 
-      : null;
+    // Handle pagination differently for 'since' queries vs regular pagination
+    let hasMore = false;
+    let messages = messagesData || [];
+    let nextCursor: string | null = null;
+    
+    if (since) {
+      // For gap recovery, return all messages (no pagination trimming needed)
+      // Messages are in ascending order (oldest first), reverse for UI if needed
+      hasMore = false;
+      nextCursor = null;
+    } else {
+      // Standard pagination: check if there are more messages
+      hasMore = messagesData && messagesData.length > limit;
+      messages = messages.slice(0, limit); // Remove the extra item
+      nextCursor = hasMore && messages.length > 0 
+        ? messages[messages.length - 1].createdAt 
+        : null;
+    }
 
     const formattedMessages = messages.map((msg: any) => {
       // Parse metadata if it's a string

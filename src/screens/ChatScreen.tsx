@@ -1486,6 +1486,7 @@ const ChatScreen = () => {
   const [typingUsers, setTypingUsers] = useState<{ id: string; name: string }[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentAt = useRef<number>(0);
+  const chatChannelRef = useRef<ReturnType<typeof supabaseClient.channel> | null>(null); // For sending typing broadcasts
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [showAttachmentsMenu, setShowAttachmentsMenu] = useState(false);
@@ -1674,19 +1675,29 @@ const ChatScreen = () => {
     if (!chatId) return;
 
     console.log(`[Realtime] Subscribing to chat:${chatId} (attempt ${realtimeRetryCount + 1})`);
-    const channel = supabaseClient.channel(`chat:${chatId}`)
-      // Listen for new messages
+    
+    // Track if we've successfully subscribed to prevent unnecessary retries
+    let isSubscribed = false;
+    let subscriptionTimeout: NodeJS.Timeout | null = null;
+    let lastMessageTimestamp: string | null = null; // For gap detection on reconnect
+    
+    const channel = supabaseClient.channel(`chat:${chatId}`, {
+      config: {
+        // Optimize for reliable message delivery
+        broadcast: { self: false },
+        presence: { key: user?.id || '' },
+      },
+    })
+      // Listen for new messages - SERVER-SIDE FILTER by chatId
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'message',
+          filter: `chatId=eq.${chatId}`, // Server-side filter - 95%+ traffic reduction
         },
         async (payload) => {
-          // Client-side filter: only process messages for this chat
-          if (payload.new.chatId !== chatId) return;
-          
           try {
             const newMessageId = payload.new.id;
             // Check for AI message - userId should be null/undefined and aiFriendId should be set
@@ -1697,6 +1708,9 @@ const ChatScreen = () => {
               userId: payload.new.userId,
               aiFriendId: payload.new.aiFriendId
             });
+            
+            // Update last message timestamp for gap detection
+            lastMessageTimestamp = payload.new.createdAt as string;
             
             // If this is an AI message, clear the AI typing indicator immediately
             // This ensures seamless transition: typing indicator -> message appears
@@ -1724,18 +1738,16 @@ const ChatScreen = () => {
           }
         }
       )
-      // Listen for message updates (edits)
+      // Listen for message updates (edits) - SERVER-SIDE FILTER by chatId
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'message',
+          filter: `chatId=eq.${chatId}`, // Server-side filter
         },
         async (payload) => {
-          // Client-side filter: only process messages for this chat
-          if (payload.new.chatId !== chatId) return;
-          
           console.log('[Realtime] Message updated:', payload.new.id);
           try {
             // Fetch full message details (including tags for Smart Threads)
@@ -1754,34 +1766,30 @@ const ChatScreen = () => {
           }
         }
       )
-      // Listen for message deletions
+      // Listen for message deletions - SERVER-SIDE FILTER by chatId
       .on(
         'postgres_changes',
         {
           event: 'DELETE',
           schema: 'public',
           table: 'message',
+          filter: `chatId=eq.${chatId}`, // Server-side filter
         },
         (payload) => {
-          // Client-side filter: only process messages for this chat
-          if (payload.old.chatId !== chatId) return;
-          
           console.log('[Realtime] Message deleted:', payload.old.id);
           setAllMessages(prev => prev.filter(m => m.id !== payload.old.id));
         }
       )
-      // Listen for reactions
+      // Listen for reactions - SERVER-SIDE FILTER by chatId
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'reaction',
+          filter: `chatId=eq.${chatId}`, // Server-side filter
         },
         async (payload) => {
-           // Client-side filter: only process reactions for this chat
-           if (payload.new.chatId !== chatId) return;
-           
            const msgId = payload.new.messageId;
            try {
              const updatedMsg = await api.get<Message>(`/api/messages/${msgId}`);
@@ -1797,11 +1805,9 @@ const ChatScreen = () => {
           event: 'DELETE',
           schema: 'public',
           table: 'reaction',
+          filter: `chatId=eq.${chatId}`, // Server-side filter
         },
         async (payload) => {
-           // Client-side filter: only process reactions for this chat
-           if (payload.old.chatId !== chatId) return;
-           
            const msgId = payload.old.messageId;
            try {
              const updatedMsg = await api.get<Message>(`/api/messages/${msgId}`);
@@ -1811,9 +1817,63 @@ const ChatScreen = () => {
            } catch (e) { console.error(e); }
         }
       )
-    // Track if we've successfully subscribed to prevent unnecessary retries
-    let isSubscribed = false;
-    let subscriptionTimeout: NodeJS.Timeout | null = null;
+      // Listen for AI Friend changes - SERVER-SIDE FILTER by chatId
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ai_friend',
+          filter: `chatId=eq.${chatId}`,
+        },
+        (payload) => {
+          console.log('[Realtime] AI Friend changed:', payload);
+          queryClient.invalidateQueries({ queryKey: ["aiFriends", chatId] });
+        }
+      )
+      // Listen for typing broadcasts (replaces polling)
+      .on(
+        'broadcast',
+        { event: 'typing' },
+        (payload) => {
+          const { userId: typerId, userName, isTyping, isAI, aiFriendId, aiFriendName, aiFriendColor } = payload.payload || {};
+          
+          // Handle AI typing
+          if (isAI && aiFriendId) {
+            if (isTyping) {
+              setIsAITyping(true);
+              setTypingAIFriend({
+                id: aiFriendId,
+                name: aiFriendName || 'AI Friend',
+                color: aiFriendColor || '#14B8A6',
+              } as AIFriend);
+            } else {
+              setIsAITyping(false);
+              setTypingAIFriend(null);
+            }
+            return;
+          }
+          
+          // Handle user typing - skip our own typing events
+          if (typerId === user?.id) return;
+          
+          setTypingUsers(prev => {
+            if (isTyping) {
+              // Add typer if not already present
+              if (!prev.some(t => t.id === typerId)) {
+                return [...prev, { id: typerId, name: userName || 'Someone' }];
+              }
+              return prev;
+            } else {
+              // Remove typer
+              return prev.filter(t => t.id !== typerId);
+            }
+          });
+        }
+      );
+
+    // Store channel ref for sending typing broadcasts
+    chatChannelRef.current = channel;
 
     // Safety net: if we don't get SUBSCRIBED within 5s, force a refetch and retry
     subscriptionTimeout = setTimeout(() => {
@@ -1850,9 +1910,10 @@ const ChatScreen = () => {
       if (subscriptionTimeout) {
         clearTimeout(subscriptionTimeout);
       }
+      chatChannelRef.current = null;
       supabaseClient.removeChannel(channel);
     };
-  }, [chatId, queryClient, realtimeRetryCount]);
+  }, [chatId, queryClient, realtimeRetryCount, user?.id]);
 
   // Update messages state when data changes
   useEffect(() => {
@@ -2432,43 +2493,9 @@ const ChatScreen = () => {
   console.log("[Smart Replies Frontend] Current smart replies:", smartReplies);
 
 
-  // Fetch typing users for this chat (includes both users and AI friends)
-  useQuery({
-    queryKey: ["typing", chatId],
-    queryFn: async () => {
-      const response = await api.get<{ typingUsers: { id: string; name: string; isAI?: boolean; color?: string }[] }>(
-        `/api/chats/${chatId}/typing?userId=${user?.id}`
-      );
-      const typers = response.typingUsers || [];
-      
-      // Separate AI typers from human typers
-      const humanTypers = typers.filter(t => !t.isAI);
-      const aiTypers = typers.filter(t => t.isAI);
-      
-      // Update human typing users
-      setTypingUsers(humanTypers);
-      
-      // Update AI typing status
-      if (aiTypers.length > 0) {
-        const aiTyper = aiTypers[0]; // Show first AI friend typing
-        setIsAITyping(true);
-        setTypingAIFriend({
-          id: aiTyper.id,
-          name: aiTyper.name,
-          color: aiTyper.color || "#14B8A6",
-        } as AIFriend);
-      } else {
-        // Clear typing indicator when backend reports no AI typers
-        // This provides a fallback in case realtime doesn't fire
-        setIsAITyping(false);
-        setTypingAIFriend(null);
-      }
-      
-      return response;
-    },
-    refetchInterval: 1000, // Poll every 1 second
-    enabled: !!user?.id && !!chatId,
-  });
+  // Typing indicators are now handled via Supabase Realtime broadcast (see channel subscription above)
+  // This eliminates 1-second polling that was causing 5000 req/sec at scale
+  // AI typing is also broadcast from the backend when AI friends start/stop typing
 
   // HIGH-10: Mark messages as read when viewing the chat
   // Use a ref to track what we've already marked to avoid re-marking on every poll
@@ -2632,10 +2659,13 @@ const ChatScreen = () => {
       // Snapshot the previous data (now in paginated format)
       const previousData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
 
+      // Generate unique optimistic ID with timestamp
+      const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
       // Optimistically update to the new value
       if (previousData?.messages && user) {
         const optimisticMessage: Message = {
-          id: `optimistic-${Date.now()}`, // Temporary ID
+          id: optimisticId,
           content: newMessage.content || "",
           messageType: newMessage.messageType,
           imageUrl: newMessage.imageUrl,
@@ -2650,6 +2680,7 @@ const ChatScreen = () => {
           reactions: [],
           replyTo: newMessage.replyToId ? previousData.messages.find(m => m.id === newMessage.replyToId) : undefined,
           mentions: [], // Mentions will be populated by the server response
+          metadata: { ...newMessage.metadata, _isPending: true }, // Mark as pending for UI
         };
 
         // Update with paginated format (prepend for descending order: Newest -> Oldest)
@@ -2666,8 +2697,8 @@ const ChatScreen = () => {
         setAllMessages(prev => [optimisticMessage, ...prev]);
       }
 
-      // Return context with the previous data for rollback
-      return { previousData };
+      // Return context with the previous data and optimistic ID for rollback
+      return { previousData, optimisticId };
     },
     onError: (err, newMessage, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
@@ -2679,13 +2710,22 @@ const ChatScreen = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", "Failed to send message. Please try again.");
     },
-    onSuccess: (newMessage) => {
+    onSuccess: (newMessage, _variables, context) => {
       // Smoothly replace optimistic message with real one from server
       const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
       if (currentData?.messages) {
-        // Remove optimistic message and prepend real one (descending order: Newest -> Oldest)
-        const withoutOptimistic = currentData.messages.filter(m => !m.id.startsWith('optimistic-'));
-        const updatedMessages = [newMessage, ...withoutOptimistic];
+        // Remove the specific optimistic message by its ID and add the real one
+        // This prevents issues when sending multiple messages rapidly
+        const withoutOptimistic = currentData.messages.filter(m => 
+          m.id !== context?.optimisticId && !m.id.startsWith('optimistic-')
+        );
+        
+        // Deduplicate: ensure we don't add the message if it was already added via realtime
+        const messageExists = withoutOptimistic.some(m => m.id === newMessage.id);
+        const updatedMessages = messageExists 
+          ? withoutOptimistic 
+          : [newMessage, ...withoutOptimistic];
+          
         queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
           {
@@ -4506,29 +4546,33 @@ const ChatScreen = () => {
     const THROTTLE_MS = 2000; // Only send "is typing" every 2 seconds
 
     if (text.trim().length > 0) {
-      // Send typing indicator if throttled
+      // Send typing indicator via broadcast if throttled (replaces polling)
       if (now - lastTypingSentAt.current > THROTTLE_MS) {
         lastTypingSentAt.current = now;
-        api.post(`/api/chats/${chatId}/typing`, {
-          userId: user.id,
-          isTyping: true,
-        }).catch((err) => console.error("Error sending typing indicator:", err));
+        // Use Supabase broadcast instead of HTTP POST - eliminates server load
+        chatChannelRef.current?.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { userId: user.id, userName: user.name, isTyping: true },
+        });
       }
 
       // Set timeout to stop typing after 3 seconds of inactivity
       typingTimeoutRef.current = setTimeout(() => {
-        api.post(`/api/chats/${chatId}/typing`, {
-          userId: user.id,
-          isTyping: false,
-        }).catch((err) => console.error("Error clearing typing indicator:", err));
+        chatChannelRef.current?.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { userId: user.id, userName: user.name, isTyping: false },
+        });
         lastTypingSentAt.current = 0; // Reset so next typing immediately sends indicator
       }, 3000);
     } else {
       // Stop typing indicator if text is empty
-      api.post(`/api/chats/${chatId}/typing`, {
-        userId: user.id,
-        isTyping: false,
-      }).catch((err) => console.error("Error clearing typing indicator:", err));
+      chatChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userId: user.id, userName: user.name, isTyping: false },
+      });
       lastTypingSentAt.current = 0;
     }
 
@@ -4677,17 +4721,18 @@ const ChatScreen = () => {
     console.log('[ChatScreen] AI friend mention inserted:', `@${aiFriend.name}`, '(ID:', aiFriend.id, ')');
   };
 
-  // Clear typing indicator on unmount
+  // Clear typing indicator on unmount (via broadcast)
   useEffect(() => {
     return () => {
-      if (user?.id && chatId) {
-        api.post(`/api/chats/${chatId}/typing`, {
-          userId: user.id,
-          isTyping: false,
-        }).catch((err) => console.error("Error clearing typing indicator on unmount:", err));
+      if (user?.id && chatChannelRef.current) {
+        chatChannelRef.current.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { userId: user.id, userName: user.name, isTyping: false },
+        });
       }
     };
-  }, [user?.id, chatId]);
+  }, [user?.id, user?.name]);
 
   // Auto-scroll logic and New Message detection
   useEffect(() => {

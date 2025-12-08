@@ -6,6 +6,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 
 import { env } from "./env";
 import { db } from "./db";
+import { rateLimiter } from "./middleware/rate-limiter";
 
 // Test database connectivity at startup
 async function testDatabaseConnection() {
@@ -75,6 +76,9 @@ const app = new Hono();
 console.log("🔧 Initializing Hono application...");
 app.use("*", logger());
 app.use("/*", cors());
+// Rate limiting to protect against runaway clients
+// Applies different limits based on endpoint type (auth, heavy, light, default)
+app.use("/api/*", rateLimiter());
 
 // Serve uploaded images statically
 // Files in uploads/ directory are accessible at /uploads/* URLs

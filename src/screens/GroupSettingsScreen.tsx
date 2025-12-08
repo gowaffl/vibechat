@@ -33,6 +33,7 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { api, BACKEND_URL } from "@/lib/api";
+import { supabaseClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
@@ -227,6 +228,33 @@ const GroupSettingsScreen = () => {
     queryFn: () => aiFriendsApi.getAIFriends(chatId, user?.id || ""),
     enabled: !!user?.id && !!chatId,
   });
+
+  // Subscribe to AI friend changes
+  React.useEffect(() => {
+    if (!chatId) return;
+
+    console.log(`[GroupSettings] Subscribing to AI friends changes for chat ${chatId}`);
+    const channel = supabaseClient.channel(`ai_friends:${chatId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ai_friend',
+          filter: `chatId=eq.${chatId}`,
+        },
+        (payload) => {
+          console.log('[GroupSettings] AI Friend change detected:', payload);
+          queryClient.invalidateQueries({ queryKey: ["aiFriends", chatId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log(`[GroupSettings] Unsubscribing from AI friends changes`);
+      supabaseClient.removeChannel(channel);
+    };
+  }, [chatId, queryClient]);
 
   // Fetch messages to extract photos and links
   const { data: messagesData } = useQuery({

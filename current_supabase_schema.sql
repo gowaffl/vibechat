@@ -14,6 +14,16 @@
 -- - add_service_role_policies ✅ APPLIED (December 2, 2025) - Added explicit service role RLS policies
 -- - add_is_muted_to_chat_member ✅ APPLIED (December 4, 2025) - Added isMuted column to chat_member
 -- - add_summary_preference_to_user ✅ APPLIED (December 5, 2025) - Added summaryPreference and hasSeenSummaryPreferencePrompt columns
+-- - fix_rls_policy_performance ✅ APPLIED (December 8, 2025) - Optimized 34 RLS policies using (SELECT auth.uid()) pattern
+-- - add_missing_foreign_key_indexes ✅ APPLIED (December 8, 2025) - Added missing indexes on poll tables
+--
+-- PERFORMANCE OPTIMIZATION (December 8, 2025):
+-- - Fixed all RLS policies to use (SELECT auth.uid()) instead of auth.uid() for per-query evaluation
+-- - Added missing foreign key indexes: idx_poll_creatorId, idx_poll_vote_optionId
+-- - Added performance indexes: idx_message_chatId_createdAt_desc, idx_read_receipt_chatId_userId, idx_reaction_messageId
+-- - Enabled RLS on ai_engagement_lock table
+-- - Fixed function search_path security: is_chat_member, acquire_ai_lock, notify_new_message_for_ai, update_thread_member_lastviewedat
+-- - Consolidated duplicate permissive policies on ai_friend, chat, and chat_member tables
 --
 -- FEATURE: Multi-Image & Video Support (December 2, 2025)
 -- - Added messageType 'video' to message table
@@ -686,4 +696,45 @@ BEGIN
 
   RETURN lock_acquired;
 END;
+$$;
+
+-- Function to efficiently calculate unread message counts for a user across all their chats
+-- This replaces the N+1 query pattern with a single optimized query
+CREATE OR REPLACE FUNCTION get_unread_counts(p_user_id text)
+RETURNS TABLE (
+  chat_id text,
+  unread_count bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH user_chats AS (
+    -- Get all chats the user is a member of
+    SELECT "chatId" FROM chat_member WHERE "userId" = p_user_id
+  ),
+  unread_messages AS (
+    -- Count messages in each chat that:
+    -- 1. Are not from the current user
+    -- 2. Are not system messages
+    -- 3. Don't have a read receipt from the current user
+    SELECT 
+      m."chatId",
+      COUNT(m.id) AS unread_count
+    FROM message m
+    INNER JOIN user_chats uc ON m."chatId" = uc."chatId"
+    LEFT JOIN read_receipt rr ON rr."messageId" = m.id AND rr."userId" = p_user_id
+    WHERE 
+      (m."userId" IS NULL OR m."userId" != p_user_id)  -- Not from current user (includes AI messages)
+      AND m."messageType" != 'system'                   -- Not system messages
+      AND rr.id IS NULL                                 -- No read receipt exists
+    GROUP BY m."chatId"
+  )
+  -- Return all user chats with their unread counts (0 if no unread messages)
+  SELECT 
+    uc."chatId" AS chat_id,
+    COALESCE(um.unread_count, 0) AS unread_count
+  FROM user_chats uc
+  LEFT JOIN unread_messages um ON uc."chatId" = um."chatId";
 $$;
