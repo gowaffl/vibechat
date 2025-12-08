@@ -166,15 +166,20 @@ onlineManager.setEventListener((setOnline) => {
 export const persistOptions = {
   persister: mmkvPersister,
   maxAge: 1000 * 60 * 60 * 24 * 7, // Persist for 7 days
-  buster: 'v2', // Increment to clear cache on schema changes (bumped for optimization)
-  // Don't persist certain queries that should always be fresh
+  buster: 'v3', // Increment to clear cache on schema changes (bumped for encryption fixes)
+  // Don't persist certain queries that should always be fresh or are in pending state
   dehydrateOptions: {
     shouldDehydrateQuery: (query: any) => {
+      // Never persist pending queries - they will fail on rehydration
+      if (query.state.status === 'pending') return false;
+      
       const key = query.queryKey[0] as string;
       // Don't persist unread counts (should always be fresh)
       if (key === 'unread-counts') return false;
       // Don't persist typing indicators
       if (key === 'typing') return false;
+      // Don't persist catchup (AI-generated, should be fresh)
+      if (key === 'catchup') return false;
       return true;
     },
   },
