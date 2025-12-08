@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { db, executeWithRetry } from "../db";
 import { generateCatchUpRequestSchema, getCatchUpRequestSchema } from "@shared/contracts";
 import { openai } from "../env";
+import { decryptMessages } from "../services/message-encryption";
 
 const catchup = new Hono();
 
@@ -110,12 +111,15 @@ catchup.post("/generate", zValidator("json", generateCatchUpRequestSchema), asyn
       .order("createdAt", { ascending: true })
       .limit(100);
     
-    const messagesData = messagesDataRaw || [];
+    const messagesDataTemp = messagesDataRaw || [];
 
     if (messagesError) {
       console.error("[Catch-Up] Error fetching messages:", messagesError);
       return c.json({ error: "Failed to fetch messages" }, 500);
     }
+
+    // Decrypt any encrypted messages
+    const messagesData = await decryptMessages(messagesDataTemp);
 
     // Fetch users for messages
     const userIds = [...new Set(messagesData.map((m: any) => m.userId))];

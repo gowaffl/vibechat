@@ -24,6 +24,7 @@ import {
   logSafetyEvent,
 } from "../services/content-safety";
 import { setAITypingStatus } from "./chats";
+import { decryptMessages } from "../services/message-encryption";
 
 const ai = new Hono<AppType>();
 
@@ -202,8 +203,11 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       .order("createdAt", { ascending: false })
       .limit(100);
 
+    // Decrypt any encrypted messages
+    const decryptedMessages = await decryptMessages(allMessages);
+
     // Reverse to get chronological order
-    const messagesInOrder = allMessages.reverse();
+    const messagesInOrder = decryptedMessages.reverse();
 
     // Get last 10 messages for recent context, last 5 for immediate context
     const recentMessages = messagesInOrder.slice(-10);
@@ -525,8 +529,8 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // User will see the preview modal instead of typing animation
 
     console.log("[AI Image] Generating image with Gemini 3 Pro Image Preview:", prompt);
-    console.log("[AI Image] API Key available:", !!process.env.GOOGLE_API_KEY);
-    console.log("[AI Image] API Key length:", process.env.GOOGLE_API_KEY?.length);
+    // Note: Never log API keys or credentials - only log availability status
+    console.log("[AI Image] API Key configured:", !!process.env.GOOGLE_API_KEY);
 
     // If reference images are provided, read them and include in the request
     const referenceImages: Array<{ base64: string; mimeType: string }> = [];
@@ -1316,8 +1320,8 @@ ai.post("/generate-group-avatar", async (c) => {
     }
 
     console.log("[AI Avatar] Starting chat avatar generation for chat:", chatId);
-    console.log("[AI Avatar] GOOGLE_API_KEY available:", !!process.env.GOOGLE_API_KEY);
-    console.log("[AI Avatar] GOOGLE_API_KEY length:", process.env.GOOGLE_API_KEY?.length);
+    // Note: Never log API keys or credentials - only log availability status
+    console.log("[AI Avatar] API Key configured:", !!process.env.GOOGLE_API_KEY);
 
     // Get chat
     const { data: chat } = await db
@@ -1363,15 +1367,18 @@ ai.post("/generate-group-avatar", async (c) => {
       .order("createdAt", { ascending: false })
       .limit(100);
 
+    // Decrypt any encrypted messages
+    const decryptedRecentMessages = await decryptMessages(recentMessages);
+
     let prompt: string;
 
-    if (recentMessages.length === 0) {
+    if (decryptedRecentMessages.length === 0) {
       // No messages, generate based on chat name
       prompt = `Create a beautiful, modern, and vibrant group chat avatar image for a chat group named "${chat.name}". ${chat.bio ? `The group is about: ${chat.bio}. ` : ""}Make it colorful, friendly, and welcoming. The image should represent community and conversation.`;
       console.log("[AI Avatar] No messages found, generating based on chat name");
     } else {
       // Analyze messages to create prompt
-      const messagesInOrder = recentMessages.reverse();
+      const messagesInOrder = decryptedRecentMessages.reverse();
 
       // Collect key themes and topics from messages
       const messageContents = messagesInOrder

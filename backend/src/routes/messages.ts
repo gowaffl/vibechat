@@ -18,6 +18,7 @@ import { generateImageDescription } from "../services/image-description";
 import { extractFirstUrl } from "../utils/url-utils";
 import { fetchLinkPreview } from "../services/link-preview";
 import { tagMessage } from "../services/message-tagger";
+import { decryptMessages } from "../services/message-encryption";
 
 const messages = new Hono<AppType>();
 
@@ -53,8 +54,11 @@ messages.get("/", async (c) => {
     return c.json({ error: "Failed to fetch messages" }, 500);
   }
 
+  // Decrypt any encrypted messages
+  const decryptedMessages = await decryptMessages(allMessages || []);
+
   // Format messages synchronously (no additional queries needed)
-  const formattedMessages = allMessages.map((msg: any) => {
+  const formattedMessages = decryptedMessages.map((msg: any) => {
     // Parse metadata
     let parsedMetadata = msg.metadata;
     if (typeof msg.metadata === "string") {
@@ -218,7 +222,10 @@ messages.post("/batch", async (c) => {
       return c.json({ error: "Failed to fetch messages" }, 500);
     }
     
-    const formattedMessages = (messages || []).map((msg: any) => {
+    // Decrypt any encrypted messages
+    const decryptedMessages = await decryptMessages(messages || []);
+    
+    const formattedMessages = decryptedMessages.map((msg: any) => {
       let parsedMetadata = msg.metadata;
       if (typeof msg.metadata === "string") {
         try {
@@ -365,8 +372,11 @@ messages.get("/:id", async (c) => {
       return c.json({ error: "Message not found" }, 404);
     }
 
+    // Decrypt message if encrypted
+    const [decryptedMsg] = await decryptMessages([msg]);
+
     // Parse metadata
-    let parsedMetadata = msg.metadata;
+    let parsedMetadata = decryptedMsg.metadata;
     if (typeof msg.metadata === "string") {
       try {
         parsedMetadata = JSON.parse(msg.metadata);
@@ -376,86 +386,86 @@ messages.get("/:id", async (c) => {
     }
 
     const formattedMessage = {
-      id: msg.id,
-      content: msg.content,
-      messageType: msg.messageType,
-      imageUrl: msg.imageUrl,
-      imageDescription: msg.imageDescription,
-      voiceUrl: msg.voiceUrl,
-      voiceDuration: msg.voiceDuration,
-      eventId: msg.eventId,
-      pollId: msg.pollId,
-      userId: msg.userId,
-      chatId: msg.chatId,
-      replyToId: msg.replyToId,
-      vibeType: msg.vibeType || null,
+      id: decryptedMsg.id,
+      content: decryptedMsg.content,
+      messageType: decryptedMsg.messageType,
+      imageUrl: decryptedMsg.imageUrl,
+      imageDescription: decryptedMsg.imageDescription,
+      voiceUrl: decryptedMsg.voiceUrl,
+      voiceDuration: decryptedMsg.voiceDuration,
+      eventId: decryptedMsg.eventId,
+      pollId: decryptedMsg.pollId,
+      userId: decryptedMsg.userId,
+      chatId: decryptedMsg.chatId,
+      replyToId: decryptedMsg.replyToId,
+      vibeType: decryptedMsg.vibeType || null,
       metadata: parsedMetadata,
-      aiFriendId: msg.aiFriendId,
-      aiFriend: msg.aiFriend ? {
-        id: msg.aiFriend.id,
-        name: msg.aiFriend.name,
-        color: msg.aiFriend.color,
-        personality: msg.aiFriend.personality,
-        tone: msg.aiFriend.tone,
-        engagementMode: msg.aiFriend.engagementMode,
-        engagementPercent: msg.aiFriend.engagementPercent,
-        chatId: msg.aiFriend.chatId,
-        sortOrder: msg.aiFriend.sortOrder,
-        createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
-        updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
+      aiFriendId: decryptedMsg.aiFriendId,
+      aiFriend: decryptedMsg.aiFriend ? {
+        id: decryptedMsg.aiFriend.id,
+        name: decryptedMsg.aiFriend.name,
+        color: decryptedMsg.aiFriend.color,
+        personality: decryptedMsg.aiFriend.personality,
+        tone: decryptedMsg.aiFriend.tone,
+        engagementMode: decryptedMsg.aiFriend.engagementMode,
+        engagementPercent: decryptedMsg.aiFriend.engagementPercent,
+        chatId: decryptedMsg.aiFriend.chatId,
+        sortOrder: decryptedMsg.aiFriend.sortOrder,
+        createdAt: new Date(decryptedMsg.aiFriend.createdAt).toISOString(),
+        updatedAt: new Date(decryptedMsg.aiFriend.updatedAt).toISOString(),
       } : null,
-      editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
-      isUnsent: msg.isUnsent,
-      editHistory: msg.editHistory,
-      user: msg.user ? {
-        id: msg.user.id,
-        name: msg.user.name,
-        bio: msg.user.bio,
-        image: msg.user.image,
-        hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
-        createdAt: new Date(msg.user.createdAt).toISOString(),
-        updatedAt: new Date(msg.user.updatedAt).toISOString(),
+      editedAt: decryptedMsg.editedAt ? new Date(decryptedMsg.editedAt).toISOString() : null,
+      isUnsent: decryptedMsg.isUnsent,
+      editHistory: decryptedMsg.editHistory,
+      user: decryptedMsg.user ? {
+        id: decryptedMsg.user.id,
+        name: decryptedMsg.user.name,
+        bio: decryptedMsg.user.bio,
+        image: decryptedMsg.user.image,
+        hasCompletedOnboarding: decryptedMsg.user.hasCompletedOnboarding,
+        createdAt: new Date(decryptedMsg.user.createdAt).toISOString(),
+        updatedAt: new Date(decryptedMsg.user.updatedAt).toISOString(),
       } : null,
-      replyTo: msg.replyTo ? {
-        id: msg.replyTo.id,
-        content: msg.replyTo.content,
-        messageType: msg.replyTo.messageType,
-        imageUrl: msg.replyTo.imageUrl,
-        imageDescription: msg.replyTo.imageDescription,
-        voiceUrl: msg.replyTo.voiceUrl,
-        voiceDuration: msg.replyTo.voiceDuration,
-        userId: msg.replyTo.userId,
-        chatId: msg.replyTo.chatId,
-        replyToId: msg.replyTo.replyToId,
-        aiFriendId: msg.replyTo.aiFriendId,
-        editedAt: msg.replyTo.editedAt ? new Date(msg.replyTo.editedAt).toISOString() : null,
-        isUnsent: msg.replyTo.isUnsent,
-        editHistory: msg.replyTo.editHistory,
-        user: msg.replyTo.user ? {
-          id: msg.replyTo.user.id,
-          name: msg.replyTo.user.name,
-          bio: msg.replyTo.user.bio,
-          image: msg.replyTo.user.image,
-          hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
-          createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
-          updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
+      replyTo: decryptedMsg.replyTo ? {
+        id: decryptedMsg.replyTo.id,
+        content: decryptedMsg.replyTo.content,
+        messageType: decryptedMsg.replyTo.messageType,
+        imageUrl: decryptedMsg.replyTo.imageUrl,
+        imageDescription: decryptedMsg.replyTo.imageDescription,
+        voiceUrl: decryptedMsg.replyTo.voiceUrl,
+        voiceDuration: decryptedMsg.replyTo.voiceDuration,
+        userId: decryptedMsg.replyTo.userId,
+        chatId: decryptedMsg.replyTo.chatId,
+        replyToId: decryptedMsg.replyTo.replyToId,
+        aiFriendId: decryptedMsg.replyTo.aiFriendId,
+        editedAt: decryptedMsg.replyTo.editedAt ? new Date(decryptedMsg.replyTo.editedAt).toISOString() : null,
+        isUnsent: decryptedMsg.replyTo.isUnsent,
+        editHistory: decryptedMsg.replyTo.editHistory,
+        user: decryptedMsg.replyTo.user ? {
+          id: decryptedMsg.replyTo.user.id,
+          name: decryptedMsg.replyTo.user.name,
+          bio: decryptedMsg.replyTo.user.bio,
+          image: decryptedMsg.replyTo.user.image,
+          hasCompletedOnboarding: decryptedMsg.replyTo.user.hasCompletedOnboarding,
+          createdAt: new Date(decryptedMsg.replyTo.user.createdAt).toISOString(),
+          updatedAt: new Date(decryptedMsg.replyTo.user.updatedAt).toISOString(),
         } : null,
-        aiFriend: msg.replyTo.aiFriend ? {
-          id: msg.replyTo.aiFriend.id,
-          name: msg.replyTo.aiFriend.name,
-          color: msg.replyTo.aiFriend.color,
-          personality: msg.replyTo.aiFriend.personality,
-          tone: msg.replyTo.aiFriend.tone,
-          engagementMode: msg.replyTo.aiFriend.engagementMode,
-          engagementPercent: msg.replyTo.aiFriend.engagementPercent,
-          chatId: msg.replyTo.aiFriend.chatId,
-          sortOrder: msg.replyTo.aiFriend.sortOrder,
-          createdAt: new Date(msg.replyTo.aiFriend.createdAt).toISOString(),
-          updatedAt: new Date(msg.replyTo.aiFriend.updatedAt).toISOString(),
+        aiFriend: decryptedMsg.replyTo.aiFriend ? {
+          id: decryptedMsg.replyTo.aiFriend.id,
+          name: decryptedMsg.replyTo.aiFriend.name,
+          color: decryptedMsg.replyTo.aiFriend.color,
+          personality: decryptedMsg.replyTo.aiFriend.personality,
+          tone: decryptedMsg.replyTo.aiFriend.tone,
+          engagementMode: decryptedMsg.replyTo.aiFriend.engagementMode,
+          engagementPercent: decryptedMsg.replyTo.aiFriend.engagementPercent,
+          chatId: decryptedMsg.replyTo.aiFriend.chatId,
+          sortOrder: decryptedMsg.replyTo.aiFriend.sortOrder,
+          createdAt: new Date(decryptedMsg.replyTo.aiFriend.createdAt).toISOString(),
+          updatedAt: new Date(decryptedMsg.replyTo.aiFriend.updatedAt).toISOString(),
         } : null,
-        createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+        createdAt: new Date(decryptedMsg.replyTo.createdAt).toISOString(),
       } : null,
-      reactions: (msg.reactions || []).map((r: any) => ({
+      reactions: (decryptedMsg.reactions || []).map((r: any) => ({
         id: r.id,
         emoji: r.emoji,
         userId: r.userId,
@@ -471,7 +481,7 @@ messages.get("/:id", async (c) => {
           updatedAt: new Date(r.user.updatedAt).toISOString(),
         } : null,
       })),
-      mentions: (msg.mentions || []).map((mention: any) => ({
+      mentions: (decryptedMsg.mentions || []).map((mention: any) => ({
         id: mention.id,
         messageId: mention.messageId,
         mentionedUserId: mention.mentionedUserId,
@@ -496,15 +506,15 @@ messages.get("/:id", async (c) => {
           updatedAt: new Date(mention.mentionedBy.updatedAt).toISOString(),
         } : null,
       })),
-      linkPreview: msg.linkPreviewUrl ? {
-        url: msg.linkPreviewUrl,
-        title: msg.linkPreviewTitle,
-        description: msg.linkPreviewDescription,
-        image: msg.linkPreviewImage,
-        siteName: msg.linkPreviewSiteName,
-        favicon: msg.linkPreviewFavicon,
+      linkPreview: decryptedMsg.linkPreviewUrl ? {
+        url: decryptedMsg.linkPreviewUrl,
+        title: decryptedMsg.linkPreviewTitle,
+        description: decryptedMsg.linkPreviewDescription,
+        image: decryptedMsg.linkPreviewImage,
+        siteName: decryptedMsg.linkPreviewSiteName,
+        favicon: decryptedMsg.linkPreviewFavicon,
       } : null,
-      createdAt: new Date(msg.createdAt).toISOString(),
+      createdAt: new Date(decryptedMsg.createdAt).toISOString(),
     };
 
     return c.json(formattedMessage);

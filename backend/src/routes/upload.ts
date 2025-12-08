@@ -5,7 +5,8 @@ import { z } from "zod";
 import { type AppType } from "../index";
 import { zValidator } from "@hono/zod-validator";
 import { uploadImageRequestSchema, type UploadImageResponse, type UploadVideoResponse } from "../../../shared/contracts";
-import { uploadFileToStorage } from "../services/storage";
+import { uploadFileToStorage, getSignedUrl, getSignedUrls, extractPathFromUrl } from "../services/storage";
+import { verifyToken } from "../auth";
 
 const uploadRouter = new Hono<AppType>();
 
@@ -182,6 +183,119 @@ uploadRouter.post("/video", zValidator("form", uploadVideoFormSchema), async (c)
       error instanceof Error ? error.stack : "No stack trace available",
     );
     return c.json({ error: "Failed to upload video" }, 500);
+  }
+});
+
+// ============================================
+// POST /api/upload/signed-url - Get a signed URL for a file
+// ============================================
+// Requires authentication
+// Accepts either a file path or a full URL (will extract path)
+// Returns a signed URL valid for 24 hours
+const signedUrlRequestSchema = z.object({
+  path: z.string().optional(),
+  url: z.string().optional(),
+  expiresIn: z.number().optional().default(86400), // Default 24 hours
+}).refine((data) => data.path || data.url, {
+  message: "Either path or url must be provided",
+});
+
+uploadRouter.post("/signed-url", zValidator("json", signedUrlRequestSchema), async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) {
+    return c.json({ error: "Authorization required" }, 401);
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const userId = await verifyToken(token);
+  if (!userId) {
+    return c.json({ error: "Invalid or expired token" }, 401);
+  }
+
+  const { path: filePath, url, expiresIn } = c.req.valid("json");
+
+  try {
+    // Extract path from URL if provided
+    let finalPath = filePath;
+    if (!finalPath && url) {
+      finalPath = extractPathFromUrl(url);
+      if (!finalPath) {
+        return c.json({ error: "Invalid storage URL provided" }, 400);
+      }
+    }
+
+    if (!finalPath) {
+      return c.json({ error: "No valid path could be determined" }, 400);
+    }
+
+    const signedUrl = await getSignedUrl(finalPath, "uploads", expiresIn);
+    
+    return c.json({
+      success: true,
+      signedUrl,
+      expiresIn,
+    });
+  } catch (error) {
+    console.error("💥 [Upload] Signed URL error:", error);
+    return c.json({ error: "Failed to generate signed URL" }, 500);
+  }
+});
+
+// ============================================
+// POST /api/upload/signed-urls - Get signed URLs for multiple files
+// ============================================
+// Requires authentication
+// Accepts an array of file paths or URLs
+// Returns signed URLs valid for 24 hours
+const bulkSignedUrlRequestSchema = z.object({
+  items: z.array(z.object({
+    path: z.string().optional(),
+    url: z.string().optional(),
+  })).min(1).max(50), // Limit to 50 items per request
+  expiresIn: z.number().optional().default(86400),
+});
+
+uploadRouter.post("/signed-urls", zValidator("json", bulkSignedUrlRequestSchema), async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) {
+    return c.json({ error: "Authorization required" }, 401);
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const userId = await verifyToken(token);
+  if (!userId) {
+    return c.json({ error: "Invalid or expired token" }, 401);
+  }
+
+  const { items, expiresIn } = c.req.valid("json");
+
+  try {
+    // Extract paths from items
+    const paths: string[] = [];
+    for (const item of items) {
+      let finalPath = item.path;
+      if (!finalPath && item.url) {
+        finalPath = extractPathFromUrl(item.url) || undefined;
+      }
+      if (finalPath) {
+        paths.push(finalPath);
+      }
+    }
+
+    if (paths.length === 0) {
+      return c.json({ error: "No valid paths could be determined" }, 400);
+    }
+
+    const signedUrls = await getSignedUrls(paths, "uploads", expiresIn);
+    
+    return c.json({
+      success: true,
+      signedUrls,
+      expiresIn,
+    });
+  } catch (error) {
+    console.error("💥 [Upload] Bulk signed URL error:", error);
+    return c.json({ error: "Failed to generate signed URLs" }, 500);
   }
 });
 

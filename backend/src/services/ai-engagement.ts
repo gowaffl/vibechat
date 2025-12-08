@@ -24,6 +24,7 @@ import {
   logSafetyEvent,
 } from "./content-safety";
 import { setAITypingStatus } from "../routes/chats";
+import { decryptMessages } from "./message-encryption";
 
 // Subscription reference to keep connection alive
 let engagementSubscription: RealtimeChannel | null = null;
@@ -128,8 +129,11 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       .order("createdAt", { ascending: false })
       .limit(50);
 
+    // Decrypt any encrypted messages
+    const decryptedMessages = await decryptMessages(allMessages || []);
+
     // Reverse to get chronological order
-    const messagesInOrder = (allMessages || []).reverse().map((msg: any) => ({
+    const messagesInOrder = decryptedMessages.reverse().map((msg: any) => ({
       ...msg,
       user: Array.isArray(msg.user) ? msg.user[0] : msg.user,
     }));

@@ -3,8 +3,9 @@ import { db } from "../src/db";
 
 async function main() {
   console.log("--- DB Connection Check ---");
-  console.log("Supabase URL:", env.SUPABASE_URL);
-  console.log("Service Role Key Start:", env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) + "...");
+  // Note: Only log safe values, never credentials or keys
+  console.log("Supabase URL configured:", !!env.SUPABASE_URL);
+  console.log("Service Role Key configured:", !!env.SUPABASE_SERVICE_ROLE_KEY);
   
   console.log("Querying 'chat' table count...");
   const { count, error } = await db.from("chat").select("*", { count: "exact", head: true });

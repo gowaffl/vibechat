@@ -19,6 +19,7 @@ import { tagMessage } from "../services/message-tagger";
 import { extractFirstUrl } from "../utils/url-utils";
 import { fetchLinkPreview } from "../services/link-preview";
 import { z } from "zod";
+import { decryptMessages } from "../services/message-encryption";
 
 const chats = new Hono<AppType>();
 
@@ -930,7 +931,10 @@ chats.get("/:id/messages", async (c) => {
         : null;
     }
 
-    const formattedMessages = messages.map((msg: any) => {
+    // Decrypt any encrypted messages
+    const decryptedMessages = await decryptMessages(messages);
+
+    const formattedMessages = decryptedMessages.map((msg: any) => {
       // Parse metadata if it's a string
       let parsedMetadata = msg.metadata;
       if (typeof msg.metadata === "string") {

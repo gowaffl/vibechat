@@ -738,3 +738,46 @@ AS $$
   FROM user_chats uc
   LEFT JOIN unread_messages um ON uc."chatId" = um."chatId";
 $$;
+
+-- ==========================================
+-- SECURITY & PRIVACY AUDIT (December 8, 2025)
+-- ==========================================
+-- Comprehensive security hardening for production readiness
+--
+-- Applied migrations:
+-- - make_uploads_bucket_private: Changed uploads bucket from public to private
+-- - consolidate_duplicate_rls_policies: Merged duplicate UPDATE/SELECT policies  
+-- - enable_audit_logging: Enabled pgaudit extension for compliance logging
+-- - implement_message_encryption: Added at-rest encryption for message content
+--
+-- STORAGE SECURITY:
+-- - uploads bucket is now PRIVATE (no public access)
+-- - All media access requires signed URLs (24h expiration)
+-- - Files are organized by chat for access control
+--
+-- RLS POLICY OPTIMIZATIONS:
+-- - All policies use (SELECT auth.uid()) pattern for per-query evaluation
+-- - Consolidated duplicate permissive policies on chat and chat_member tables
+-- - is_chat_member() helper function uses optimized auth.uid() call
+--
+-- AUDIT LOGGING (pgaudit):
+-- - Extension enabled: pgaudit
+-- - Authenticator role logs: write operations (INSERT, UPDATE, DELETE)
+-- - Object-level auditing on: auth.users, public.user, public.message
+-- - Audit role: security_auditor (non-login)
+--
+-- MESSAGE ENCRYPTION:
+-- - Encryption key stored in Vault (message_encryption_key)
+-- - AES-256 encryption via pgp_sym_encrypt
+-- - is_encrypted column tracks encrypted messages
+-- - message_decrypted view provides transparent decryption
+-- - encrypt_existing_messages() function for batch migration
+--
+-- SIGNED URL ENDPOINTS:
+-- - POST /api/upload/signed-url: Get signed URL for single file
+-- - POST /api/upload/signed-urls: Batch signed URL generation (up to 50)
+-- - All signed URLs expire after 24 hours
+--
+-- Note: Enable "Leaked Password Protection" in Supabase Dashboard > Auth Settings
+-- This is a Pro Plan feature that checks passwords against HaveIBeenPwned database
+-- ==========================================
