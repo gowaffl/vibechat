@@ -1618,6 +1618,7 @@ chats.post("/:id/read-receipts", async (c) => {
 
     // Create read receipts for the identified messages
     // Use upsert with onConflict to handle race conditions gracefully
+    // Note: unique constraint is on (userId, messageId) only
     const { error: insertError } = await client
       .from("read_receipt")
       .upsert(
@@ -1628,7 +1629,7 @@ chats.post("/:id/read-receipts", async (c) => {
           readAt: new Date().toISOString()
         })),
         { 
-          onConflict: 'userId,chatId,messageId',
+          onConflict: 'userId,messageId',
           ignoreDuplicates: true 
         }
       );
