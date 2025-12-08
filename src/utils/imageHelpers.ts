@@ -12,7 +12,6 @@ export const getFullImageUrl = (imageUrl: string | null | undefined): string => 
   const supabaseUrlMatch = imageUrl.match(/(https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/.+)/);
   if (supabaseUrlMatch) {
     // Extract and return the clean Supabase URL
-    console.log("[ImageHelper] Fixed corrupted URL, extracted:", supabaseUrlMatch[1]);
     return supabaseUrlMatch[1];
   }
   

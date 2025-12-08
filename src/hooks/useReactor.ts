@@ -12,12 +12,6 @@ export interface ReactorOptions {
 export function useReactor(chatId: string, userId: string, options?: ReactorOptions) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  
-  console.log("[useReactor] Hook initialized with options:", {
-    hasOnStart: !!options?.onStart,
-    hasOnPreview: !!options?.onPreview,
-    hasOnGenerationError: !!options?.onGenerationError,
-  });
 
   // Generate caption for media
   const captionMutation = useMutation({

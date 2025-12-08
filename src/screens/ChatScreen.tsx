@@ -2444,32 +2444,21 @@ const ChatScreen = () => {
   const { data: smartRepliesData, isLoading: isLoadingSmartReplies, error: smartRepliesError } = useQuery({
     queryKey: ["smartReplies", chatId, JSON.stringify(lastMessagesForSmartReply)],
     queryFn: async () => {
-      console.log("=== [Smart Replies Frontend] Starting fetch ===");
-      console.log("[Smart Replies Frontend] ChatId:", chatId);
-      console.log("[Smart Replies Frontend] UserId:", user?.id);
-      console.log("[Smart Replies Frontend] Last messages count:", lastMessagesForSmartReply.length);
-      console.log("[Smart Replies Frontend] Last messages for context:", JSON.stringify(lastMessagesForSmartReply, null, 2));
-      
       // Don't fetch if no messages with content for context
       if (lastMessagesForSmartReply.length === 0) {
-        console.log("[Smart Replies Frontend] ❌ Skipping - no messages with content for context");
         return { replies: [] };
       }
       
       // mostRecentMessageIsFromOther is checked in `enabled`, but double-check here
       if (!mostRecentMessageIsFromOther) {
-        console.log("[Smart Replies Frontend] ❌ Skipping - most recent message is from current user");
         return { replies: [] };
       }
 
-      console.log("[Smart Replies Frontend] ✅ Making API call to /api/ai/smart-replies...");
-      const response = await api.post<SmartRepliesResponse>("/api/ai/smart-replies", {
+      return api.post<SmartRepliesResponse>("/api/ai/smart-replies", {
         chatId,
         userId: user?.id,
         lastMessages: lastMessagesForSmartReply,
       });
-      console.log("[Smart Replies Frontend] ✅ Response received:", JSON.stringify(response, null, 2));
-      return response;
     },
     // Only enable if the most recent message is from someone else (another user or AI)
     enabled: lastMessagesForSmartReply.length > 0 && mostRecentMessageIsFromOther,
@@ -2480,17 +2469,6 @@ const ChatScreen = () => {
   });
 
   const smartReplies = smartRepliesData?.replies || [];
-  
-  console.log("[Smart Replies Frontend] Query enabled:", lastMessagesForSmartReply.length > 0 && mostRecentMessageIsFromOther);
-  console.log("[Smart Replies Frontend] Most recent is from other:", mostRecentMessageIsFromOther);
-  console.log("[Smart Replies Frontend] Is loading:", isLoadingSmartReplies);
-  console.log("[Smart Replies Frontend] Has error:", !!smartRepliesError);
-  if (smartRepliesError) {
-    console.error("[Smart Replies Frontend] Error object:", smartRepliesError);
-  }
-  console.log("[Smart Replies Frontend] Data received:", smartRepliesData);
-  console.log("[Smart Replies Frontend] Current smart replies:", smartReplies);
-
 
   // Typing indicators are now handled via Supabase Realtime broadcast (see channel subscription above)
   // This eliminates 1-second polling that was causing 5000 req/sec at scale
@@ -6064,19 +6042,6 @@ const ChatScreen = () => {
       </View>
     );
   }
-
-  // Debug logging
-  console.log('[ChatScreen] Thread filtering:', {
-    currentThreadId,
-    hasThreadId: !!currentThreadId,
-    threadMessagesIsDefined: threadMessages !== undefined,
-    threadMessages: threadMessages,
-    threadMessagesCount: threadMessages?.length || 0,
-    allMessagesCount: messages?.length || 0,
-    activeMessagesCount: activeMessages?.length || 0,
-    isUsingFilteredMessages: currentThreadId && threadMessages !== undefined,
-    willShowEmptyIfNoMatches: currentThreadId && threadMessages !== undefined && threadMessages.length === 0
-  });
   
   // Check if smart replies are visible (for dynamic bottom padding)
   const areSmartRepliesVisible = smartReplies.length > 0 && !messageText && selectedImages.length === 0 && !replyToMessage;
@@ -6440,16 +6405,7 @@ const ChatScreen = () => {
         {/* LOW-A: Drag handle removed per design request */}
         
         {/* Mention Picker - positioned above input */}
-        {(() => {
-          console.log('[ChatScreen] Rendering MentionPicker check:', {
-            showMentionPicker,
-            chatMembersCount: chatMembers.length,
-            mentionSearch,
-            activeInput: activeInput, // Check state value
-            editingMessage: !!editingMessage,
-          });
-          return showMentionPicker && activeInput === "main";
-        })() && (
+        {showMentionPicker && activeInput === "main" && (
           <View
             style={{
               width: "100%",

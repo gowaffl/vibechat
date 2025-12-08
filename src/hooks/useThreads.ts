@@ -103,34 +103,17 @@ export function useThreads(chatId: string, userId: string) {
 
 // Hook to get messages for a specific thread
 export function useThreadMessages(threadId: string | null, userId: string) {
-  console.log('[useThreadMessages Hook] Called with:', { threadId, userId, enabled: !!threadId });
-
   const query = useQuery<Message[]>({
     queryKey: ["thread-messages", threadId],
     queryFn: async () => {
-      console.log('[useThreadMessages Hook] Query function executing for threadId:', threadId);
       if (!threadId) {
-        console.log('[useThreadMessages Hook] No threadId, returning empty array');
         return [];
       }
-
-      console.log('[useThreadMessages Hook] Fetching messages from API:', `/api/threads/${threadId}/messages?userId=${userId}`);
-      const result = await api.get<Message[]>(`/api/threads/${threadId}/messages?userId=${userId}`);
-      console.log('[useThreadMessages Hook] API returned messages:', result?.length || 0);
-      return result;
+      return api.get<Message[]>(`/api/threads/${threadId}/messages?userId=${userId}`);
     },
     enabled: !!threadId, // Only run query if threadId is provided
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
     gcTime: 1000 * 60 * 30, // Keep in memory for 30 minutes
-  });
-
-  console.log('[useThreadMessages Hook] Query state:', {
-    isLoading: query.isLoading,
-    isFetching: query.isFetching,
-    isSuccess: query.isSuccess,
-    isError: query.isError,
-    data: query.data?.length,
-    error: query.error,
   });
 
   return query;

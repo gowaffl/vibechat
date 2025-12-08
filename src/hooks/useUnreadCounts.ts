@@ -63,6 +63,10 @@ export const useUnreadCounts = (userId: string | undefined, chatIds?: string[]) 
     });
   }, [queryClient, userId]);
 
+  // Store refetch function in a ref to avoid dependency issues
+  const refetchRef = useRef(query.refetch);
+  refetchRef.current = query.refetch;
+
   // Subscribe to realtime events for unread count updates
   useEffect(() => {
     if (!userId) return;
@@ -139,7 +143,7 @@ export const useUnreadCounts = (userId: string | undefined, chatIds?: string[]) 
       console.log('[UnreadCounts] Subscription status:', status);
       if (status === 'SUBSCRIBED') {
         // Fetch fresh data after successful subscription
-        query.refetch();
+        refetchRef.current();
       }
     });
 
@@ -152,7 +156,7 @@ export const useUnreadCounts = (userId: string | undefined, chatIds?: string[]) 
         channelRef.current = null;
       }
     };
-  }, [userId, updateUnreadCount, queryClient, query]);
+  }, [userId, updateUnreadCount, queryClient]); // Removed 'query' - it changes every render!
 
   // Sync badge count whenever unread counts change
   useEffect(() => {
