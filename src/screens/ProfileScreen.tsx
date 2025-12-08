@@ -21,6 +21,7 @@ import { BlurView } from "expo-blur";
 import { Camera, User as UserIcon, Bell, BellOff, Trash2, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Zap, FileText } from "lucide-react-native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import * as ImagePicker from "expo-image-picker";
+import { Image as ExpoImage } from "expo-image";
 import * as FileSystem from "expo-file-system";
 import { useUser } from "@/contexts/UserContext";
 import { BACKEND_URL, api } from "@/lib/api";
@@ -45,6 +46,12 @@ const ProfileScreen = () => {
   const [deletionFeedback, setDeletionFeedback] = useState("");
   const [summaryPreference, setSummaryPreference] = useState<"concise" | "detailed">(user?.summaryPreference || "concise");
   const [isUpdatingSummaryPreference, setIsUpdatingSummaryPreference] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
+
+  // Reset image error state when user image changes
+  React.useEffect(() => {
+    setImageLoadError(false);
+  }, [user?.image]);
 
   // Keyboard listener
   React.useEffect(() => {
@@ -106,6 +113,8 @@ const ProfileScreen = () => {
           // The response.url is already a full Supabase storage URL, don't prepend BACKEND_URL
           console.log("[ProfileScreen] Image URL:", response.url);
           await updateUser({ image: response.url });
+          // Reset image error state since we have a new valid image
+          setImageLoadError(false);
           Alert.alert("Success", "Profile photo updated!");
         }
       } else {
@@ -374,17 +383,23 @@ const ProfileScreen = () => {
                   elevation: 8,
                 }}
               >
-                {user?.image && getFullImageUrl(user.image) ? (
-                  <Image
+                {user?.image && !imageLoadError ? (
+                  <ExpoImage
                     source={{ uri: getFullImageUrl(user.image) }}
                     className="w-32 h-32 rounded-full"
-                    resizeMode="cover"
-                    onError={(error) => {
-                      console.error("[ProfileScreen] Image load error:", error.nativeEvent.error);
-                      console.error("[ProfileScreen] Failed URL:", getFullImageUrl(user.image));
+                    contentFit="cover"
+                    onError={(error: any) => {
+                      console.error("[ProfileScreen] Image load error:", error);
+                      console.error("[ProfileScreen] Original image URL:", user.image);
+                      console.error("[ProfileScreen] Transformed URL:", getFullImageUrl(user.image));
+                      // Set error state to show fallback avatar
+                      setImageLoadError(true);
                     }}
                     onLoad={() => {
-                      console.log("[ProfileScreen] Image loaded successfully:", getFullImageUrl(user.image));
+                      console.log("[ProfileScreen] Image loaded successfully!");
+                      console.log("[ProfileScreen] Image URL:", getFullImageUrl(user.image));
+                      // Reset error state on successful load
+                      setImageLoadError(false);
                     }}
                   />
                 ) : (

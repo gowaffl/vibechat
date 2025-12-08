@@ -31,6 +31,7 @@ import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { CustomRefreshControl } from "@/components/CustomRefreshControl";
 
 // Separated component for performance optimization with memoization
 const ChatItem = React.memo(({ 
@@ -287,9 +288,10 @@ const ChatListScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch user's chats
-  const { data: chats = [], isLoading, refetch, isFetching } = useQuery<GetUserChatsResponse>({
+  const { data: chats = [], isLoading, refetch } = useQuery<GetUserChatsResponse>({
     queryKey: ["user-chats", user?.id],
     queryFn: () => api.get(`/api/chats?userId=${user?.id}`),
     enabled: !!user?.id,
@@ -334,11 +336,27 @@ const ChatListScreen = () => {
     }
   }, [chats, user?.id, queryClient]);
 
+  // Handle manual refresh
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchUnread()]);
+    } finally {
+      // Ensure refresh state is cleared even if there's an error
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 500); // Small delay to ensure smooth animation completion
+    }
+  }, [refetch, refetchUnread]);
+
   // Auto-update on focus
   useFocusEffect(
     useCallback(() => {
+      // Silently refetch on focus without showing refresh indicator
       refetch();
       refetchUnread();
+      // Make sure we clear any stuck refresh state when focusing
+      setIsRefreshing(false);
     }, [refetch, refetchUnread])
   );
 
@@ -619,6 +637,7 @@ const ChatListScreen = () => {
                   height: 52,
                   borderRadius: 26,
                 }}
+                contentFit="cover"
               />
             ) : (
               <GradientIcon
@@ -755,6 +774,9 @@ const ChatListScreen = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>
+      {/* Custom Refresh Control Overlay */}
+      <CustomRefreshControl refreshing={isRefreshing} message="Refreshing chats" />
+      
       {/* Animated Gradient Background */}
       <View
         style={{
@@ -1031,9 +1053,10 @@ const ChatListScreen = () => {
             
             refreshControl={
               <RefreshControl
-                refreshing={isFetching}
-                onRefresh={refetch}
-                tintColor={BRAND_GRADIENT_COLORS[0]}
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="transparent"
+                colors={["transparent"]}
               />
             }
           />

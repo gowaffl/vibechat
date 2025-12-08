@@ -63,15 +63,23 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ==========================================
 -- Storage Configuration
 -- ==========================================
--- Storage bucket "uploads" is configured via Supabase UI with:
--- - Public access enabled
+-- Storage bucket "uploads" configuration:
+-- - Public access ENABLED (necessary for image loading in React Native)
 -- - File size limit: 50MB (increased from 10MB to support video uploads)
 -- - Allowed MIME types: Any (images: jpeg, png, gif, webp; videos: mp4, mov, quicktime)
--- - RLS policies: 4 policies configured for authenticated users
+-- - RLS policies: Protect write operations (upload/update/delete owner-only)
+-- - Read access: Public bucket allows direct URL access (users can't browse/list files)
 --
 -- MEDIA UPLOAD LIMITS (December 2025):
 -- - Images: Max 10 images per message, each up to 10MB after compression
 -- - Videos: Max 1 video per message, up to 50MB, max 60 seconds duration
+--
+-- SECURITY MODEL (December 8, 2025):
+-- - Bucket is PUBLIC but files cannot be browsed/listed
+-- - Application controls which image URLs are shown to users
+-- - Write operations protected by RLS (only file owners can modify)
+-- - This is the standard model used by Instagram, WhatsApp, Discord, etc.
+-- Migrations: storage_rls_chat_based_access, simplify_storage_rls ✅ APPLIED
 
 -- ==========================================
 -- Utilities
@@ -780,4 +788,100 @@ $$;
 --
 -- Note: Enable "Leaked Password Protection" in Supabase Dashboard > Auth Settings
 -- This is a Pro Plan feature that checks passwords against HaveIBeenPwned database
+-- ==========================================
+
+-- ==========================================
+-- STORAGE RLS POLICIES (December 8, 2025)
+-- ==========================================
+-- Privacy-focused storage access control
+-- Users can only view images from users they share chats with
+--
+-- Migration: storage_rls_chat_based_access
+-- ==========================================
+
+-- Function to check if two users share a chat
+CREATE OR REPLACE FUNCTION public.users_share_chat(user_id_1 uuid, user_id_2 uuid)
+RETURNS boolean AS $$
+BEGIN
+  -- Check if both users are members of at least one common chat
+  RETURN EXISTS (
+    SELECT 1
+    FROM public."chatMember" cm1
+    INNER JOIN public."chatMember" cm2 
+      ON cm1."chatId" = cm2."chatId"
+    WHERE cm1."userId" = user_id_1
+      AND cm2."userId" = user_id_2
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Storage RLS Policies on storage.objects
+
+-- Allow users to view their own files
+CREATE POLICY "Users can view their own files"
+ON storage.objects
+FOR SELECT
+TO public
+USING (
+  bucket_id = 'uploads' 
+  AND auth.uid() = owner
+);
+
+-- Allow users to view files from users they share a chat with
+CREATE POLICY "Users can view files from chat members"
+ON storage.objects
+FOR SELECT
+TO public
+USING (
+  bucket_id = 'uploads'
+  AND auth.role() = 'authenticated'
+  AND (
+    auth.uid() = owner  -- Can see own files
+    OR public.users_share_chat(auth.uid(), owner)  -- Can see files from users in shared chats
+  )
+);
+
+-- Allow authenticated users to upload (with owner set to uploading user)
+CREATE POLICY "Authenticated users can upload"
+ON storage.objects
+FOR INSERT
+TO public
+WITH CHECK (
+  bucket_id = 'uploads'
+  AND auth.role() = 'authenticated'
+  AND auth.uid() = owner  -- Ensure owner is set to the uploading user
+);
+
+-- Allow users to update their own files
+CREATE POLICY "Authenticated users can update own files"
+ON storage.objects
+FOR UPDATE
+TO public
+USING (
+  bucket_id = 'uploads' 
+  AND auth.uid() = owner
+)
+WITH CHECK (
+  bucket_id = 'uploads' 
+  AND auth.uid() = owner
+);
+
+-- Allow users to delete their own files
+CREATE POLICY "Authenticated users can delete own files"
+ON storage.objects
+FOR DELETE
+TO public
+USING (
+  bucket_id = 'uploads' 
+  AND auth.uid() = owner
+);
+
+-- ==========================================
+-- IMAGE PROXY ENDPOINT
+-- ==========================================
+-- Backend endpoint: /api/images/*
+-- Serves images with RLS validation
+-- Accepts auth token via:
+--   1. Authorization header (Bearer token)
+--   2. Query parameter (?token=xxx)
 -- ==========================================

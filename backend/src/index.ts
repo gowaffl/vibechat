@@ -49,6 +49,7 @@ setInterval(async () => {
 }, 2 * 60 * 1000); // Every 2 minutes
 export type { AppType } from "./types";
 import { uploadRouter } from "./routes/upload";
+import { imageProxy } from "./routes/image-proxy";
 import usersRouter from "./routes/users";
 import messagesRouter from "./routes/messages";
 import aiRouter from "./routes/ai";
@@ -91,6 +92,9 @@ app.route("/api/auth", authRouter);
 
 console.log("📤 Mounting upload routes at /api/upload");
 app.route("/api/upload", uploadRouter);
+
+console.log("🖼️  Mounting image proxy routes at /api/images");
+app.route("/api/images", imageProxy);
 
 console.log("👥 Mounting users routes at /api/users");
 app.route("/api/users", usersRouter);
