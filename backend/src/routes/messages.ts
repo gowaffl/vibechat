@@ -560,7 +560,7 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
     return c.json({ error: "Failed to fetch user" }, 500);
   }
 
-  // Fetch replyTo if exists
+  // Fetch replyTo if exists and decrypt if encrypted
   let replyTo = null;
   if (message.replyToId) {
     const { data: replyToMsg } = await db
@@ -570,15 +570,18 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
       .single();
     
     if (replyToMsg) {
+      // Decrypt replyTo content if encrypted
+      const [decryptedReplyTo] = await decryptMessages([replyToMsg]);
+      
       const { data: replyToUser } = await db
         .from("user")
         .select("*")
-        .eq("id", replyToMsg.userId)
+        .eq("id", decryptedReplyTo.userId)
         .single();
       
       if (replyToUser) {
         replyTo = {
-          ...replyToMsg,
+          ...decryptedReplyTo,
           user: replyToUser,
         };
       }
@@ -706,9 +709,10 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
     }
   }
 
+  // IMPORTANT: Return the original content, not message.content which is encrypted by the DB trigger
   return c.json(sendMessageResponseSchema.parse({
     id: message.id,
-    content: message.content,
+    content: content || "", // Use original content, not encrypted message.content
     messageType: message.messageType,
     imageUrl: message.imageUrl,
     imageDescription: message.imageDescription,
@@ -908,7 +912,7 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
       return c.json({ error: "Message can only be edited within 15 minutes of sending" }, 400);
     }
 
-    // Store edit history
+    // Store edit history - decrypt the old content first
     let editHistory: any[] = [];
     if (message.editHistory) {
       try {
@@ -918,8 +922,10 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
       }
     }
     
+    // Decrypt the old message content before storing in history
+    const [decryptedOldMessage] = await decryptMessages([message]);
     editHistory.push({
-      content: message.content,
+      content: decryptedOldMessage.content,
       editedAt: now.toISOString(),
     });
 
@@ -981,10 +987,11 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
     console.log(`✅ [Messages] Message ${messageId} edited successfully`);
 
     // Parse and validate the response
+    // IMPORTANT: Return the new content from request, not encrypted updatedMessage.content
     try {
       const response = editMessageResponseSchema.parse({
         id: updatedMessage.id,
-        content: updatedMessage.content,
+        content: content, // Use original content, not encrypted updatedMessage.content
         messageType: updatedMessage.messageType,
         imageUrl: updatedMessage.imageUrl,
         imageDescription: updatedMessage.imageDescription,
@@ -1043,9 +1050,10 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
         reactions: reactions.length,
       });
       // Return success anyway since the message was actually edited
+      // IMPORTANT: Return the new content from request, not encrypted content
       return c.json({ 
         id: updatedMessage.id,
-        content: updatedMessage.content,
+        content: content, // Use original content, not encrypted
         messageType: updatedMessage.messageType,
         userId: updatedMessage.userId,
         chatId: updatedMessage.chatId,
