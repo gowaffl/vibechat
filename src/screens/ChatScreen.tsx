@@ -92,6 +92,15 @@ import { getFullImageUrl } from "@/utils/imageHelpers";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
+// Define PendingMessage type locally extending Message
+type PendingMessage = Message & {
+  isPending?: boolean;
+  isUploading?: boolean;
+  uploadProgress?: number; // 0-100
+  localUri?: string;
+  localVideoThumbnailUri?: string;
+};
+
 // Custom Chat Header Component
 const ChatHeader = ({ 
   chatName, 
@@ -1451,6 +1460,7 @@ const ChatScreen = () => {
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState<PendingMessage[]>([]);
   const [viewerImage, setViewerImage] = useState<{
     url: string;
     imageUrls?: string[];
@@ -3299,7 +3309,43 @@ const ChatScreen = () => {
   const uploadImageAndSend = async () => {
     if (selectedImages.length === 0 || !user) return;
 
-    setIsUploadingImage(true);
+    const currentImages = [...selectedImages];
+    const currentText = messageText.trim();
+    const currentReplyTo = replyToMessage;
+    
+    // Create pending message ID
+    const pendingId = `pending-${Date.now()}`;
+    
+    // Create pending message object
+    const pendingMessage: PendingMessage = {
+      id: pendingId,
+      content: currentText,
+      messageType: "image",
+      imageUrl: currentImages[0], // Use local URI for preview
+      userId: user.id,
+      chatId: chatId,
+      createdAt: new Date().toISOString(),
+      user: user,
+      isPending: true,
+      isUploading: true,
+      localUri: currentImages[0],
+      replyTo: currentReplyTo ? { ...currentReplyTo } as Message : undefined,
+      replyToId: currentReplyTo?.id,
+      metadata: currentImages.length > 1 ? { mediaUrls: currentImages } : undefined,
+      reactions: [],
+      mentions: [],
+    };
+
+    // Add to pending uploads
+    setPendingUploads(prev => [...prev, pendingMessage]);
+
+    // Clear UI state immediately
+    setSelectedImages([]);
+    setMessageText("");
+    clearDraftMessage();
+    setReplyToMessage(null);
+    setInputHeight(MIN_INPUT_HEIGHT);
+
     try {
       // Get auth token
       const token = await authClient.getToken();
@@ -3307,7 +3353,7 @@ const ChatScreen = () => {
       // Upload all selected images
       const uploadedUrls: string[] = [];
       
-      for (const imageUri of selectedImages) {
+      for (const imageUri of currentImages) {
         console.log("[ChatScreen] Uploading image:", imageUri);
 
         // Use FileSystem.uploadAsync for proper file upload in React Native
@@ -3342,34 +3388,34 @@ const ChatScreen = () => {
         uploadedUrls.push(uploadData.url);
       }
 
+      // Remove from pending uploads
+      setPendingUploads(prev => prev.filter(m => m.id !== pendingId));
+
       // Send message with image URL(s)
       // For multiple images, store URLs in metadata.mediaUrls
       // For single image, use imageUrl for backward compatibility
       if (uploadedUrls.length === 1) {
         await sendMessageMutation.mutateAsync({
-          content: messageText.trim(),
+          content: currentText,
           messageType: "image",
           imageUrl: uploadedUrls[0],
-          replyToId: replyToMessage?.id,
+          replyToId: currentReplyTo?.id,
         });
       } else {
         // Multiple images - store in metadata
         await sendMessageMutation.mutateAsync({
-          content: messageText.trim(),
+          content: currentText,
           messageType: "image",
           imageUrl: uploadedUrls[0], // First image for thumbnail/preview
           metadata: { mediaUrls: uploadedUrls },
-          replyToId: replyToMessage?.id,
+          replyToId: currentReplyTo?.id,
         });
       }
-
-      // Clear selected images after successful send
-      setSelectedImages([]);
     } catch (error) {
       console.error("Error uploading image:", error);
       Alert.alert("Error", "Failed to upload image");
-    } finally {
-      setIsUploadingImage(false);
+      // Remove pending message on error
+      setPendingUploads(prev => prev.filter(m => m.id !== pendingId));
     }
   };
 
@@ -3401,17 +3447,55 @@ const ChatScreen = () => {
   const uploadVideoAndSend = async () => {
     if (!selectedVideo || !user) return;
 
-    setIsUploadingVideo(true);
+    const currentVideo = { ...selectedVideo };
+    const currentText = messageText.trim();
+    const currentReplyTo = replyToMessage;
+    
+    // Create pending message ID
+    const pendingId = `pending-video-${Date.now()}`;
+    
+    // Create pending message object
+    const pendingMessage: PendingMessage = {
+      id: pendingId,
+      content: currentText,
+      messageType: "video",
+      userId: user.id,
+      chatId: chatId,
+      createdAt: new Date().toISOString(),
+      user: user,
+      isPending: true,
+      isUploading: true,
+      localUri: currentVideo.uri,
+      replyTo: currentReplyTo ? { ...currentReplyTo } as Message : undefined,
+      replyToId: currentReplyTo?.id,
+      metadata: { 
+        videoDuration: currentVideo.duration,
+        localUri: currentVideo.uri
+      },
+      reactions: [],
+      mentions: [],
+    };
+
+    // Add to pending uploads
+    setPendingUploads(prev => [...prev, pendingMessage]);
+
+    // Clear UI state
+    setSelectedVideo(null);
+    setMessageText("");
+    clearDraftMessage();
+    setReplyToMessage(null);
+    setInputHeight(MIN_INPUT_HEIGHT);
+
     try {
       // Get auth token
       const token = await authClient.getToken();
 
-      console.log("[ChatScreen] Uploading video:", selectedVideo.uri);
+      console.log("[ChatScreen] Uploading video:", currentVideo.uri);
 
       // Upload video
       const uploadResult = await FileSystem.uploadAsync(
         `${BACKEND_URL}/api/upload/video`,
-        selectedVideo.uri,
+        currentVideo.uri,
         {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
@@ -3442,7 +3526,7 @@ const ChatScreen = () => {
       let thumbnailUrl: string | null = null;
       try {
         const { uri: thumbnailUri } = await VideoThumbnails.getThumbnailAsync(
-          selectedVideo.uri,
+          currentVideo.uri,
           { time: 1000 } // Get thumbnail at 1 second
         );
         
@@ -3472,25 +3556,26 @@ const ChatScreen = () => {
         // Continue without thumbnail
       }
 
+      // Remove pending message
+      setPendingUploads(prev => prev.filter(m => m.id !== pendingId));
+
       // Send video message
       await sendMessageMutation.mutateAsync({
-        content: messageText.trim(),
+        content: currentText,
         messageType: "video",
         metadata: {
           videoUrl: uploadData.url,
           videoThumbnailUrl: thumbnailUrl,
-          videoDuration: selectedVideo.duration,
+          videoDuration: currentVideo.duration,
+          localUri: currentVideo.uri
         },
-        replyToId: replyToMessage?.id,
+        replyToId: currentReplyTo?.id,
       });
 
-      // Clear selected video after successful send
-      setSelectedVideo(null);
     } catch (error) {
       console.error("Error uploading video:", error);
       Alert.alert("Error", "Failed to upload video");
-    } finally {
-      setIsUploadingVideo(false);
+      setPendingUploads(prev => prev.filter(m => m.id !== pendingId));
     }
   };
 
@@ -5091,6 +5176,12 @@ const ChatScreen = () => {
     // So newest (index 0) appears at bottom - no reverse needed!
     const data: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
 
+    // Add pending uploads (reversed because they are Newest -> Oldest in the list, but stored Oldest -> Newest in state)
+    // Pending messages are newer than active messages, so they go to the front (bottom of inverted list)
+    if (pendingUploads.length > 0) {
+      data.unshift(...[...pendingUploads].reverse());
+    }
+
     // Add AI typing indicator if AI is typing (only in main chat, not in threads)
     if (isAITyping && !currentThreadId) {
       data.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
@@ -5102,7 +5193,7 @@ const ChatScreen = () => {
     }
 
     return data;
-  }, [activeMessages, isAITyping, currentThreadId, typingUsers]);
+  }, [activeMessages, isAITyping, currentThreadId, typingUsers, pendingUploads]);
 
   const renderMessage = useCallback(({ item, index }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }; index: number }) => {
     // Check if this is the AI typing indicator
@@ -5120,6 +5211,12 @@ const ChatScreen = () => {
 
     const message = item as Message;
     const isCurrentUser = message.userId === user?.id;
+    // Cast to PendingMessage to access local state
+    const pendingMsg = message as PendingMessage;
+    const isPending = pendingMsg.isPending;
+    const isUploading = pendingMsg.isUploading;
+    const localUri = pendingMsg.localUri;
+    
     // AI messages have userId: null and aiFriendId set
     const isAI = !!(message.aiFriendId && message.userId === null);
     const isSystem = message.messageType === "system" || message.userId === "system";
@@ -5494,15 +5591,39 @@ const ChatScreen = () => {
                 isCurrentUser={isCurrentUser}
               />
             </View>
-          ) : /* Video Message */ isVideo && metadata?.videoUrl ? (
+          ) : /* Video Message */ isVideo && (metadata?.videoUrl || localUri) ? (
             <View style={{ width: 270 }}>
-              <VideoPlayer
-                videoUrl={getFullImageUrl(metadata.videoUrl)}
-                thumbnailUrl={metadata.videoThumbnailUrl ? getFullImageUrl(metadata.videoThumbnailUrl) : null}
-                duration={metadata.videoDuration}
-                containerWidth={270}
-                borderRadius={0}
-              />
+              <View style={{ position: 'relative' }}>
+                <VideoPlayer
+                  videoUrl={localUri || getFullImageUrl(metadata?.videoUrl)}
+                  thumbnailUrl={metadata?.videoThumbnailUrl ? getFullImageUrl(metadata.videoThumbnailUrl) : null}
+                  duration={metadata?.videoDuration}
+                  containerWidth={270}
+                  borderRadius={0}
+                />
+                {/* Uploading Overlay for Video */}
+                {isUploading && (
+                  <View style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    zIndex: 10,
+                  }}>
+                    <View style={{
+                      padding: 12,
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      borderRadius: 24,
+                    }}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    </View>
+                  </View>
+                )}
+              </View>
               {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
                 <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
@@ -5523,23 +5644,40 @@ const ChatScreen = () => {
             </View>
           ) : /* Multi-Image Carousel */ hasMultipleImages ? (
             <View style={{ width: 270 }}>
-              <MediaCarousel
-                imageUrls={mediaUrls.map(url => getFullImageUrl(url))}
-                onImagePress={(index, imageUrl) => {
-                  setViewerImage({
-                    url: imageUrl,
-                    imageUrls: mediaUrls.map(url => getFullImageUrl(url)),
-                    initialIndex: index,
-                    senderName: message.user?.name || "Unknown",
-                    timestamp: new Date(message.createdAt).toLocaleString(),
-                    messageId: message.id,
-                    caption: message.content,
-                    isOwnMessage: isCurrentUser,
-                  });
-                }}
-                containerWidth={270}
-                borderRadius={0}
-              />
+              <View style={{ position: 'relative' }}>
+                <MediaCarousel
+                  imageUrls={mediaUrls.map(url => getFullImageUrl(url))}
+                  onImagePress={(index, imageUrl) => {
+                    setViewerImage({
+                      url: imageUrl,
+                      imageUrls: mediaUrls.map(url => getFullImageUrl(url)),
+                      initialIndex: index,
+                      senderName: message.user?.name || "Unknown",
+                      timestamp: new Date(message.createdAt).toLocaleString(),
+                      messageId: message.id,
+                      caption: message.content,
+                      isOwnMessage: isCurrentUser,
+                    });
+                  }}
+                  containerWidth={270}
+                  borderRadius={0}
+                />
+                {isUploading && (
+                  <View style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    zIndex: 10
+                  }}>
+                    <ActivityIndicator size="large" color="#FFFFFF" />
+                  </View>
+                )}
+              </View>
               {/* Caption if exists - HIGH-14: Reduced padding for density */}
               {message.content && (
                 <View style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
@@ -5558,7 +5696,7 @@ const ChatScreen = () => {
                 </View>
               )}
             </View>
-          ) : /* Single Image Message */ isImage && message.imageUrl ? (
+          ) : /* Single Image Message */ isImage && (message.imageUrl || localUri) ? (
             <View style={{ width: 270 }}>
               <Pressable
                 onPress={() => {
@@ -5566,7 +5704,7 @@ const ChatScreen = () => {
                     toggleImageSelection(message.id);
                   } else {
                     setViewerImage({
-                      url: message.imageUrl!,
+                      url: localUri || message.imageUrl!,
                       senderName: message.user?.name || "Unknown",
                       timestamp: new Date(message.createdAt).toLocaleString(),
                       messageId: message.id,
@@ -5582,8 +5720,8 @@ const ChatScreen = () => {
                 }}
               >
                 <View style={{ width: 270, height: 288, position: "relative", overflow: "hidden" }}>
-                  {/* Placeholder - only show while loading */}
-                  {loadingImageIds.has(message.id) && (
+                  {/* Placeholder - only show while loading remote image */}
+                  {!localUri && loadingImageIds.has(message.id) && (
                     <View
                       style={{
                         position: "absolute",
@@ -5601,7 +5739,7 @@ const ChatScreen = () => {
                   )}
                   {/* Actual Image */}
                   <Image
-                    source={{ uri: (() => {
+                    source={{ uri: localUri || (() => {
                       const fullUrl = getFullImageUrl(message.imageUrl);
                       console.log(`[ChatScreen] Loading image for message ${message.id}:`, {
                         relativeUrl: message.imageUrl,
@@ -5619,26 +5757,49 @@ const ChatScreen = () => {
                     }}
                     resizeMode="cover"
                     onLoadStart={() => {
-                      console.log(`[ChatScreen] Image load started for message ${message.id}`);
-                      setLoadingImageIds(prev => new Set(prev).add(message.id));
+                      if (!localUri) {
+                        console.log(`[ChatScreen] Image load started for message ${message.id}`);
+                        setLoadingImageIds(prev => new Set(prev).add(message.id));
+                      }
                     }}
                     onLoad={() => {
-                      console.log(`[ChatScreen] Image loaded successfully for message ${message.id}`);
-                      setLoadingImageIds(prev => {
-                        const next = new Set(prev);
-                        next.delete(message.id);
-                        return next;
-                      });
+                      if (!localUri) {
+                        console.log(`[ChatScreen] Image loaded successfully for message ${message.id}`);
+                        setLoadingImageIds(prev => {
+                          const next = new Set(prev);
+                          next.delete(message.id);
+                          return next;
+                        });
+                      }
                     }}
                     onError={(error) => {
-                      console.error(`[ChatScreen] Image load error for message ${message.id}:`);
-                      setLoadingImageIds(prev => {
-                        const next = new Set(prev);
-                        next.delete(message.id);
-                        return next;
-                      });
+                      if (!localUri) {
+                        console.error(`[ChatScreen] Image load error for message ${message.id}:`);
+                        setLoadingImageIds(prev => {
+                          const next = new Set(prev);
+                          next.delete(message.id);
+                          return next;
+                        });
+                      }
                     }}
                   />
+
+                  {/* Uploading Overlay */}
+                  {isUploading && (
+                    <View style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      backgroundColor: 'rgba(0,0,0,0.3)',
+                      zIndex: 10
+                    }}>
+                      <ActivityIndicator size="large" color="#FFFFFF" />
+                    </View>
+                  )}
 
                   {/* Selection checkbox overlay */}
                   {imageSelectionMode && (

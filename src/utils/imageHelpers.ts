@@ -29,8 +29,10 @@ export const getFullImageUrl = (imageUrl: string | null | undefined): string => 
     return cleanUrl;
   }
   
-  // If already a full URL
-  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+  // If already a full URL or local file URI
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://") || imageUrl.startsWith("file://")) {
+    if (imageUrl.startsWith("file://")) return imageUrl;
+
     try {
       const url = new URL(imageUrl);
       

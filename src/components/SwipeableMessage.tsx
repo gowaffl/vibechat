@@ -31,6 +31,8 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
 }) => {
   const translateX = useSharedValue(0);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [bubbleHeight, setBubbleHeight] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
 
   const triggerHaptic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -94,8 +96,53 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
           // Slight parallax effect - moves in opposite direction for visual polish
           translateX: translateX.value * 0.3,
         },
+        {
+          // Center the text vertically
+          translateY: -10, // Half of approximate text height for perfect centering
+        },
       ],
     };
+  });
+
+  // Clone children to add onLayout to the first child (message bubble)
+  const childrenArray = React.Children.toArray(children);
+  const modifiedChildren = React.Children.map(childrenArray, (child, index) => {
+    // Only add onLayout to the outermost View (which contains both bubble and reactions)
+    if (index === 0 && React.isValidElement(child)) {
+      return React.cloneElement(child as React.ReactElement<any>, {
+        onLayout: (event: any) => {
+          // This captures the full height including reactions
+          const { height } = event.nativeEvent.layout;
+          setContainerHeight(height);
+          
+          // If the child has its own onLayout, call it too
+          const existingOnLayout = (child as React.ReactElement<any>).props?.onLayout;
+          if (existingOnLayout) {
+            existingOnLayout(event);
+          }
+        },
+        children: React.Children.map((child as React.ReactElement<any>).props.children, (innerChild: any, innerIndex: number) => {
+          // First child is the Pressable with the message bubble
+          if (innerIndex === 0 && React.isValidElement(innerChild)) {
+            return React.cloneElement(innerChild as React.ReactElement<any>, {
+              onLayout: (event: any) => {
+                // This captures just the message bubble height
+                const { height } = event.nativeEvent.layout;
+                setBubbleHeight(height);
+                
+                // If the Pressable has its own onLayout, call it too
+                const existingOnLayout = (innerChild as React.ReactElement<any>).props?.onLayout;
+                if (existingOnLayout) {
+                  existingOnLayout(event);
+                }
+              },
+            });
+          }
+          return innerChild;
+        }),
+      });
+    }
+    return child;
   });
 
   return (
@@ -107,9 +154,8 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
             position: "absolute",
             right: isCurrentUser ? 8 : undefined,
             left: !isCurrentUser ? 8 : undefined,
-            top: 0,
-            bottom: 0,
-            justifyContent: "center",
+            // Position timestamp at the vertical center of just the message bubble
+            top: bubbleHeight > 0 ? bubbleHeight / 2 : 0,
             paddingHorizontal: 12,
             zIndex: 0,
           },
@@ -130,7 +176,7 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
       {/* Message Content - swipeable */}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[{ zIndex: 1 }, animatedStyle]}>
-          {children}
+          {modifiedChildren}
         </Animated.View>
       </GestureDetector>
     </View>

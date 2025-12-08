@@ -539,6 +539,7 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
       voiceDuration: voiceDuration || null,
       userId,
       replyToId: replyToId || null,
+      metadata: (c.req.valid("json") as any).metadata || null,
     })
     .select("*")
     .single();

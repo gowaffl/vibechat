@@ -266,20 +266,67 @@ const GroupSettingsScreen = () => {
   // Extract messages array from paginated response
   const messages = messagesData?.messages || [];
 
-  // Filter messages for media (photos and videos) and sort by most recent first
-  const mediaMessages = messages
-    .filter((msg: any) => {
-      if (msg.isUnsent) return false;
-      // Include image messages with imageUrl
-      if (msg.messageType === "image" && msg.imageUrl) return true;
-      // Include video messages with videoUrl in metadata
-      if (msg.messageType === "video") {
-        const metadata = typeof msg.metadata === "string" ? JSON.parse(msg.metadata) : msg.metadata;
-        return metadata?.videoUrl;
+  // Extract all media items from messages (flattened to support multi-image messages)
+  const mediaMessages = React.useMemo(() => {
+    const items: any[] = [];
+    
+    messages.forEach((msg: any) => {
+      if (msg.isUnsent) return;
+
+      const metadata = typeof msg.metadata === "string" ? JSON.parse(msg.metadata) : msg.metadata;
+
+      // Handle Video
+      if (msg.messageType === "video" && metadata?.videoUrl) {
+        items.push({
+          id: msg.id,
+          messageId: msg.id,
+          messageType: "video",
+          createdAt: msg.createdAt,
+          user: msg.user,
+          metadata: metadata,
+          imageUrl: msg.imageUrl, // Fallback for thumbnail if metadata missing
+          url: metadata.videoUrl,
+          thumbnailUrl: metadata.videoThumbnailUrl || msg.imageUrl
+        });
+        return;
       }
-      return false;
-    })
-    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      // Handle Images
+      if (msg.messageType === "image") {
+        // Check for multi-image
+        if (metadata?.mediaUrls && Array.isArray(metadata.mediaUrls) && metadata.mediaUrls.length > 0) {
+          metadata.mediaUrls.forEach((url: string, index: number) => {
+            items.push({
+              id: `${msg.id}_${index}`,
+              messageId: msg.id,
+              messageType: "image",
+              createdAt: msg.createdAt,
+              user: msg.user,
+              metadata: metadata,
+              imageUrl: url, // For compatibility
+              url: url,
+              thumbnailUrl: url
+            });
+          });
+        } else if (msg.imageUrl) {
+          // Single image fallback
+          items.push({
+            id: msg.id,
+            messageId: msg.id,
+            messageType: "image",
+            createdAt: msg.createdAt,
+            user: msg.user,
+            metadata: metadata,
+            imageUrl: msg.imageUrl,
+            url: msg.imageUrl,
+            thumbnailUrl: msg.imageUrl
+          });
+        }
+      }
+    });
+
+    return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [messages]);
 
   // Extract all links from messages
   const linkMessages = messages.filter((msg: any) => 
@@ -1277,15 +1324,14 @@ const GroupSettingsScreen = () => {
                 {/* Preview Grid */}
                 {mediaMessages.length > 0 && (
                   <View className="flex-row gap-2 mt-4">
-                    {mediaMessages.slice(0, Math.min(5, mediaMessages.length)).map((msg: any, index: number) => {
-                      const isVideo = msg.messageType === "video";
-                      const metadata = typeof msg.metadata === "string" ? JSON.parse(msg.metadata) : msg.metadata;
-                      const thumbnailUrl = isVideo 
-                        ? (metadata?.videoThumbnailUrl?.startsWith('http') ? metadata.videoThumbnailUrl : `${BACKEND_URL}${metadata?.videoThumbnailUrl}`)
-                        : (msg.imageUrl?.startsWith('http') ? msg.imageUrl : `${BACKEND_URL}${msg.imageUrl}`);
+                    {mediaMessages.slice(0, Math.min(5, mediaMessages.length)).map((item: any, index: number) => {
+                      const isVideo = item.messageType === "video";
+                      const thumbnailUrl = item.thumbnailUrl?.startsWith('http') 
+                        ? item.thumbnailUrl 
+                        : `${BACKEND_URL}${item.thumbnailUrl}`;
                       
                       return (
-                        <View key={msg.id} style={{ position: "relative" }}>
+                        <View key={item.id} style={{ position: "relative" }}>
                           <Image
                             source={{ uri: thumbnailUrl }}
                             style={{
@@ -1293,7 +1339,7 @@ const GroupSettingsScreen = () => {
                               height: 50,
                               borderRadius: 8,
                             }}
-                            resizeMode="cover"
+                            contentFit="cover"
                           />
                           {isVideo && (
                             <View style={{
@@ -2832,25 +2878,25 @@ const GroupSettingsScreen = () => {
                 }}
                 renderItem={({ item }: { item: any }) => {
                   const isVideo = item.messageType === "video";
-                  const metadata = typeof item.metadata === "string" ? JSON.parse(item.metadata) : item.metadata;
-                  const thumbnailUrl = isVideo 
-                    ? (metadata?.videoThumbnailUrl?.startsWith('http') ? metadata.videoThumbnailUrl : `${BACKEND_URL}${metadata?.videoThumbnailUrl}`)
-                    : (item.imageUrl?.startsWith('http') ? item.imageUrl : `${BACKEND_URL}${item.imageUrl}`);
-                  const videoUrl = isVideo 
-                    ? (metadata?.videoUrl?.startsWith('http') ? metadata.videoUrl : `${BACKEND_URL}${metadata?.videoUrl}`)
+                  const thumbnailUrl = item.thumbnailUrl?.startsWith('http') 
+                    ? item.thumbnailUrl 
+                    : `${BACKEND_URL}${item.thumbnailUrl}`;
+                  
+                  const videoUrl = isVideo && item.url
+                    ? (item.url.startsWith('http') ? item.url : `${BACKEND_URL}${item.url}`)
                     : null;
                   
                   return (
                   <Pressable
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      const sender = item.user || item.sender;
+                      const sender = item.user;
                       // Hide gallery modal first to allow viewer to show on top
                       setShowPhotoGallery(false);
                       // Use setTimeout to ensure gallery closes before opening viewer
                       setTimeout(() => {
                         setGalleryViewerImage({
-                          url: thumbnailUrl,
+                          url: isVideo ? thumbnailUrl : (item.url?.startsWith('http') ? item.url : `${BACKEND_URL}${item.url}`),
                           senderName: sender?.name || "Unknown",
                           timestamp: new Date(item.createdAt).toLocaleString("en-US", {
                             month: "short",
@@ -2859,7 +2905,7 @@ const GroupSettingsScreen = () => {
                             hour: "numeric",
                             minute: "2-digit",
                           }),
-                          messageId: item.id,
+                          messageId: item.messageId,
                           isVideo: isVideo,
                           videoUrl: videoUrl,
                         });
