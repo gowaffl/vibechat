@@ -1696,7 +1696,7 @@ const ChatScreen = () => {
         console.log(`[ChatScreen] Message ${messageId} not found in loaded messages`);
       }
     }
-  }, [messageId, allMessages.length]);
+  }, [messageId, allMessages]);
 
   // Realtime subscription for messages and reactions
   // NOTE: We don't use filters because Supabase Realtime doesn't support camelCase column names

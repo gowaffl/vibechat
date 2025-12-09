@@ -292,7 +292,7 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
     
     // Virtual Y including potential scroll needed to reach this finger position
     // This creates a "follow the finger" scroll effect for items outside the view
-    const index = Math.floor(relativeY / ITEM_HEIGHT);
+    const index = Math.floor((relativeY + scrollY.value) / ITEM_HEIGHT);
     
     // Check horizontal bounds
     if (pageX < targetLeft - 50 || pageX > targetLeft + ITEM_WIDTH + 50) {

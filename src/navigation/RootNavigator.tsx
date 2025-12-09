@@ -6,7 +6,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useEffect } from "react";
 
 import type { RootStackParamList } from "@/navigation/types";
-import { forTrayTransition, transitionSpec } from "@/navigation/TransitionConfig";
+import { forFadeTransition, transitionSpec } from "@/navigation/TransitionConfig";
 import TabNavigator from "@/navigation/TabNavigator";
 import ChatScreen from "@/screens/ChatScreen";
 import ChatListScreen from "@/screens/ChatListScreen";
@@ -47,16 +47,17 @@ const RootNavigator = () => {
   }
 
   return (
-    <RootStack.Navigator 
-      initialRouteName={initialRoute}
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+      <RootStack.Navigator 
+        initialRouteName={initialRoute}
       screenOptions={{
         headerShown: false,
         gestureEnabled: true,
         gestureDirection: 'horizontal',
         // Use custom transition spec for bounce effect
         transitionSpec: transitionSpec,
-        // Use custom card style interpolator for "Tray" effect
-        cardStyleInterpolator: forTrayTransition,
+        // Use custom card style interpolator for "Fade" effect
+        cardStyleInterpolator: forFadeTransition,
         // Ensure background is visible for the "tray" depth effect
         cardOverlayEnabled: true,
         headerMode: 'screen',
@@ -168,6 +169,7 @@ const RootNavigator = () => {
         }}
       />
     </RootStack.Navigator>
+    </View>
   );
 };
 

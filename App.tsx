@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { queryClient, persistOptions } from "@/lib/queryClient";
 import RootStackNavigator from "@/navigation/RootNavigator";
@@ -171,6 +171,7 @@ export default function App() {
               <SafeAreaProvider>
                 <NavigationContainer
                   linking={linking}
+                  theme={DarkTheme}
                   ref={navigationRef}
                   onReady={() => {
                     console.log("[Navigation] ✅ Navigation container ready");

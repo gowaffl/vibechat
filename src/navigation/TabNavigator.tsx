@@ -6,7 +6,7 @@ import ChatListScreen from "@/screens/ChatListScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import MoreScreen from "@/screens/MoreScreen";
 import { CustomTabBar } from "@/components/CustomTabBar";
-import { forTrayTransition, transitionSpec } from "@/navigation/TransitionConfig";
+import { forFadeTransition, transitionSpec } from "@/navigation/TransitionConfig";
 import { LinearGradient } from "expo-linear-gradient";
 
 const TabStack = createStackNavigator<TabParamList>();
@@ -15,7 +15,7 @@ export default function TabNavigator() {
   const [activeRouteName, setActiveRouteName] = useState("Chats");
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
       <TabStack.Navigator
         initialRouteName="Chats"
         screenOptions={({ route }) => ({
@@ -24,7 +24,8 @@ export default function TabNavigator() {
           cardStyleInterpolator: (props) => {
             // Extract direction from route params
             const direction = (route.params as any)?.animationDirection;
-            return forTrayTransition({ ...props, direction });
+            // The direction parameter is unused in the new fade transition but kept for compatibility
+            return forFadeTransition({ ...props });
           },
           cardOverlayEnabled: true,
         })}

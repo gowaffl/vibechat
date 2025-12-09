@@ -206,7 +206,10 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
       };
     });
 
-    return c.json(searchMessagesResponseSchema.parse(results));
+    // Filter out messages where user is null (required by schema)
+    const validResults = results.filter((r: any) => r.user !== null);
+
+    return c.json(searchMessagesResponseSchema.parse(validResults));
   } catch (error) {
     console.error("[Messages] Search error:", error);
     return c.json({ error: "Search failed" }, 500);
