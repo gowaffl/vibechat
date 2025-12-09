@@ -17,6 +17,7 @@ import Animated, {
   withSequence,
   Easing,
   useDerivedValue,
+  useAnimatedKeyboard,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { Heart, Smile, AlertCircle, Cloud, Zap, Quote, Coffee, HelpCircle, Megaphone } from "lucide-react-native";
@@ -140,6 +141,9 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
   const [selectedVibe, setSelectedVibe] = useState<VibeType | null>(null);
   const lastHoveredVibe = useRef<VibeType | null>(null);
 
+  // Keyboard
+  const keyboard = useAnimatedKeyboard();
+
   // Calculate list dimensions
   const listHeight = VIBES.length * ITEM_HEIGHT + (CONTAINER_PADDING * 2);
   
@@ -150,16 +154,63 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
   // 2nd item center Y relative to list top = CONTAINER_PADDING + (1 * ITEM_HEIGHT) + (ITEM_HEIGHT / 2)
   // = 8 + 52 + 26 = 86
   const anchorOffsetInList = CONTAINER_PADDING + ITEM_HEIGHT + (ITEM_HEIGHT / 2);
-  const targetTop = anchorPosition.y - anchorOffsetInList - 50; // Reverted to 50px offset
-  const targetLeft = anchorPosition.x - ITEM_WIDTH - 20; // 20px gap from center of button
-
-  // Calculate max height to fit on screen with some padding
+  
+  // Base calculations
   const screenHeight = Dimensions.get('window').height;
-  const availableHeight = screenHeight - targetTop - 40; // 40px bottom margin
-  const containerHeight = Math.min(listHeight, Math.max(200, availableHeight));
+  const idealTop = anchorPosition.y - anchorOffsetInList - 50; 
+  const targetLeft = anchorPosition.x - ITEM_WIDTH - 20;
+
+  // Use derived values for responsive layout that reacts to keyboard
+  const layout = useDerivedValue(() => {
+    const keyboardHeight = keyboard.height.value;
+    const safeBottom = screenHeight - keyboardHeight;
+    const minTop = screenHeight * 0.4; // Max 60% up the screen (40% from top)
+    
+    // We want to anchor to bottom if keyboard is open to ensure it sits on top
+    // Default bottom padding when keyboard is closed
+    const defaultBottomPadding = 40;
+    
+    // Calculate the maximum Y value the menu bottom can reach
+    // When keyboard open: sits right on top (minus small padding)
+    // When keyboard closed: sits above tab bar/safe area
+    const maxBottom = safeBottom - (keyboardHeight > 0 ? 10 : defaultBottomPadding);
+    
+    // Calculate actual top position
+    // 1. Start with ideal position (centered on button)
+    // 2. Clamp top to be at least minTop (don't go too high)
+    // 3. Ensure bottom doesn't exceed maxBottom
+    
+    let top = idealTop;
+    
+    // If keyboard pushes it up, we might need to shift up
+    if (top + listHeight > maxBottom) {
+      top = maxBottom - listHeight;
+    }
+    
+    // But don't go higher than minTop
+    top = Math.max(top, minTop);
+    
+    // Now determine height based on the constrained top and maxBottom
+    const availableHeight = maxBottom - top;
+    const height = Math.min(listHeight, Math.max(200, availableHeight));
+    
+    // Recalculate top to anchor to bottom if we are constrained
+    // If we are constrained by height, we want the bottom to stay at maxBottom
+    if (height < listHeight) {
+      top = maxBottom - height;
+    }
+
+    return {
+      top,
+      height,
+      left: targetLeft
+    };
+  });
 
   // Morph animation styles
   const containerStyle = useAnimatedStyle(() => {
+    const currentLayout = layout.value;
+    
     // Morph from a small circle at anchor to a large rounded rectangle
     const width = interpolate(
       openProgress.value,
@@ -171,21 +222,21 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
     const height = interpolate(
       openProgress.value,
       [0, 1],
-      [SEND_BUTTON_SIZE, containerHeight],
+      [SEND_BUTTON_SIZE, currentLayout.height],
       Extrapolation.CLAMP
     );
     
     const top = interpolate(
       openProgress.value,
       [0, 1],
-      [anchorPosition.y - SEND_BUTTON_SIZE / 2, targetTop],
+      [anchorPosition.y - SEND_BUTTON_SIZE / 2, currentLayout.top],
       Extrapolation.CLAMP
     );
     
     const left = interpolate(
       openProgress.value,
       [0, 1],
-      [anchorPosition.x - SEND_BUTTON_SIZE / 2, targetLeft],
+      [anchorPosition.x - SEND_BUTTON_SIZE / 2, currentLayout.left],
       Extrapolation.CLAMP
     );
 
@@ -288,14 +339,17 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
 
     // Determine which item is hovered
     // Calculate Y relative to the list container top
-    const relativeY = pageY - targetTop - CONTAINER_PADDING;
+    // Use the dynamic layout top to ensure touches map correctly when list shifts
+    const currentTop = layout.value.top;
+    const relativeY = pageY - currentTop - CONTAINER_PADDING;
     
     // Virtual Y including potential scroll needed to reach this finger position
     // This creates a "follow the finger" scroll effect for items outside the view
     const index = Math.floor((relativeY + scrollY.value) / ITEM_HEIGHT);
     
     // Check horizontal bounds
-    if (pageX < targetLeft - 50 || pageX > targetLeft + ITEM_WIDTH + 50) {
+    const currentLeft = layout.value.left;
+    if (pageX < currentLeft - 50 || pageX > currentLeft + ITEM_WIDTH + 50) {
        if (lastHoveredVibe.current !== null) {
         lastHoveredVibe.current = null;
         setSelectedVibe(null);
@@ -319,7 +373,7 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
       const currentScroll = scrollY.value;
       
       // Adjusted view height (taking padding into account)
-      const viewportHeight = containerHeight - (CONTAINER_PADDING * 2);
+      const viewportHeight = layout.value.height - (CONTAINER_PADDING * 2);
 
       if (itemBottom > currentScroll + viewportHeight) {
         // Scroll down to show item
@@ -337,7 +391,7 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
         onPreview(null);
       }
     }
-  }, [visible, anchorPosition, targetTop, targetLeft, onPreview, containerHeight]);
+  }, [visible, anchorPosition, layout, onPreview]); // Removed targetTop/Left/containerHeight deps, added layout
 
   const handleTouchEnd = useCallback((pageX: number, pageY: number) => {
     if (!visible) return;

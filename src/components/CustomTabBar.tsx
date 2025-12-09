@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { View, Text, TouchableOpacity, Platform, TextInput, Pressable, Keyboard, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
-import { MessageCircle, User, MoreHorizontal, Search, Globe } from "lucide-react-native";
+import { MessageCircle, User, MoreHorizontal, Search, Globe, ChevronLeft } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import Animated, { 
@@ -11,7 +11,8 @@ import Animated, {
   withSpring,
   interpolate,
   useDerivedValue,
-  Extrapolation
+  Extrapolation,
+  useAnimatedKeyboard
 } from "react-native-reanimated";
 import { GradientIcon } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
@@ -30,6 +31,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
   
   // Animation values
   const searchAnim = useSharedValue(0); // 0 = closed, 1 = open
+  const keyboard = useAnimatedKeyboard();
 
   useEffect(() => {
     searchAnim.value = withSpring(isSearchOpen ? 1 : 0, {
@@ -110,8 +112,17 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
     };
   });
 
+  const containerAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateY: -keyboard.height.value }
+      ]
+    };
+  });
+
   return (
-    <View style={{
+    <Animated.View style={[
+      {
       position: "absolute",
       bottom: 0,
       left: 0,
@@ -120,7 +131,9 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
       justifyContent: 'flex-end',
       paddingBottom: Platform.OS === "ios" ? 35 : 15,
       pointerEvents: 'box-none',
-    }}>
+    },
+    Platform.OS === 'ios' ? containerAnimatedStyle : null
+    ]}>
 
       {/* TABS CONTAINER PILL - Merged Background and Content */}
       <Animated.View style={[
@@ -226,9 +239,11 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
                       paddingHorizontal: 16, 
                       height: '100%', 
                       justifyContent: 'center',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      flexDirection: 'row',
                   }}
               >
+                  <ChevronLeft size={24} color="#4FC3F7" style={{ marginRight: 4 }} />
                   <MessageCircle size={24} color="#4FC3F7" fill={activeRouteName === 'Chats' ? "#4FC3F7" : "transparent"} fillOpacity={0.2} />
               </Pressable>
 
@@ -249,7 +264,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
           </Animated.View>
       </Animated.View>
 
-    </View>
+    </Animated.View>
   );
 
   function renderTab(tab: typeof tabs[0]) {

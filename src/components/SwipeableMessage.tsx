@@ -30,6 +30,7 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
   isCurrentUser,
 }) => {
   const translateX = useSharedValue(0);
+  const maxSwipeDistance = useSharedValue(MAX_SWIPE);
   const [isRevealed, setIsRevealed] = useState(false);
   const [bubbleHeight, setBubbleHeight] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
@@ -53,9 +54,10 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
       
       if (isValidDirection) {
         // Limit the swipe distance
+        const currentMaxSwipe = maxSwipeDistance.value;
         const clampedTranslation = isCurrentUser
-          ? Math.max(translation, -MAX_SWIPE)
-          : Math.min(translation, MAX_SWIPE);
+          ? Math.max(translation, -currentMaxSwipe)
+          : Math.min(translation, currentMaxSwipe);
         translateX.value = clampedTranslation;
         
         // Trigger haptic when crossing threshold
@@ -161,12 +163,28 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
           },
           timestampAnimatedStyle,
         ]}
+        onLayout={(event) => {
+          // Calculate required swipe distance based on timestamp width
+          const width = event.nativeEvent.layout.width;
+          // We need enough space for the timestamp plus some padding
+          // The timestamp moves at 0.3x speed, so we create 0.7x relative space
+          // required_swipe * 0.7 = width + padding
+          const padding = 20;
+          const requiredSwipe = (width + padding) / 0.7;
+          
+          // Only update if significantly different to avoid jitter, but ensure at least MAX_SWIPE
+          if (requiredSwipe > MAX_SWIPE) {
+             maxSwipeDistance.value = requiredSwipe;
+          }
+        }}
       >
         <Text
+          numberOfLines={1}
           style={{
             color: "#8E8E93",
             fontSize: 13,
             fontWeight: "500",
+            minWidth: 50, // Ensure it has some width
           }}
         >
           {timestamp}
