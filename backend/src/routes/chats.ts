@@ -441,9 +441,10 @@ chats.get("/:id", async (c) => {
           user: user ? {
             id: user.id,
             name: user.name,
+            phone: user.phone || "",
             bio: user.bio,
             image: user.image,
-            hasCompletedOnboarding: user.hasCompletedOnboarding,
+            hasCompletedOnboarding: user.hasCompletedOnboarding || false,
             createdAt: new Date(user.createdAt).toISOString(),
             updatedAt: new Date(user.updatedAt).toISOString(),
           } : null,
@@ -644,6 +645,16 @@ chats.post("/:id/invite", async (c) => {
       chatId: newMembership.chatId,
       userId: newMembership.userId,
       joinedAt: new Date(newMembership.joinedAt).toISOString(),
+      user: {
+        id: userToInvite.id,
+        name: userToInvite.name,
+        phone: userToInvite.phone || "",
+        bio: userToInvite.bio,
+        image: userToInvite.image,
+        hasCompletedOnboarding: userToInvite.hasCompletedOnboarding || false,
+        createdAt: new Date(userToInvite.createdAt).toISOString(),
+        updatedAt: new Date(userToInvite.updatedAt).toISOString(),
+      },
     });
   } catch (error) {
     console.error("[Chats] Error inviting user:", error);

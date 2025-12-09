@@ -21,12 +21,12 @@ const users = new Hono<AppType>();
 // Helper function to format user response
 const formatUserResponse = (user: any) => ({
   id: user.id,
-  phone: user.phone,
+  phone: user.phone || "",
   name: user.name,
   bio: user.bio,
   image: user.image,
   birthdate: user.birthdate,
-  hasCompletedOnboarding: user.hasCompletedOnboarding,
+  hasCompletedOnboarding: user.hasCompletedOnboarding || false,
   summaryPreference: user.summaryPreference || "concise",
   hasSeenSummaryPreferencePrompt: user.hasSeenSummaryPreferencePrompt || false,
   createdAt: typeof user.createdAt === 'string' ? user.createdAt : new Date(user.createdAt).toISOString(),
