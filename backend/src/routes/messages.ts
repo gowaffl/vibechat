@@ -27,9 +27,12 @@ const messages = new Hono<AppType>();
 // POST /api/messages/search - Search messages globally
 messages.post("/search", zValidator("json", searchMessagesRequestSchema), async (c) => {
   try {
-    const { userId, query } = c.req.valid("json");
+    const { userId, query: rawQuery } = c.req.valid("json");
+    
+    // Ensure query is trimmed and handle case-insensitivity expectations
+    const query = rawQuery?.trim() || "";
 
-    if (!query || query.trim().length === 0) {
+    if (query.length === 0) {
       return c.json([]);
     }
 
@@ -78,10 +81,14 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
       .in("chatId", chatIds);
 
     // Apply filter: content matches query OR userId is in matchedUserIds
+    // We use ilike for case-insensitive search
     if (matchedUserIds.length > 0) {
       // Need to construct the OR filter carefully
       // Note: .or() expects a comma-separated list of filters
-      messageQuery = messageQuery.or(`content.ilike.%${query}%,userId.in.(${matchedUserIds.join(',')})`);
+      // We sanitize the query to avoid breaking the OR syntax if it contains commas
+      // This is a limitation of the PostgREST syntax for OR filters
+      const sanitizedQuery = query.replace(/,/g, " ");
+      messageQuery = messageQuery.or(`content.ilike.%${sanitizedQuery}%,userId.in.(${matchedUserIds.join(',')})`);
     } else {
       messageQuery = messageQuery.ilike("content", `%${query}%`);
     }
