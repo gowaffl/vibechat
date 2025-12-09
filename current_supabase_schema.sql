@@ -719,14 +719,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   WITH user_chats AS (
-    -- Get all chats the user is a member of
-    SELECT "chatId" FROM chat_member WHERE "userId" = p_user_id
+    -- Get all chats the user is a member of, with join date
+    SELECT "chatId", "joinedAt" FROM chat_member WHERE "userId" = p_user_id
   ),
   unread_messages AS (
-    -- Count messages in each chat that:
-    -- 1. Are not from the current user
-    -- 2. Are not system messages
-    -- 3. Don't have a read receipt from the current user
     SELECT 
       m."chatId",
       COUNT(m.id) AS unread_count
@@ -734,12 +730,12 @@ AS $$
     INNER JOIN user_chats uc ON m."chatId" = uc."chatId"
     LEFT JOIN read_receipt rr ON rr."messageId" = m.id AND rr."userId" = p_user_id
     WHERE 
-      (m."userId" IS NULL OR m."userId" != p_user_id)  -- Not from current user (includes AI messages)
+      (m."userId" IS NULL OR m."userId" != p_user_id)  -- Not from current user
       AND m."messageType" != 'system'                   -- Not system messages
       AND rr.id IS NULL                                 -- No read receipt exists
+      AND m."createdAt" >= uc."joinedAt"                -- Only count messages after user joined
     GROUP BY m."chatId"
   )
-  -- Return all user chats with their unread counts (0 if no unread messages)
   SELECT 
     uc."chatId" AS chat_id,
     COALESCE(um.unread_count, 0) AS unread_count

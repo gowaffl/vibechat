@@ -80,53 +80,19 @@ notifications.get("/chats/unread-counts", async (c) => {
       return c.json({ error: "userId is required" }, 400);
     }
 
-    // Get all chats the user is a member of
-    const { data: memberships = [], error: memberError } = await db
-      .from("chat_member")
-      .select("chatId")
-      .eq("userId", userId);
+    // Use optimized database function that calculates all unread counts in a single query
+    const { data, error } = await db.rpc("get_unread_counts", { p_user_id: userId });
 
-    if (memberError) {
-      console.error("[Notifications] Error fetching memberships:", memberError);
+    if (error) {
+      console.error("[Notifications] Error getting unread counts:", error);
       return c.json({ error: "Failed to get unread counts" }, 500);
     }
 
-    const chatIds = memberships.map((m: any) => m.chatId);
-
-    // For each chat, count unread messages
-    const unreadCounts = await Promise.all(
-      chatIds.map(async (chatId: string) => {
-        // Get all messages in this chat (excluding current user and system messages)
-        const { data: messages = [] } = await db
-          .from("message")
-          .select("id")
-          .eq("chatId", chatId)
-          .neq("userId", userId)
-          .neq("messageType", "system");
-
-        const messageIds = messages.map((m: any) => m.id);
-
-        if (messageIds.length === 0) {
-          return { chatId, unreadCount: 0 };
-        }
-
-        // Count messages that don't have a read receipt from this user
-        const { data: readReceipts = [] } = await db
-          .from("read_receipt")
-          .select("messageId")
-          .eq("userId", userId)
-          .eq("chatId", chatId)
-          .in("messageId", messageIds);
-
-        const readMessageIdSet = new Set(readReceipts.map((r: any) => r.messageId));
-        const unreadCount = messageIds.filter((id: string) => !readMessageIdSet.has(id)).length;
-
-        return {
-          chatId,
-          unreadCount,
-        };
-      })
-    );
+    // Transform to expected format
+    const unreadCounts = (data || []).map((row: { chat_id: string; unread_count: number }) => ({
+      chatId: row.chat_id,
+      unreadCount: Number(row.unread_count),
+    }));
 
     return c.json(getUnreadCountsResponseSchema.parse(unreadCounts));
   } catch (error) {

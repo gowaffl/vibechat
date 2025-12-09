@@ -105,6 +105,22 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
     // 3. Decrypt and Format
     const decryptedMessages = await decryptMessages(messages || []);
 
+    // Decrypt nested replyTo messages if they exist
+    const replyToMessages = decryptedMessages
+      .filter((m: any) => m.replyTo)
+      .map((m: any) => m.replyTo);
+
+    if (replyToMessages.length > 0) {
+      const decryptedReplyTos = await decryptMessages(replyToMessages);
+      const replyToMap = new Map(decryptedReplyTos.map((m: any) => [m.id, m]));
+      
+      decryptedMessages.forEach((msg: any) => {
+        if (msg.replyTo && replyToMap.has(msg.replyTo.id)) {
+          msg.replyTo = replyToMap.get(msg.replyTo.id);
+        }
+      });
+    }
+
     const results = decryptedMessages.map((msg: any) => {
       // Parse metadata
       let parsedMetadata = msg.metadata;
@@ -637,6 +653,12 @@ messages.get("/:id", async (c) => {
     // Decrypt message if encrypted
     const [decryptedMsg] = await decryptMessages([msg]);
 
+    // Decrypt replyTo if it exists
+    if (decryptedMsg.replyTo) {
+      const [decryptedReplyTo] = await decryptMessages([decryptedMsg.replyTo]);
+      decryptedMsg.replyTo = decryptedReplyTo;
+    }
+
     // Parse metadata
     let parsedMetadata = decryptedMsg.metadata;
     if (typeof msg.metadata === "string") {
@@ -816,6 +838,9 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
     return c.json({ error: "Failed to create message" }, 500);
   }
 
+  // Decrypt the message immediately for processing
+  const [decryptedMessage] = await decryptMessages([message]);
+
   // Fetch user
   const { data: user, error: userError } = await db
     .from("user")
@@ -906,8 +931,8 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
   }
 
   // Auto-tag message for smart threads (fire-and-forget, immediate)
-  if (content && content.trim().length > 0) {
-    tagMessage(message.id, content).catch(error => {
+  if (decryptedMessage.content && decryptedMessage.content.trim().length > 0) {
+    tagMessage(decryptedMessage.id, decryptedMessage.content).catch(error => {
       console.error(`[Messages] Failed to tag message ${message.id}:`, error);
     });
   }
@@ -941,8 +966,8 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
   }
 
   // If this is a text message, check for URLs and fetch link preview
-  if (messageType === "text" && content) {
-    const url = extractFirstUrl(content);
+  if (messageType === "text" && decryptedMessage.content) {
+    const url = extractFirstUrl(decryptedMessage.content);
     if (url) {
       console.log(`🔗 [Messages] URL detected in message (${message.id}), fetching link preview: ${url}`);
 

@@ -951,6 +951,22 @@ chats.get("/:id/messages", async (c) => {
     // Decrypt any encrypted messages
     const decryptedMessages = await decryptMessages(messages);
 
+    // Decrypt nested replyTo messages if they exist
+    const replyToMessages = decryptedMessages
+      .filter((m: any) => m.replyTo)
+      .map((m: any) => m.replyTo);
+
+    if (replyToMessages.length > 0) {
+      const decryptedReplyTos = await decryptMessages(replyToMessages);
+      const replyToMap = new Map(decryptedReplyTos.map((m: any) => [m.id, m]));
+      
+      decryptedMessages.forEach((msg: any) => {
+        if (msg.replyTo && replyToMap.has(msg.replyTo.id)) {
+          msg.replyTo = replyToMap.get(msg.replyTo.id);
+        }
+      });
+    }
+
     const formattedMessages = decryptedMessages.map((msg: any) => {
       // Parse metadata if it's a string
       let parsedMetadata = msg.metadata;
@@ -1153,6 +1169,9 @@ chats.post("/:id/messages", async (c) => {
       return c.json({ error: "Failed to send message" }, 500);
     }
 
+    // Decrypt the message immediately for processing
+    const [decryptedMessage] = await decryptMessages([message]);
+
     // Fetch user
     const { data: user } = await db
       .from("user")
@@ -1239,15 +1258,15 @@ chats.post("/:id/messages", async (c) => {
 
     // Auto-tag message for smart threads (fire-and-forget, immediate)
     // This ensures real-time tagging for background AI processing
-    if (message.content && message.content.trim().length > 0) {
-      tagMessage(message.id, message.content).catch(error => {
+    if (decryptedMessage.content && decryptedMessage.content.trim().length > 0) {
+      tagMessage(decryptedMessage.id, decryptedMessage.content).catch(error => {
         console.error(`[Chats] Failed to tag message ${message.id}:`, error);
       });
     }
 
     // If this is a text message, check for URLs and fetch link preview
-    if (message.messageType === "text" && message.content) {
-      const url = extractFirstUrl(message.content);
+    if (message.messageType === "text" && decryptedMessage.content) {
+      const url = extractFirstUrl(decryptedMessage.content);
       if (url) {
         console.log(`🔗 [Chats] URL detected in message (${message.id}), fetching link preview: ${url}`);
 
@@ -1298,7 +1317,7 @@ chats.post("/:id/messages", async (c) => {
         ? "🎤 Voice message"
         : message.messageType === "video"
         ? "🎬 Video"
-        : (validated.content || "New message"); // Use plaintext from request
+        : (decryptedMessage.content || "New message"); // Use plaintext from decrypted message
 
       sendChatPushNotifications({
         chatId,

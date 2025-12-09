@@ -17,43 +17,19 @@ interface SendPushNotificationParams {
  */
 async function getTotalUnreadCount(userId: string): Promise<number> {
   try {
-    // Get all chats the user is a member of
-    const { data: memberships } = await db
-      .from("chat_member")
-      .select("chatId")
-      .eq("userId", userId);
+    // Use the optimized RPC function that correctly handles joinedAt time
+    const { data, error } = await db.rpc("get_unread_counts", { p_user_id: userId });
 
-    if (!memberships || memberships.length === 0) {
+    if (error) {
+      console.error("[Push] Error calling get_unread_counts RPC:", error);
       return 0;
     }
 
-    const chatIds = memberships.map((m: any) => m.chatId);
+    if (!data) return 0;
 
-    // Get all messages in user's chats (excluding their own and system messages)
-    const { data: messages } = await db
-      .from("message")
-      .select("id, chatId")
-      .in("chatId", chatIds)
-      .neq("userId", userId)
-      .neq("messageType", "system");
-
-    if (!messages || messages.length === 0) {
-      return 0;
-    }
-
-    const messageIds = messages.map((m: any) => m.id);
-
-    // Get read receipts for these messages
-    const { data: readReceipts } = await db
-      .from("read_receipt")
-      .select("messageId")
-      .eq("userId", userId)
-      .in("messageId", messageIds);
-
-    const readMessageIdSet = new Set((readReceipts || []).map((r: any) => r.messageId));
-    const unreadCount = messageIds.filter((id: string) => !readMessageIdSet.has(id)).length;
-
-    return unreadCount;
+    // Sum up unread counts from all chats
+    const total = data.reduce((sum: number, row: any) => sum + Number(row.unread_count), 0);
+    return total;
   } catch (error) {
     console.error("[Push] Error calculating total unread count:", error);
     return 0;
