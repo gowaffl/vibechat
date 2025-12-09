@@ -140,9 +140,10 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
         user: msg.user ? {
           id: msg.user.id,
           name: msg.user.name,
+          phone: msg.user.phone || "",
           bio: msg.user.bio,
           image: msg.user.image,
-          hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
+          hasCompletedOnboarding: msg.user.hasCompletedOnboarding || false,
           createdAt: new Date(msg.user.createdAt).toISOString(),
           updatedAt: new Date(msg.user.updatedAt).toISOString(),
         } : null,
@@ -170,7 +171,12 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
           user: msg.replyTo.user ? {
             id: msg.replyTo.user.id,
             name: msg.replyTo.user.name,
+            phone: msg.replyTo.user.phone || "",
+            bio: msg.replyTo.user.bio,
             image: msg.replyTo.user.image,
+            hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding || false,
+            createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
+            updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
           } : null,
         } : null,
         reactions: (msg.reactions || []).map((reaction: any) => ({
@@ -183,7 +189,12 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
           user: reaction.user ? {
             id: reaction.user.id,
             name: reaction.user.name,
+            phone: reaction.user.phone || "",
+            bio: reaction.user.bio,
             image: reaction.user.image,
+            hasCompletedOnboarding: reaction.user.hasCompletedOnboarding || false,
+            createdAt: new Date(reaction.user.createdAt).toISOString(),
+            updatedAt: new Date(reaction.user.updatedAt).toISOString(),
           } : null,
         })),
         mentions: (msg.mentions || []).map((mention: any) => ({
@@ -195,7 +206,12 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
           mentionedUser: mention.mentionedUser ? {
             id: mention.mentionedUser.id,
             name: mention.mentionedUser.name,
+            phone: mention.mentionedUser.phone || "",
+            bio: mention.mentionedUser.bio,
             image: mention.mentionedUser.image,
+            hasCompletedOnboarding: mention.mentionedUser.hasCompletedOnboarding || false,
+            createdAt: new Date(mention.mentionedUser.createdAt).toISOString(),
+            updatedAt: new Date(mention.mentionedUser.updatedAt).toISOString(),
           } : null,
         })),
       };
@@ -207,7 +223,24 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
     });
 
     // Filter out messages where user is null (required by schema)
-    const validResults = results.filter((r: any) => r.user !== null);
+    // Also, match in-chat search logic: content match OR sender name match
+    // The initial SQL query handles the content/sender matching, but we should double check here
+    // especially for AI messages which might have null userId but we still want them if they match query
+    const validResults = results.filter((r: any) => {
+      // 1. Must have a valid message object
+      if (!r.message) return false;
+      
+      // 2. Schema requires 'user' to be non-null. 
+      // If it's an AI message (userId is null), we need to ensure we don't break the schema.
+      // However, the current schema implementation (searchMessageResultSchema -> messageSchema) 
+      // DOES require 'user' to be present.
+      // If it's an AI message, we might need to synthesize a "user" object or the schema needs to allow null.
+      // Based on messageSchema in contracts.ts, user is REQUIRED (user: User).
+      // So filtering out null users is correct for SCHEMA VALIDATION, but might hide AI messages.
+      // If AI messages are desired, we would need to mock a user object for them or update schema.
+      // For now, adhering to strict schema validation as requested.
+      return r.message.user !== null;
+    });
 
     return c.json(searchMessagesResponseSchema.parse(validResults));
   } catch (error) {
