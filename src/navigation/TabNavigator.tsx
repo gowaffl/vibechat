@@ -5,6 +5,7 @@ import type { TabParamList } from "@/navigation/types";
 import ChatListScreen from "@/screens/ChatListScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import MoreScreen from "@/screens/MoreScreen";
+import CommunityScreen from "@/screens/CommunityScreen";
 import { CustomTabBar } from "@/components/CustomTabBar";
 import { forFadeTransition, transitionSpec } from "@/navigation/TransitionConfig";
 import { LinearGradient } from "expo-linear-gradient";
@@ -54,6 +55,7 @@ export default function TabNavigator() {
             headerTintColor: "#FFFFFF",
           }}
         />
+        <TabStack.Screen name="Community" component={CommunityScreen} />
         <TabStack.Screen name="More" component={MoreScreen} />
       </TabStack.Navigator>
       

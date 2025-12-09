@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { View, Text, TouchableOpacity, Platform, TextInput, Pressable, Keyboard, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
-import { MessageCircle, User, MoreHorizontal, Search } from "lucide-react-native";
+import { MessageCircle, User, MoreHorizontal, Search, Globe } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import Animated, { 
@@ -41,7 +41,8 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
   const tabs = [
     { name: "Chats", label: "Chats", icon: MessageCircle, index: 0 },
     { name: "Profile", label: "Profile", icon: User, index: 1 },
-    { name: "More", label: "More", icon: MoreHorizontal, index: 2 },
+    { name: "Community", label: "Community", icon: Globe, index: 2 },
+    { name: "More", label: "More", icon: MoreHorizontal, index: 3 },
   ];
 
   // Helper to get current index

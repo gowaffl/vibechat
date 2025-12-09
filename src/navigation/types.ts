@@ -22,11 +22,13 @@ export type RootStackParamList = {
   GroupSettings: { chatId: string; expandAIFriends?: boolean; createAIFriend?: boolean };
   InviteMembers: { chatId: string; chatName: string };
   Invite: { token: string };
+  JoinChat: undefined;
 };
 
 export type TabParamList = {
   Chats: undefined;
   Profile: undefined;
+  Community: undefined;
   More: undefined;
 };
 

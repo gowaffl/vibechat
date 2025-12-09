@@ -1,14 +1,16 @@
 import React from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, Text, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Settings, Info, Shield, CircleHelp } from "lucide-react-native";
+import { Info, CircleHelp, MessageSquarePlus, Share2, UserPlus } from "lucide-react-native";
+import { useNavigation } from "@react-navigation/native";
 import { GradientIcon } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 
 const MoreScreen = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
 
   const MenuItem = ({ icon, label, onPress }: { icon: React.ReactNode, label: string, onPress?: () => void }) => (
     <View style={{ marginBottom: 16 }}>
@@ -22,27 +24,29 @@ const MoreScreen = () => {
           borderColor: "rgba(255, 255, 255, 0.1)",
         }}
       >
-        <LinearGradient
-          colors={["rgba(255, 255, 255, 0.05)", "rgba(255, 255, 255, 0.02)"]}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            padding: 16,
-          }}
-        >
-          <View style={{ 
-            width: 40, 
-            height: 40, 
-            borderRadius: 20, 
-            backgroundColor: "rgba(255, 255, 255, 0.1)",
-            alignItems: "center",
-            justifyContent: "center",
-            marginRight: 16
-          }}>
-            {icon}
-          </View>
-          <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>{label}</Text>
-        </LinearGradient>
+        <Pressable onPress={onPress}>
+          <LinearGradient
+            colors={["rgba(255, 255, 255, 0.05)", "rgba(255, 255, 255, 0.02)"]}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              padding: 16,
+            }}
+          >
+            <View style={{ 
+              width: 40, 
+              height: 40, 
+              borderRadius: 20, 
+              backgroundColor: "rgba(255, 255, 255, 0.1)",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 16
+            }}>
+              {icon}
+            </View>
+            <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>{label}</Text>
+          </LinearGradient>
+        </Pressable>
       </BlurView>
     </View>
   );
@@ -65,12 +69,8 @@ const MoreScreen = () => {
         </Text>
 
         <MenuItem 
-          icon={<Settings size={24} color="#FFF" />} 
-          label="Settings"
-        />
-        <MenuItem 
-          icon={<Shield size={24} color="#FFF" />} 
-          label="Privacy & Security"
+          icon={<MessageSquarePlus size={24} color="#FFF" />} 
+          label="Feedback/Requests"
         />
         <MenuItem 
           icon={<CircleHelp size={24} color="#FFF" />} 
@@ -79,6 +79,18 @@ const MoreScreen = () => {
         <MenuItem 
           icon={<Info size={24} color="#FFF" />} 
           label="About VibeChat"
+        />
+        <MenuItem 
+          icon={<Share2 size={24} color="#FFF" />} 
+          label="Share VibeChat"
+        />
+
+        <View style={{ height: 20 }} />
+
+        <MenuItem 
+          icon={<UserPlus size={24} color="#FFF" />} 
+          label="Join Chat (Temporary)"
+          onPress={() => navigation.navigate("JoinChat")}
         />
         
         <View style={{ marginTop: 32, alignItems: "center" }}>

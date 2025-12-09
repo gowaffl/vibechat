@@ -19,6 +19,7 @@ import OnboardingPhotoScreen from "@/screens/OnboardingPhotoScreen";
 import PhoneAuthScreen from "@/screens/PhoneAuthScreen";
 import WelcomeScreen from "@/screens/WelcomeScreen";
 import BirthdateScreen from "@/screens/BirthdateScreen";
+import JoinChatScreen from "@/screens/JoinChatScreen";
 import { useUser } from "@/contexts/UserContext";
 
 /**
@@ -148,6 +149,24 @@ const RootNavigator = () => {
               }),
             },
           }),
+        }}
+      />
+      <RootStack.Screen
+        name="JoinChat"
+        component={JoinChatScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "Join Chat",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
         }}
       />
       <RootStack.Screen
