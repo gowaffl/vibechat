@@ -17,7 +17,7 @@ export type RootStackParamList = {
   OnboardingPhoto: { name: string; bio?: string };
   MainTabs: NavigatorScreenParams<TabParamList>;
   ChatList: undefined; // Kept for backward compatibility references if any
-  Chat: { chatId: string; chatName: string };
+  Chat: { chatId: string; chatName: string; messageId?: string };
   Profile: undefined; // Kept for backward compatibility references if any
   GroupSettings: { chatId: string; expandAIFriends?: boolean; createAIFriend?: boolean };
   InviteMembers: { chatId: string; chatName: string };
@@ -26,9 +26,8 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Chats: undefined;
-  CreateChat: undefined;
-  JoinChat: undefined;
   Profile: undefined;
+  More: undefined;
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> = StackScreenProps<

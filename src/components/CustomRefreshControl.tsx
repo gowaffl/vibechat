@@ -7,11 +7,13 @@ import { GradientText } from './GradientText';
 interface CustomRefreshControlProps {
   refreshing: boolean;
   message?: string;
+  topOffset?: number;
 }
 
 export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({ 
   refreshing,
-  message = "Refreshing chats" 
+  message = "Refreshing chats",
+  topOffset
 }) => {
   const insets = useSafeAreaInsets();
   
@@ -20,7 +22,7 @@ export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({
   // Calculate position to be just below the header
   // Header has paddingTop: insets.top + 16 and paddingBottom: 16
   // Plus the search bar and title height (approximately 100-120px)
-  const topPosition = insets.top + 140;
+  const topPosition = topOffset ?? (insets.top + 140);
 
   return (
     <View

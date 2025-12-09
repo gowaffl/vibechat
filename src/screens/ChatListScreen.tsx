@@ -32,6 +32,8 @@ import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { CustomRefreshControl } from "@/components/CustomRefreshControl";
+import { useDebounce } from "@/hooks/useDebounce";
+import { SearchMessagesResponse, SearchMessageResult } from "@/shared/contracts";
 
 // Separated component for performance optimization with memoization
 const ChatItem = React.memo(({ 
@@ -279,13 +281,17 @@ const ChatItem = React.memo(({
   );
 });
 
+import { useSearchStore } from "@/stores/searchStore";
+import { CreateChatFAB } from "@/components/CreateChatFAB";
+
 const ChatListScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<RootStackScreenProps<"ChatList">["navigation"]>();
   const { user } = useUser();
   const queryClient = useQueryClient();
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const { searchQuery } = useSearchStore();
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -299,6 +305,13 @@ const ChatListScreen = () => {
 
   // Fetch unread counts for all chats using shared hook
   const { data: unreadCounts = [], refetch: refetchUnread } = useUnreadCounts(user?.id);
+
+  // Search messages query
+  const { data: searchResults = [], isLoading: isSearching } = useQuery<SearchMessagesResponse>({
+    queryKey: ["search-messages", debouncedSearchQuery],
+    queryFn: () => api.post("/api/messages/search", { userId: user!.id, query: debouncedSearchQuery }),
+    enabled: !!user?.id && debouncedSearchQuery.trim().length > 0,
+  });
 
   // Ref to track current chat IDs for filtering realtime events
   const chatIdsRef = React.useRef<Set<string>>(new Set());
@@ -401,6 +414,15 @@ const ChatListScreen = () => {
     navigation.navigate("Chat", {
       chatId: chat.id,
       chatName: chat.name,
+    });
+  };
+
+  const handleSearchResultPress = (result: SearchMessageResult) => {
+    Haptics.selectionAsync();
+    navigation.navigate("Chat", {
+      chatId: result.chat.id,
+      chatName: result.chat.name,
+      messageId: result.message.id,
     });
   };
 
@@ -772,10 +794,62 @@ const ChatListScreen = () => {
     );
   };
 
+  const renderSearchResult = ({ item }: { item: SearchMessageResult }) => {
+    return (
+      <Pressable
+        onPress={() => handleSearchResultPress(item)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.7 : 1,
+          marginHorizontal: 16,
+          marginBottom: 12,
+        })}
+      >
+        <BlurView
+          intensity={Platform.OS === "ios" ? 20 : 40}
+          tint="dark"
+          style={{
+            borderRadius: 16,
+            overflow: "hidden",
+            borderWidth: 1,
+            borderColor: "rgba(255, 255, 255, 0.1)",
+          }}
+        >
+          <View style={{ padding: 16 }}>
+            {/* Header: Sender Name + Chat Name + Time */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}>
+                  <Text style={{ color: "#4FC3F7", fontSize: 14, fontWeight: "700" }}>
+                    {item.message.user?.name || "Unknown"}
+                  </Text>
+                  <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12, fontWeight: "600", marginLeft: 6 }}>
+                    in {item.chat.name}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: "rgba(255, 255, 255, 0.4)", fontSize: 11, marginTop: 2 }}>
+                {formatTime(item.message.createdAt)}
+              </Text>
+            </View>
+
+            {/* Message Content */}
+            <Text style={{ color: "#FFFFFF", fontSize: 15, lineHeight: 20 }} numberOfLines={3}>
+              {item.message.content}
+            </Text>
+          </View>
+        </BlurView>
+      </Pressable>
+    );
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>
       {/* Custom Refresh Control Overlay */}
-      <CustomRefreshControl refreshing={isRefreshing} message="Refreshing chats" />
+      <CustomRefreshControl 
+        refreshing={isRefreshing} 
+        message="Refreshing chats" 
+        topOffset={insets.top + 80}
+      />
       
       {/* Animated Gradient Background */}
       <View
@@ -828,12 +902,12 @@ const ChatListScreen = () => {
           zIndex: 100,
         }}
       >
-        <BlurView
+          <BlurView
           intensity={80}
           tint="dark"
           style={{
-            paddingTop: insets.top + 16,
-            paddingBottom: 16,
+            paddingTop: insets.top + 4,
+            paddingBottom: 4,
             paddingHorizontal: 20,
             backgroundColor: Platform.OS === "ios" ? "rgba(0, 0, 0, 0.3)" : "rgba(0, 0, 0, 0.85)",
             borderBottomWidth: 0.5,
@@ -858,7 +932,7 @@ const ChatListScreen = () => {
             }}
           />
         <View>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
             <TapGestureHandler
               numberOfTaps={3}
               onHandlerStateChange={({ nativeEvent }) => {
@@ -869,83 +943,46 @@ const ChatListScreen = () => {
               }}
             >
               <View>
-                <Text style={{ fontSize: 32, fontWeight: "bold", color: "#FFFFFF" }}>
-                  Chats
-                </Text>
+                <Image
+                  source={require("../../assets/vibechat text only.png")}
+                  style={{ width: 225, height: 55 }}
+                  contentFit="contain"
+                />
               </View>
             </TapGestureHandler>
-          </View>
-
-          {/* Search Bar */}
-          <View
-            style={{
-              borderRadius: 16,
-              overflow: "hidden",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <BlurView
-              intensity={Platform.OS === "ios" ? 40 : 80}
-              tint="dark"
-              style={{
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.1)",
-                overflow: "hidden",
-              }}
-            >
-              <LinearGradient
-                colors={[
-                  "rgba(255, 255, 255, 0.1)",
-                  "rgba(255, 255, 255, 0.05)",
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{ padding: 2 }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    backgroundColor: "rgba(0, 0, 0, 0.3)",
-                    borderRadius: 14,
-                  }}
-                >
-                  <Search size={20} color="rgba(255, 255, 255, 0.6)" />
-                  <TextInput
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholder="Search chats..."
-                    placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                    keyboardAppearance="dark"
-                    style={{
-                      flex: 1,
-                      marginLeft: 12,
-                      fontSize: 16,
-                      color: "#FFFFFF",
-                    }}
-                  />
-                  {searchQuery.length > 0 && (
-                    <Pressable onPress={() => setSearchQuery("")}>
-                      <X size={20} color="rgba(255, 255, 255, 0.6)" />
-                    </Pressable>
-                  )}
-                </View>
-              </LinearGradient>
-            </BlurView>
           </View>
         </View>
         </BlurView>
       </View>
 
-      {/* Chat List */}
-      {isLoading ? (
+      {/* Chat List or Search Results */}
+      {searchQuery.trim().length > 0 ? (
+        // Search Mode
+        isSearching ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <LuxeLogoLoader size="large" />
+          </View>
+        ) : searchResults.length === 0 ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
+            <Text style={{ fontSize: 16, fontWeight: "500", color: "rgba(255, 255, 255, 0.5)", textAlign: "center" }}>
+              No messages found for "{searchQuery}"
+            </Text>
+          </View>
+        ) : (
+          <FlashList
+            data={searchResults}
+            keyExtractor={(item) => item.message.id}
+            estimatedItemSize={100}
+            renderItem={renderSearchResult}
+            contentContainerStyle={{
+              paddingTop: insets.top + 100,
+              paddingBottom: insets.bottom + 100,
+            }}
+          />
+        )
+      ) : (
+        // Chat List Mode
+        isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <LuxeLogoLoader size="large" />
         </View>
@@ -965,11 +1002,8 @@ const ChatListScreen = () => {
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              navigation.navigate("CreateChat");
             }}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.8 : 1,
-            })}
+            style={{ display: 'none' }} 
           >
             <View
               style={{
@@ -1019,11 +1053,11 @@ const ChatListScreen = () => {
               />
             )}
             contentContainerStyle={{
-              paddingTop: insets.top + 160,
+              paddingTop: insets.top + 100,
               paddingBottom: insets.bottom + 100,
             }}
             ListHeaderComponent={
-              pinnedChats.length > 0 && !searchQuery ? (
+              pinnedChats.length > 0 ? (
                 <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
                     <GradientIcon
@@ -1060,7 +1094,12 @@ const ChatListScreen = () => {
               />
             }
           />
-      )}
+      )
+    )
+      }
+
+      {/* FAB */}
+      <CreateChatFAB />
 
       {/* Context Menu Modal */}
       <Modal

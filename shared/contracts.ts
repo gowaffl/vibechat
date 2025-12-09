@@ -114,7 +114,7 @@ export const chatWithMembersSchema = chatSchema.extend({
 export type ChatWithMembers = z.infer<typeof chatWithMembersSchema>;
 
 // VibeWrapper type for emotional message context
-export const vibeTypeSchema = z.enum(["genuine", "playful", "serious", "soft", "hype"]);
+export const vibeTypeSchema = z.enum(["genuine", "playful", "serious", "soft", "hype", "sarcastic", "chill", "confused", "bold"]);
 export type VibeType = z.infer<typeof vibeTypeSchema>;
 
 // Message metadata schema for multi-image and video support
@@ -150,7 +150,7 @@ export const messageSchema: z.ZodType<{
   voiceDuration?: number | null;
   eventId?: string | null;
   pollId?: string | null;
-  vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | null;
+  vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | "sarcastic" | "chill" | "confused" | "bold" | null;
   metadata?: MessageMetadata | null;
   user: User;
   replyTo?: Message | null;
@@ -275,6 +275,26 @@ export const deleteMessageResponseSchema = z.object({
   message: z.string(),
 });
 export type DeleteMessageResponse = z.infer<typeof deleteMessageResponseSchema>;
+
+// POST /api/messages/search - Search messages globally
+export const searchMessagesRequestSchema = z.object({
+  userId: z.string(),
+  query: z.string(),
+});
+export type SearchMessagesRequest = z.infer<typeof searchMessagesRequestSchema>;
+
+export const searchMessageResultSchema = z.object({
+  message: messageSchema,
+  chat: z.object({
+    id: z.string(),
+    name: z.string(),
+    image: z.string().nullable(),
+  }),
+});
+export type SearchMessageResult = z.infer<typeof searchMessageResultSchema>;
+
+export const searchMessagesResponseSchema = z.array(searchMessageResultSchema);
+export type SearchMessagesResponse = z.infer<typeof searchMessagesResponseSchema>;
 
 // PATCH /api/messages/:id - Edit a message
 export const editMessageRequestSchema = z.object({

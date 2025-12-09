@@ -150,24 +150,6 @@ const RootNavigator = () => {
         }}
       />
       <RootStack.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          headerShown: true,
-          headerTitle: "Profile",
-          headerTransparent: true,
-          headerBackground: () => (
-            <LinearGradient
-              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={{ flex: 1 }}
-            />
-          ),
-          headerTintColor: "#FFFFFF",
-        }}
-      />
-      <RootStack.Screen
         name="GroupSettings"
         component={GroupSettingsScreen}
         options={{

@@ -1,14 +1,26 @@
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
-  Animated,
   StyleSheet,
+  Dimensions,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  interpolate,
+  Extrapolation,
+  runOnJS,
+  withDelay,
+  withSequence,
+  Easing,
+  useDerivedValue,
+} from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { Heart, Smile, AlertCircle, Cloud, Zap } from "lucide-react-native";
+import { Heart, Smile, AlertCircle, Cloud, Zap, Quote, Coffee, HelpCircle, Megaphone } from "lucide-react-native";
 import type { VibeType } from "@shared/contracts";
-
 
 // Vibe configuration with icons, colors, and labels
 export const VIBE_CONFIG: Record<
@@ -56,15 +68,53 @@ export const VIBE_CONFIG: Record<
     label: "Hype",
     description: "Excited & energetic",
   },
+  sarcastic: {
+    icon: Quote,
+    color: "#bef264",
+    gradient: ["rgba(190, 242, 100, 0.35)", "rgba(190, 242, 100, 0.20)", "rgba(190, 242, 100, 0.10)"],
+    label: "Sarcastic",
+    description: "Don't take literally",
+  },
+  chill: {
+    icon: Coffee,
+    color: "#22D3EE",
+    gradient: ["rgba(34, 211, 238, 0.35)", "rgba(34, 211, 238, 0.20)", "rgba(34, 211, 238, 0.10)"],
+    label: "Chill",
+    description: "Relaxed & easy",
+  },
+  confused: {
+    icon: HelpCircle,
+    color: "#FB923C",
+    gradient: ["rgba(251, 146, 60, 0.35)", "rgba(251, 146, 60, 0.20)", "rgba(251, 146, 60, 0.10)"],
+    label: "Confused",
+    description: "Unsure or lost",
+  },
+  bold: {
+    icon: Megaphone,
+    color: "#8B5CF6",
+    gradient: ["rgba(139, 92, 246, 0.35)", "rgba(139, 92, 246, 0.20)", "rgba(139, 92, 246, 0.10)"],
+    label: "Bold",
+    description: "Loud & confident",
+  },
 };
 
-const VIBES: VibeType[] = ["genuine", "playful", "serious", "soft", "hype"];
+const VIBES: VibeType[] = [
+  "genuine", 
+  "playful", 
+  "serious", 
+  "soft", 
+  "hype", 
+  "sarcastic", 
+  "chill", 
+  "confused", 
+  "bold"
+];
 
-// Arc configuration - positioned to the LEFT of send button
-// Arc goes: above → left → below (like a "C" opening to the right)
-const ARC_RADIUS = 110; // Increased for more spacing between icons
-const ICON_SIZE = 48;
-const HIT_SLOP = 35; // Extra touch area for better precision
+const ITEM_HEIGHT = 52;
+const ITEM_WIDTH = 180;
+const CONTAINER_PADDING = 8;
+const SEND_BUTTON_SIZE = 44; // Approximate size of send button for morph origin
+const BORDER_RADIUS = 28;
 
 interface VibeSelectorProps {
   visible: boolean;
@@ -81,274 +131,300 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
   onCancel,
   anchorPosition,
 }) => {
+  // Animation state 0 -> 1
+  const openProgress = useSharedValue(0);
+  // Scroll state
+  const scrollY = useSharedValue(0);
+  
+  // Track selected vibe
   const [selectedVibe, setSelectedVibe] = useState<VibeType | null>(null);
-  const iconAnims = useRef(VIBES.map(() => new Animated.Value(0))).current;
-  const iconScales = useRef(VIBES.map(() => new Animated.Value(1))).current;
   const lastHoveredVibe = useRef<VibeType | null>(null);
 
-  // Calculate icon positions in a semi-circle arc to the LEFT of anchor
-  // Arc goes from above, around to the left, ending above keyboard level
-  // Shifted UP significantly to avoid keyboard overlap
-  const getIconPosition = useCallback((index: number) => {
-    const totalVibes = VIBES.length;
-    // Arc needs to stay well above keyboard
-    // Range: 120° to 0° - keeps all icons above input bar
-    const startAngle = 95;
-    const endAngle = 0;
-    const angleRange = endAngle - startAngle;
-    const angleStep = angleRange / (totalVibes - 1);
-    const angle = startAngle + index * angleStep;
-    // Rotate 180° to flip to the left side
-    const adjustedAngle = angle + 180;
-    const radians = (adjustedAngle * Math.PI) / 180;
+  // Calculate list dimensions
+  const listHeight = VIBES.length * ITEM_HEIGHT + (CONTAINER_PADDING * 2);
+  
+  // Position logic:
+  // We want the list to be to the left of the anchor
+  // We want the 2nd item (index 1) to align with the anchor Y
+  // Anchor is center of send button
+  // 2nd item center Y relative to list top = CONTAINER_PADDING + (1 * ITEM_HEIGHT) + (ITEM_HEIGHT / 2)
+  // = 8 + 52 + 26 = 86
+  const anchorOffsetInList = CONTAINER_PADDING + ITEM_HEIGHT + (ITEM_HEIGHT / 2);
+  const targetTop = anchorPosition.y - anchorOffsetInList - 50; // Reverted to 50px offset
+  const targetLeft = anchorPosition.x - ITEM_WIDTH - 20; // 20px gap from center of button
+
+  // Calculate max height to fit on screen with some padding
+  const screenHeight = Dimensions.get('window').height;
+  const availableHeight = screenHeight - targetTop - 40; // 40px bottom margin
+  const containerHeight = Math.min(listHeight, Math.max(200, availableHeight));
+
+  // Morph animation styles
+  const containerStyle = useAnimatedStyle(() => {
+    // Morph from a small circle at anchor to a large rounded rectangle
+    const width = interpolate(
+      openProgress.value,
+      [0, 1],
+      [SEND_BUTTON_SIZE, ITEM_WIDTH],
+      Extrapolation.CLAMP
+    );
+    
+    const height = interpolate(
+      openProgress.value,
+      [0, 1],
+      [SEND_BUTTON_SIZE, containerHeight],
+      Extrapolation.CLAMP
+    );
+    
+    const top = interpolate(
+      openProgress.value,
+      [0, 1],
+      [anchorPosition.y - SEND_BUTTON_SIZE / 2, targetTop],
+      Extrapolation.CLAMP
+    );
+    
+    const left = interpolate(
+      openProgress.value,
+      [0, 1],
+      [anchorPosition.x - SEND_BUTTON_SIZE / 2, targetLeft],
+      Extrapolation.CLAMP
+    );
+
+    const borderRadius = interpolate(
+      openProgress.value,
+      [0, 1],
+      [SEND_BUTTON_SIZE / 2, BORDER_RADIUS],
+      Extrapolation.CLAMP
+    );
+
+    const opacity = interpolate(
+      openProgress.value,
+      [0, 0.2],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
 
     return {
-      x: Math.cos(radians) * ARC_RADIUS,
-      y: Math.sin(radians) * ARC_RADIUS,
+      position: 'absolute',
+      width,
+      height,
+      top,
+      left,
+      borderRadius,
+      backgroundColor: 'rgba(20, 20, 20, 0.95)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
+      overflow: 'hidden',
+      opacity,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 10,
+      elevation: 10,
+      zIndex: 9999,
     };
-  }, []);
+  });
 
-  // Get absolute position of each icon for hit testing
-  const getIconAbsolutePosition = useCallback((index: number) => {
-    const relPos = getIconPosition(index);
+  const contentStyle = useAnimatedStyle(() => {
     return {
-      x: anchorPosition.x + relPos.x,
-      y: anchorPosition.y + relPos.y,
-    };
-  }, [anchorPosition, getIconPosition]);
-
-  // Find which vibe is being hovered based on absolute touch position
-  const findHoveredVibe = useCallback(
-    (touchX: number, touchY: number): VibeType | null => {
-      let closestVibe: VibeType | null = null;
-      let closestDistance = Infinity;
-      const maxDistance = ICON_SIZE / 2 + HIT_SLOP;
-
-      VIBES.forEach((vibe, index) => {
-        const iconPos = getIconAbsolutePosition(index);
-        const distance = Math.sqrt(
-          Math.pow(touchX - iconPos.x, 2) + Math.pow(touchY - iconPos.y, 2)
-        );
-
-        if (distance < maxDistance && distance < closestDistance) {
-          closestDistance = distance;
-          closestVibe = vibe;
+      opacity: interpolate(
+        openProgress.value,
+        [0.5, 1],
+        [0, 1],
+        Extrapolation.CLAMP
+      ),
+      transform: [
+        {
+          scale: interpolate(
+            openProgress.value,
+            [0.5, 1],
+            [0.8, 1],
+            Extrapolation.CLAMP
+          ),
+        },
+        {
+          translateY: -scrollY.value, // Apply scrolling
         }
-      });
+      ]
+    };
+  });
 
-      return closestVibe;
-    },
-    [getIconAbsolutePosition]
-  );
-
-  // Animate in/out
+  // Effect to drive animation
   useEffect(() => {
     if (visible) {
-      // Reset state
-      setSelectedVibe(null);
-      lastHoveredVibe.current = null;
-
-      // Quick staggered pop-in animation - very fast
-      iconAnims.forEach((anim, index) => {
-        anim.setValue(0);
-        Animated.sequence([
-          Animated.delay(index * 25), // 25ms stagger - super quick
-          Animated.spring(anim, {
-            toValue: 1,
-            useNativeDriver: true,
-            tension: 500,
-            friction: 8,
-          }),
-        ]).start();
+      openProgress.value = withSpring(1, {
+        damping: 15,
+        stiffness: 150,
       });
-
-      // Haptic feedback on open
+      scrollY.value = 0; // Reset scroll
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } else {
-      // Quick fade out
-      iconAnims.forEach((anim) => {
-        Animated.timing(anim, {
-          toValue: 0,
-          duration: 80,
-          useNativeDriver: true,
-        }).start();
-      });
+      openProgress.value = withTiming(0, { duration: 200 });
+      setSelectedVibe(null);
+      lastHoveredVibe.current = null;
     }
-  }, [visible, iconAnims]);
+  }, [visible]);
 
-  // Handle vibe hover changes
-  const handleVibeHover = useCallback(
-    (vibe: VibeType | null) => {
+  // Handle touch interactions
+  const handleTouchMove = useCallback((pageX: number, pageY: number) => {
+    // If we're closed, ignore
+    if (!visible) return;
+
+    // Check if we're back near the send button (cancel zone)
+    // Send button radius approx 30px
+    const dx = pageX - anchorPosition.x;
+    const dy = pageY - anchorPosition.y;
+    const distToAnchor = Math.sqrt(dx * dx + dy * dy);
+
+    if (distToAnchor < 50) {
+      // Near anchor -> Cancel selection
+      if (lastHoveredVibe.current !== null) {
+        lastHoveredVibe.current = null;
+        setSelectedVibe(null);
+        onPreview(null);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      return;
+    }
+
+    // Determine which item is hovered
+    // Calculate Y relative to the list container top
+    const relativeY = pageY - targetTop - CONTAINER_PADDING;
+    
+    // Virtual Y including potential scroll needed to reach this finger position
+    // This creates a "follow the finger" scroll effect for items outside the view
+    const index = Math.floor(relativeY / ITEM_HEIGHT);
+    
+    // Check horizontal bounds
+    if (pageX < targetLeft - 50 || pageX > targetLeft + ITEM_WIDTH + 50) {
+       if (lastHoveredVibe.current !== null) {
+        lastHoveredVibe.current = null;
+        setSelectedVibe(null);
+        onPreview(null);
+      }
+      return;
+    }
+
+    if (index >= 0 && index < VIBES.length) {
+      const vibe = VIBES[index];
       if (vibe !== lastHoveredVibe.current) {
         lastHoveredVibe.current = vibe;
         setSelectedVibe(vibe);
         onPreview(vibe);
-
-        // Animate icon scales - quick and snappy
-        VIBES.forEach((v, index) => {
-          Animated.spring(iconScales[index], {
-            toValue: v === vibe ? 1.35 : 1,
-            useNativeDriver: true,
-            tension: 500,
-            friction: 8,
-          }).start();
-        });
-
-        // Haptic feedback on hover change
-        if (vibe) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-      }
-    },
-    [onPreview, iconScales]
-  );
-
-  // Handle touch move - called from parent
-  const handleTouchMove = useCallback(
-    (touchX: number, touchY: number) => {
-      const hoveredVibe = findHoveredVibe(touchX, touchY);
-      handleVibeHover(hoveredVibe);
-    },
-    [findHoveredVibe, handleVibeHover]
-  );
-
-  // Handle touch end - called from parent
-  const handleTouchEnd = useCallback(
-    (touchX: number, touchY: number) => {
-      const hoveredVibe = findHoveredVibe(touchX, touchY);
-      
-      if (hoveredVibe) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onSelect(hoveredVibe);
-      } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onCancel();
       }
-    },
-    [findHoveredVibe, onSelect, onCancel]
-  );
 
-  // Expose methods via ref-like pattern using effect
+      // Scroll logic: Ensure the selected item is visible
+      const itemTop = index * ITEM_HEIGHT;
+      const itemBottom = itemTop + ITEM_HEIGHT;
+      const currentScroll = scrollY.value;
+      
+      // Adjusted view height (taking padding into account)
+      const viewportHeight = containerHeight - (CONTAINER_PADDING * 2);
+
+      if (itemBottom > currentScroll + viewportHeight) {
+        // Scroll down to show item
+        scrollY.value = withTiming(itemBottom - viewportHeight, { duration: 150 });
+      } else if (itemTop < currentScroll) {
+        // Scroll up to show item
+        scrollY.value = withTiming(itemTop, { duration: 150 });
+      }
+
+    } else {
+      // Outside vertical bounds (e.g. way above top or way below bottom)
+       if (lastHoveredVibe.current !== null) {
+        lastHoveredVibe.current = null;
+        setSelectedVibe(null);
+        onPreview(null);
+      }
+    }
+  }, [visible, anchorPosition, targetTop, targetLeft, onPreview, containerHeight]);
+
+  const handleTouchEnd = useCallback((pageX: number, pageY: number) => {
+    if (!visible) return;
+
+    // Logic same as move, but finalize
+    if (selectedVibe) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onSelect(selectedVibe);
+    } else {
+      onCancel();
+    }
+  }, [visible, selectedVibe, onSelect, onCancel]);
+
+  // Expose methods to parent
   useEffect(() => {
     if (visible) {
-      // Store handlers globally so parent can call them
       (VibeSelector as any)._handleTouchMove = handleTouchMove;
       (VibeSelector as any)._handleTouchEnd = handleTouchEnd;
     }
   }, [visible, handleTouchMove, handleTouchEnd]);
 
-  if (!visible) return null;
+  if (!visible && openProgress.value === 0) return null;
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          left: anchorPosition.x,
-          top: anchorPosition.y,
-        },
-      ]}
-      pointerEvents="none"
-    >
-      {/* Vibe icons in arc pattern - no background */}
-      {VIBES.map((vibe, index) => {
-        const pos = getIconPosition(index);
-        const config = VIBE_CONFIG[vibe];
-        const IconComponent = config.icon;
-        const isSelected = selectedVibe === vibe;
+    <Animated.View style={containerStyle} pointerEvents="none">
+      <Animated.View style={[styles.contentContainer, contentStyle]}>
+        {VIBES.map((vibe) => {
+          const config = VIBE_CONFIG[vibe];
+          const isSelected = selectedVibe === vibe;
+          const Icon = config.icon;
 
-        return (
-          <Animated.View
-            key={vibe}
-            style={[
-              styles.iconWrapper,
-              {
-                transform: [
-                  { translateX: pos.x - ICON_SIZE / 2 },
-                  { translateY: pos.y - ICON_SIZE / 2 },
-                  { scale: Animated.multiply(iconAnims[index], iconScales[index]) },
-                ],
-                opacity: iconAnims[index],
-              },
-            ]}
-          >
-            <View
+          return (
+            <View 
+              key={vibe} 
               style={[
-                styles.iconBackground,
-                {
-                  backgroundColor: isSelected
-                    ? `${config.color}50`
-                    : "rgba(30, 30, 30, 0.95)",
-                  borderColor: isSelected ? config.color : "rgba(255, 255, 255, 0.25)",
-                  shadowColor: config.color,
-                  shadowOpacity: isSelected ? 0.8 : 0.3,
-                },
+                styles.itemContainer,
+                isSelected && styles.itemSelected
               ]}
             >
-              <IconComponent
-                size={24}
-                color={isSelected ? "#FFFFFF" : config.color}
-                strokeWidth={2}
-              />
-            </View>
-            
-            {/* Label appears ABOVE selected icon (so finger doesn't block it) */}
-            {isSelected && (
-              <View style={styles.labelBubble}>
-                <Text style={[styles.labelText, { color: config.color }]}>
-                  {config.label}
-                </Text>
+              <View style={[styles.iconContainer, { backgroundColor: isSelected ? 'white' : config.color + '20' }]}>
+                <Icon 
+                  size={24} 
+                  color={isSelected ? config.color : config.color} 
+                  strokeWidth={2.5}
+                />
               </View>
-            )}
-          </Animated.View>
-        );
-      })}
-    </View>
+              <Text style={[styles.label, { color: isSelected ? 'white' : '#ccc' }]}>
+                {config.label}
+              </Text>
+            </View>
+          );
+        })}
+      </Animated.View>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: "absolute",
-    zIndex: 9999,
-    // Center point is at anchor position
+  contentContainer: {
+    // flex: 1, // Removed flex: 1 to allow scroll transform to work correctly on height
+    padding: CONTAINER_PADDING,
+    // justifyContent: 'space-between', // Removed to allow stacking
   },
-  iconWrapper: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "visible",
+  itemContainer: {
+    height: ITEM_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginBottom: 0,
   },
-  iconBackground: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
-    borderRadius: ICON_SIZE / 2,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 10,
+  itemSelected: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  labelBubble: {
-    position: "absolute",
-    bottom: ICON_SIZE + 4,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    zIndex: 100,
-    minWidth: 60,
-    alignItems: "center",
-    justifyContent: "center",
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  labelText: {
-    fontSize: 7,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.1,
-    textAlign: "center",
-  },
+  label: {
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  }
 });
 
 // Static methods for parent to call

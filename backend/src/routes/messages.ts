@@ -12,6 +12,8 @@ import {
   editMessageResponseSchema,
   unsendMessageRequestSchema,
   unsendMessageResponseSchema,
+  searchMessagesRequestSchema,
+  searchMessagesResponseSchema,
 } from "../../../shared/contracts";
 import { db } from "../db";
 import { generateImageDescription } from "../services/image-description";
@@ -21,6 +23,195 @@ import { tagMessage } from "../services/message-tagger";
 import { decryptMessages } from "../services/message-encryption";
 
 const messages = new Hono<AppType>();
+
+// POST /api/messages/search - Search messages globally
+messages.post("/search", zValidator("json", searchMessagesRequestSchema), async (c) => {
+  try {
+    const { userId, query } = c.req.valid("json");
+
+    if (!query || query.trim().length === 0) {
+      return c.json([]);
+    }
+
+    // 1. Find all chats the user is a member of
+    const { data: userChats, error: chatError } = await db
+      .from("chat_member")
+      .select("chatId")
+      .eq("userId", userId);
+
+    if (chatError || !userChats || userChats.length === 0) {
+      return c.json([]);
+    }
+
+    const chatIds = userChats.map((c) => c.chatId);
+
+    // 2. Find users matching the query (to search by sender name)
+    const { data: matchedUsers } = await db
+      .from("user")
+      .select("id")
+      .ilike("name", `%${query}%`)
+      .limit(20); // Limit to avoid massive lists
+    
+    const matchedUserIds = matchedUsers?.map(u => u.id) || [];
+
+    // 3. Search messages in those chats (content match OR sender match)
+    let messageQuery = db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*),
+        chat:chatId (id, name, image),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*)
+        )
+      `)
+      .in("chatId", chatIds);
+
+    // Apply filter: content matches query OR userId is in matchedUserIds
+    if (matchedUserIds.length > 0) {
+      // Need to construct the OR filter carefully
+      // Note: .or() expects a comma-separated list of filters
+      messageQuery = messageQuery.or(`content.ilike.%${query}%,userId.in.(${matchedUserIds.join(',')})`);
+    } else {
+      messageQuery = messageQuery.ilike("content", `%${query}%`);
+    }
+
+    const { data: messages, error: searchError } = await messageQuery
+      .order("createdAt", { ascending: false })
+      .limit(50);
+
+    if (searchError) {
+      console.error("[Messages] Search error:", searchError);
+      return c.json({ error: "Search failed" }, 500);
+    }
+
+    // 3. Decrypt and Format
+    const decryptedMessages = await decryptMessages(messages || []);
+
+    const results = decryptedMessages.map((msg: any) => {
+      // Parse metadata
+      let parsedMetadata = msg.metadata;
+      if (typeof msg.metadata === "string") {
+        try {
+          parsedMetadata = JSON.parse(msg.metadata);
+        } catch {
+          parsedMetadata = null;
+        }
+      }
+
+      const formattedMessage = {
+        id: msg.id,
+        content: msg.content,
+        messageType: msg.messageType,
+        imageUrl: msg.imageUrl,
+        imageDescription: msg.imageDescription,
+        voiceUrl: msg.voiceUrl,
+        voiceDuration: msg.voiceDuration,
+        eventId: msg.eventId,
+        pollId: msg.pollId,
+        userId: msg.userId,
+        chatId: msg.chatId,
+        replyToId: msg.replyToId,
+        vibeType: msg.vibeType || null,
+        metadata: parsedMetadata,
+        aiFriendId: msg.aiFriendId,
+        editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
+        isUnsent: msg.isUnsent,
+        editHistory: msg.editHistory,
+        createdAt: new Date(msg.createdAt).toISOString(),
+        linkPreview: msg.linkPreviewUrl ? {
+          url: msg.linkPreviewUrl,
+          title: msg.linkPreviewTitle,
+          description: msg.linkPreviewDescription,
+          image: msg.linkPreviewImage,
+          siteName: msg.linkPreviewSiteName,
+          favicon: msg.linkPreviewFavicon,
+        } : null,
+        user: msg.user ? {
+          id: msg.user.id,
+          name: msg.user.name,
+          bio: msg.user.bio,
+          image: msg.user.image,
+          hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
+          createdAt: new Date(msg.user.createdAt).toISOString(),
+          updatedAt: new Date(msg.user.updatedAt).toISOString(),
+        } : null,
+        aiFriend: msg.aiFriend ? {
+          id: msg.aiFriend.id,
+          name: msg.aiFriend.name,
+          color: msg.aiFriend.color,
+          personality: msg.aiFriend.personality,
+          tone: msg.aiFriend.tone,
+          engagementMode: msg.aiFriend.engagementMode,
+          engagementPercent: msg.aiFriend.engagementPercent,
+          chatId: msg.aiFriend.chatId,
+          sortOrder: msg.aiFriend.sortOrder,
+          createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
+          updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
+        } : null,
+        replyTo: msg.replyTo ? {
+          id: msg.replyTo.id,
+          content: msg.replyTo.content,
+          messageType: msg.replyTo.messageType,
+          imageUrl: msg.replyTo.imageUrl,
+          userId: msg.replyTo.userId,
+          chatId: msg.replyTo.chatId,
+          createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+          user: msg.replyTo.user ? {
+            id: msg.replyTo.user.id,
+            name: msg.replyTo.user.name,
+            image: msg.replyTo.user.image,
+          } : null,
+        } : null,
+        reactions: (msg.reactions || []).map((reaction: any) => ({
+          id: reaction.id,
+          emoji: reaction.emoji,
+          userId: reaction.userId,
+          messageId: reaction.messageId,
+          chatId: reaction.chatId,
+          createdAt: new Date(reaction.createdAt).toISOString(),
+          user: reaction.user ? {
+            id: reaction.user.id,
+            name: reaction.user.name,
+            image: reaction.user.image,
+          } : null,
+        })),
+        mentions: (msg.mentions || []).map((mention: any) => ({
+          id: mention.id,
+          messageId: mention.messageId,
+          mentionedUserId: mention.mentionedUserId,
+          mentionedByUserId: mention.mentionedByUserId,
+          createdAt: new Date(mention.createdAt).toISOString(),
+          mentionedUser: mention.mentionedUser ? {
+            id: mention.mentionedUser.id,
+            name: mention.mentionedUser.name,
+            image: mention.mentionedUser.image,
+          } : null,
+        })),
+      };
+
+      return {
+        message: formattedMessage,
+        chat: msg.chat,
+      };
+    });
+
+    return c.json(searchMessagesResponseSchema.parse(results));
+  } catch (error) {
+    console.error("[Messages] Search error:", error);
+    return c.json({ error: "Search failed" }, 500);
+  }
+});
 
 // GET /api/messages - Get all messages (optimized single query with all relations)
 messages.get("/", async (c) => {

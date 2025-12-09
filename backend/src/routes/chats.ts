@@ -1280,13 +1280,14 @@ chats.post("/:id/messages", async (c) => {
 
     // Send push notifications to other members (non-blocking)
     if (chat && message.messageType !== "system") {
+      // IMPORTANT: Use original content from request, not encrypted message.content
       const messagePreview = message.messageType === "image"
         ? "📷 Image"
         : message.messageType === "voice"
         ? "🎤 Voice message"
         : message.messageType === "video"
         ? "🎬 Video"
-        : (message.content || "New message");
+        : (validated.content || "New message"); // Use plaintext from request
 
       sendChatPushNotifications({
         chatId,

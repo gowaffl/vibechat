@@ -3,11 +3,11 @@ import { View, Platform } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
 import type { TabParamList } from "@/navigation/types";
 import ChatListScreen from "@/screens/ChatListScreen";
-import CreateChatScreen from "@/screens/CreateChatScreen";
-import JoinChatScreen from "@/screens/JoinChatScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
+import MoreScreen from "@/screens/MoreScreen";
 import { CustomTabBar } from "@/components/CustomTabBar";
 import { forTrayTransition, transitionSpec } from "@/navigation/TransitionConfig";
+import { LinearGradient } from "expo-linear-gradient";
 
 const TabStack = createStackNavigator<TabParamList>();
 
@@ -35,9 +35,25 @@ export default function TabNavigator() {
         })}
       >
         <TabStack.Screen name="Chats" component={ChatListScreen} />
-        <TabStack.Screen name="CreateChat" component={CreateChatScreen} />
-        <TabStack.Screen name="JoinChat" component={JoinChatScreen} />
-        <TabStack.Screen name="Profile" component={ProfileScreen} />
+        <TabStack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+          options={{
+            headerShown: true,
+            headerTitle: "Profile",
+            headerTransparent: true,
+            headerBackground: () => (
+              <LinearGradient
+                colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={{ flex: 1 }}
+              />
+            ),
+            headerTintColor: "#FFFFFF",
+          }}
+        />
+        <TabStack.Screen name="More" component={MoreScreen} />
       </TabStack.Navigator>
       
       <CustomTabBar activeRouteName={activeRouteName} />

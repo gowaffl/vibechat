@@ -1445,10 +1445,12 @@ const ChatScreen = () => {
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
   const chatId = route.params?.chatId || "default-chat";
   const chatName = route.params?.chatName || "VibeChat";
+  const messageId = route.params?.messageId;
 
   const flatListRef = useRef<FlashList<any>>(null);
   const textInputRef = useRef<TextInput>(null);
   const isInputFocused = useRef(false);
+  const wasKeyboardOpenForAttachments = useRef(false); // Tracks if keyboard was open when attachments menu opened
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
   const isAtBottomRef = useRef(true); // Tracks if user is at bottom of list
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -1677,6 +1679,24 @@ const ChatScreen = () => {
 
     syncRealtimeAuth();
   }, [user?.id]);
+
+  // Scroll to message if provided
+  useEffect(() => {
+    if (messageId && allMessages.length > 0 && flatListRef.current) {
+      const index = allMessages.findIndex((m) => m.id === messageId);
+      if (index !== -1) {
+        console.log(`[ChatScreen] Scrolling to message ${messageId} at index ${index}`);
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+          setHighlightedMessageId(messageId);
+          // Remove highlight after a delay
+          setTimeout(() => setHighlightedMessageId(null), 3000);
+        }, 500); 
+      } else {
+        console.log(`[ChatScreen] Message ${messageId} not found in loaded messages`);
+      }
+    }
+  }, [messageId, allMessages.length]);
 
   // Realtime subscription for messages and reactions
   // NOTE: We don't use filters because Supabase Realtime doesn't support camelCase column names
@@ -4879,6 +4899,13 @@ const ChatScreen = () => {
 
   // Removed keyboard listeners - now using react-native-keyboard-controller for native-synchronized animations
   
+  // Handle keyboard opening - only scroll to bottom if already there
+  const handleKeyboardOpen = useCallback(() => {
+    if (isAtBottomRef.current) {
+      scrollToBottom(false);
+    }
+  }, [scrollToBottom]);
+
   // Scroll to bottom when keyboard opens to show most recent messages
   const lastKeyboardHeight = useRef(0);
   useAnimatedReaction(
@@ -4886,7 +4913,7 @@ const ChatScreen = () => {
     (currentHeight, previousHeight) => {
       // Keyboard just opened (went from 0 to positive)
       if (previousHeight === 0 && currentHeight > 0) {
-        runOnJS(scrollToBottom)(false);
+        runOnJS(handleKeyboardOpen)();
       }
       lastKeyboardHeight.current = currentHeight;
     },
@@ -6993,6 +7020,11 @@ const ChatScreen = () => {
               <Pressable
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  // Track if keyboard was open and dismiss it if needed
+                  wasKeyboardOpenForAttachments.current = isInputFocused.current;
+                  if (isInputFocused.current) {
+                    Keyboard.dismiss();
+                  }
                   setShowAttachmentsMenu(true);
                 }}
                 disabled={isUploadingImage}
@@ -7700,7 +7732,16 @@ const ChatScreen = () => {
         {/* Attachments Menu */}
         <AttachmentsMenu
           visible={showAttachmentsMenu}
-          onClose={() => setShowAttachmentsMenu(false)}
+          onClose={() => {
+            setShowAttachmentsMenu(false);
+            // Restore keyboard if it was open when attachments menu was opened
+            if (wasKeyboardOpenForAttachments.current) {
+              setTimeout(() => {
+                textInputRef.current?.focus();
+                wasKeyboardOpenForAttachments.current = false;
+              }, 250);
+            }
+          }}
           onTakePhoto={takePhoto}
           onPickImage={pickImage}
           onPickVideo={pickVideo}
