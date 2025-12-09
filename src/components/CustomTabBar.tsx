@@ -115,7 +115,8 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
   const containerAnimatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
-        { translateY: -keyboard.height.value }
+        // Subtract 10 extra pixels to pull it down slightly closer to the keyboard
+        { translateY: -keyboard.height.value + (keyboard.height.value > 0 ? 25 : 0) }
       ]
     };
   });
