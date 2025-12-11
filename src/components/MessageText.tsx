@@ -4,6 +4,7 @@ import Markdown from "react-native-markdown-display";
 import type { Mention } from "@shared/contracts";
 import * as Haptics from "expo-haptics";
 import { ShimmeringText } from "./ShimmeringText";
+import { getColorFromName } from "../utils/avatarHelpers";
 
 interface MessageTextProps {
   content: string;
@@ -228,8 +229,9 @@ const MessageText: React.FC<MessageTextProps> = ({
   // HIGH-16: Get user's assigned color for mentions (if available) or use accent color
   const getMentionColor = (mention: Mention) => {
     // Check if user has an assigned color
-    const userColor = mention.mentionedUser?.color;
-    if (userColor) return userColor;
+    if (mention.mentionedUser?.name) {
+      return getColorFromName(mention.mentionedUser.name);
+    }
     // Default to theme accent based on message ownership
     return isOwnMessage ? "#A0D4FF" : "#007AFF";
   };

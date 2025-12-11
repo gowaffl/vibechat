@@ -1461,14 +1461,10 @@ const ChatScreen = () => {
   const originalInvalidate = useRef(queryClient.invalidateQueries.bind(queryClient));
   useEffect(() => {
     queryClient.invalidateQueries = ((options: any) => {
-      const queryKey = options?.queryKey || [];
-      if (queryKey[0] === 'messages') {
-        const stack = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:invalidate',message:'[INVALIDATE] Messages query invalidated',data:{chatId:queryKey[1],stack:stack.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-      }
+      // Logic removed
       return originalInvalidate.current(options);
     }) as any;
-    
+
     return () => {
       queryClient.invalidateQueries = originalInvalidate.current as any;
     };
@@ -1782,17 +1778,9 @@ const ChatScreen = () => {
   const { data: messageData, isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["messages", chatId],
     queryFn: async () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1747',message:'[QUERY FETCH] Fetching messages from API (actual network call)',data:{chatId:chatId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H'})}).catch(()=>{});
-      // #endregion
-
       const response = await api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
         `/api/chats/${chatId}/messages?userId=${user?.id}`
       );
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1757',message:'[QUERY FETCH] API response received',data:{count:response.messages?.length,firstId:response.messages?.[0]?.id,hasContent:response.messages?.[0]?.content?.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H'})}).catch(()=>{});
-      // #endregion
 
       return response;
     },
@@ -1884,33 +1872,16 @@ const ChatScreen = () => {
               setTypingAIFriend(null);
             }
             
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1842',message:'[REALTIME INSERT] Fetching new message',data:{newMessageId:newMessageId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
-            // #endregion
-            
             // Fetch single message from our new endpoint
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
 
             if (newMessage) {
-               // #region agent log
-               fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1851',message:'[REALTIME INSERT] Message fetched from API',data:{newMessageId:newMessage.id,hasContent:!!newMessage.content,contentLength:newMessage.content?.length,messageType:newMessage.messageType},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
-               // #endregion
-               
                setAllMessages(prev => {
-                 // #region agent log
-                 fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1859',message:'[REALTIME INSERT] Current state before add',data:{prevCount:prev.length,prevFirstId:prev[0]?.id,prevFirst3:prev.slice(0,3).map(m=>({id:m.id,hasContent:!!m.content}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
-                 // #endregion
                  
                  // Deduplicate
                  if (prev.some(m => m.id === newMessage.id)) {
-                   // #region agent log
-                   fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1867',message:'[REALTIME INSERT] Duplicate detected, skipping',data:{newMessageId:newMessage.id,existingCount:prev.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
-                   // #endregion
                    return prev;
                  }
-                 // #region agent log
-                 fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1873',message:'[REALTIME INSERT] Adding new message to state',data:{newMessageId:newMessage.id,prevCount:prev.length,newCount:prev.length+1},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
-                 // #endregion
                  // Prepend to START (Descending order: Newest -> Oldest)
                  return [newMessage, ...prev];
                });
@@ -2141,18 +2112,11 @@ const ChatScreen = () => {
   // IMPORTANT: We merge rather than replace to preserve optimistic messages
   useEffect(() => {
     if (messageData) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2039',message:'[SYNC] messageData changed, syncing to allMessages',data:{newCount:messageData.messages?.length,prevCount:allMessages.length,firstNewId:messageData.messages?.[0]?.id,firstPrevId:allMessages[0]?.id,isFetching:isFetching,hasContent:messageData.messages?.[0]?.content?.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H'})}).catch(()=>{});
-      // #endregion
-      
       setAllMessages(prev => {
         const newMessages = messageData.messages || [];
 
         // If we have no previous messages, just use the new ones
         if (prev.length === 0) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2044',message:'[SYNC] No prev messages, using new',data:{newCount:newMessages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           return newMessages;
         }
 
@@ -2202,10 +2166,6 @@ const ChatScreen = () => {
         
         // Sort to maintain newest-first order (descending by createdAt)
         merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2083',message:'[SYNC] Smart merge complete',data:{prevCount:prev.length,newCount:newMessages.length,mergedCount:merged.length,keptRealtimeOnly:merged.length-newMessages.length-optimisticMessages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
 
         return merged;
       });
@@ -2979,16 +2939,8 @@ const ChatScreen = () => {
       Alert.alert("Error", "Failed to send message. Please try again.");
     },
     onSuccess: (newMessage, _variables, context) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2830',message:'[MUTATION SUCCESS] Message sent successfully',data:{newMessageId:newMessage.id,optimisticId:context?.optimisticId,hasContent:!!newMessage.content,contentLength:newMessage.content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
       // Get current allMessages state (NOT queryClient cache - it might be stale)
       setAllMessages(prev => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2837',message:'[MUTATION SUCCESS] Current allMessages state',data:{prevCount:prev.length,prevFirstId:prev[0]?.id,prevFirst3:prev.slice(0,3).map(m=>({id:m.id,hasContent:!!m.content}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        
         // Remove optimistic message and any duplicate of the new message
         const withoutOptimistic = prev.filter(m =>
           m.id !== context?.optimisticId &&
@@ -2996,16 +2948,8 @@ const ChatScreen = () => {
           m.id !== newMessage.id
         );
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2848',message:'[MUTATION SUCCESS] After filtering optimistic',data:{filteredCount:withoutOptimistic.length,removedCount:prev.length-withoutOptimistic.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        
         // Add the new message at the front, preserving ALL other messages (including realtime-added ones)
         const updated = [newMessage, ...withoutOptimistic];
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2858',message:'[MUTATION SUCCESS] Final updated messages',data:{updatedCount:updated.length,updatedFirstId:updated[0]?.id,updatedFirst3:updated.slice(0,3).map(m=>({id:m.id,hasContent:!!m.content}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
         
         return updated;
       });
