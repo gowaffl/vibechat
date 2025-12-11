@@ -1711,6 +1711,24 @@ const ChatScreen = () => {
            
            return [...uniqueNewMessages, ...prev];
         });
+        
+        // CRITICAL FIX: Update cache for persistence
+        queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+           ["messages", chatId],
+           (oldData) => {
+             if (!oldData || !oldData.messages) return oldData;
+             // Filter out duplicates just in case
+             const existingIds = new Set(oldData.messages.map(m => m.id));
+             const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+             
+             if (uniqueNewMessages.length === 0) return oldData;
+             
+             return {
+               ...oldData,
+               messages: [...uniqueNewMessages, ...oldData.messages]
+             };
+           }
+         );
       }
     } catch (error) {
       console.error('[ChatScreen] Failed to recover missed messages:', error);
@@ -1896,6 +1914,21 @@ const ChatScreen = () => {
                  // Prepend to START (Descending order: Newest -> Oldest)
                  return [newMessage, ...prev];
                });
+               
+               // CRITICAL FIX: Also update React Query cache so it persists when navigating away/back
+               queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+                 ["messages", chatId],
+                 (oldData) => {
+                   if (!oldData || !oldData.messages) return oldData;
+                   // Deduplicate against cache
+                   if (oldData.messages.some(m => m.id === newMessage.id)) return oldData;
+                   
+                   return {
+                     ...oldData,
+                     messages: [newMessage, ...oldData.messages]
+                   };
+                 }
+               );
             }
           } catch (error) {
             console.error('[Realtime] Error fetching new message:', error);
@@ -1920,9 +1953,21 @@ const ChatScreen = () => {
             // IMPORTANT: Always fetch from API to get decrypted content
             const updatedMsg = await api.get<Message>(`/api/messages/${payload.new.id}`);
             if (updatedMsg) {
-              setAllMessages(prev => prev.map(m => 
+              setAllMessages(prev => prev.map(m =>
                 m.id === payload.new.id ? updatedMsg : m
               ));
+              
+              // CRITICAL FIX: Update cache for persistence
+              queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+                 ["messages", chatId],
+                 (oldData) => {
+                   if (!oldData || !oldData.messages) return oldData;
+                   return {
+                     ...oldData,
+                     messages: oldData.messages.map(m => m.id === payload.new.id ? updatedMsg : m)
+                   };
+                 }
+               );
             }
           } catch (error) {
             console.error('[Realtime] Error fetching updated message:', error);
@@ -1943,6 +1988,18 @@ const ChatScreen = () => {
         (payload) => {
           console.log('[Realtime] Message deleted:', payload.old.id);
           setAllMessages(prev => prev.filter(m => m.id !== payload.old.id));
+          
+          // CRITICAL FIX: Update cache for persistence
+          queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+             ["messages", chatId],
+             (oldData) => {
+               if (!oldData || !oldData.messages) return oldData;
+               return {
+                 ...oldData,
+                 messages: oldData.messages.filter(m => m.id !== payload.old.id)
+               };
+             }
+           );
         }
       )
       // Listen for reactions - SERVER-SIDE FILTER by chatId
