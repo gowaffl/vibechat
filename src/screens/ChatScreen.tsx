@@ -22,6 +22,8 @@ import {
   PanResponder,
   useColorScheme,
   TouchableOpacity,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -89,6 +91,7 @@ import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+import { format, isSameDay, isToday, isYesterday } from "date-fns";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
@@ -99,6 +102,12 @@ type PendingMessage = Message & {
   uploadProgress?: number; // 0-100
   localUri?: string;
   localVideoThumbnailUri?: string;
+};
+
+type DateDivider = {
+  id: string;
+  isDateDivider: true;
+  date: Date;
 };
 
 // Custom Chat Header Component
@@ -1649,9 +1658,88 @@ const ChatScreen = () => {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const lastMessageTimestampRef = useRef<string | null>(null);
 
   // Track realtime subscription retries (helps surface errors + auto-retry)
   const [realtimeRetryCount, setRealtimeRetryCount] = useState(0);
+
+  // Recover missed messages after reconnection or backgrounding
+  const recoverMissedMessages = useCallback(async (since: string) => {
+    if (!chatId || !user?.id) return;
+    
+    console.log('[ChatScreen] Recovering messages since:', since);
+    try {
+      // Fetch messages created after we disconnected
+      // Use standard endpoint with 'since' parameter
+      const response = await api.get<{ messages: Message[] }>(
+        `/api/chats/${chatId}/messages?userId=${user.id}&since=${encodeURIComponent(since)}`
+      );
+      
+      if (response.messages && response.messages.length > 0) {
+        console.log(`[ChatScreen] Recovered ${response.messages.length} missed messages`);
+        
+        // Backend returns Oldest -> Newest for 'since' queries (see backend logic)
+        // Our list is Newest -> Oldest, so we reverse the new messages
+        const newMessages = [...response.messages].reverse();
+        
+        setAllMessages(prev => {
+           // Filter out duplicates just in case
+           const existingIds = new Set(prev.map(m => m.id));
+           const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+           
+           if (uniqueNewMessages.length === 0) return prev;
+           
+           return [...uniqueNewMessages, ...prev];
+        });
+      }
+    } catch (error) {
+      console.error('[ChatScreen] Failed to recover missed messages:', error);
+      // Fallback: invalidate the entire messages query to force a refetch
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+    }
+  }, [chatId, user?.id, queryClient]);
+
+  // Keep lastMessageTimestampRef updated
+  useEffect(() => {
+    if (allMessages.length > 0) {
+      // allMessages is sorted Newest -> Oldest, so index 0 is the newest
+      const newestMessage = allMessages[0];
+      if (newestMessage && newestMessage.createdAt) {
+         // Only update if newer
+         if (!lastMessageTimestampRef.current || new Date(newestMessage.createdAt) > new Date(lastMessageTimestampRef.current)) {
+             lastMessageTimestampRef.current = newestMessage.createdAt;
+         }
+      }
+    }
+  }, [allMessages]);
+
+  // Handle app state changes for foreground recovery
+  useEffect(() => {
+      const handleAppStateChange = (nextAppState: AppStateStatus) => {
+        if (
+          appStateRef.current.match(/inactive|background/) &&
+          nextAppState === 'active'
+        ) {
+          console.log('[ChatScreen] App returned to foreground, checking for missed messages');
+          
+          if (lastMessageTimestampRef.current) {
+             recoverMissedMessages(lastMessageTimestampRef.current);
+          } else {
+             // If we don't have a timestamp, just refetch everything to be safe
+             queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+          }
+        }
+        appStateRef.current = nextAppState;
+      };
+  
+      const subscription = AppState.addEventListener('change', handleAppStateChange);
+      
+      return () => {
+        subscription.remove();
+      };
+    }, [recoverMissedMessages, queryClient, chatId]);
+
 
   // Fetch messages for this chat (with pagination support)
   const { data: messageData, isLoading } = useQuery({
@@ -5151,7 +5239,8 @@ const ChatScreen = () => {
   );
 
   // HIGH-B: Performance optimization - getItemType for FlashList recycling
-  const getItemType = useCallback((item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }) => {
+  const getItemType = useCallback((item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } | DateDivider) => {
+    if ('isDateDivider' in item) return 'date-divider';
     if ('isTyping' in item && item.isTyping) return 'ai-typing';
     if ('isUserTyping' in item && item.isUserTyping) return 'user-typing';
     
@@ -5201,28 +5290,88 @@ const ChatScreen = () => {
     // Backend returns Newest-First (Descending): [Newest, ..., Oldest]
     // Inverted FlashList renders index 0 at bottom
     // So newest (index 0) appears at bottom - no reverse needed!
-    const data: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
+    const rawData: (Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] })[] = [...activeMessages];
 
     // Add pending uploads (reversed because they are Newest -> Oldest in the list, but stored Oldest -> Newest in state)
     // Pending messages are newer than active messages, so they go to the front (bottom of inverted list)
     if (pendingUploads.length > 0) {
-      data.unshift(...[...pendingUploads].reverse());
+      rawData.unshift(...[...pendingUploads].reverse());
     }
 
     // Add AI typing indicator if AI is typing (only in main chat, not in threads)
     if (isAITyping && !currentThreadId) {
-      data.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
+      rawData.unshift({ id: 'typing-indicator-ai', isTyping: true as const });
     }
 
     // Add user typing indicator if users are typing (only in main chat, not in threads)
     if (typingUsers.length > 0 && !currentThreadId) {
-      data.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
+      rawData.unshift({ id: 'typing-indicator-users', isUserTyping: true as const, typingUsers });
     }
 
-    return data;
+    const dataWithDividers: (typeof rawData[0] | DateDivider)[] = [];
+
+    for (let i = 0; i < rawData.length; i++) {
+      const item = rawData[i];
+      dataWithDividers.push(item);
+
+      // Skip processing for typing indicators
+      if ('isTyping' in item || 'isUserTyping' in item) {
+        continue;
+      }
+
+      const currentMessage = item as Message;
+      const nextItem = rawData[i + 1];
+
+      // If this is the last item (oldest message), always add a date divider
+      if (!nextItem) {
+        dataWithDividers.push({
+          id: `date-divider-${currentMessage.id}`,
+          isDateDivider: true,
+          date: new Date(currentMessage.createdAt)
+        });
+        continue;
+      }
+
+      // If next item is a message, check if we need a divider
+      if (!('isTyping' in nextItem) && !('isUserTyping' in nextItem)) {
+        const nextMessage = nextItem as Message;
+        const currentDate = new Date(currentMessage.createdAt);
+        const nextDate = new Date(nextMessage.createdAt);
+
+        if (!isSameDay(currentDate, nextDate)) {
+          dataWithDividers.push({
+            id: `date-divider-${currentMessage.id}`,
+            isDateDivider: true,
+            date: currentDate
+          });
+        }
+      }
+    }
+
+    return dataWithDividers;
   }, [activeMessages, isAITyping, currentThreadId, typingUsers, pendingUploads]);
 
-  const renderMessage = useCallback(({ item, index }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] }; index: number }) => {
+  const renderMessage = useCallback(({ item, index }: { item: Message | { id: string; isTyping: true } | { id: string; isUserTyping: true; typingUsers: { id: string; name: string }[] } | DateDivider; index: number }) => {
+    // Check if this is a date divider
+    if ('isDateDivider' in item) {
+      let dateText = '';
+      if (isToday(item.date)) {
+        dateText = 'Today';
+      } else if (isYesterday(item.date)) {
+        dateText = 'Yesterday';
+      } else {
+        dateText = format(item.date, 'EEE, MMM d'); // Mon, Dec 10
+      }
+      
+      return (
+        <View style={{ alignItems: 'center', marginVertical: 16 }}>
+           <Text style={{ color: '#8E8E93', fontSize: 12, fontWeight: '600' }}>
+             {dateText}
+           </Text>
+        </View>
+      );
+    }
+
     // Check if this is the AI typing indicator
     if ('isTyping' in item && item.isTyping) {
       return <AITypingIndicator 
@@ -5256,6 +5405,7 @@ const ChatScreen = () => {
     const isSameUserAsOlder = prevMessage && 
       !('isTyping' in prevMessage) && 
       !('isUserTyping' in prevMessage) && 
+      !('isDateDivider' in prevMessage) &&
       (prevMessage as Message).messageType !== 'system' &&
       (prevMessage as Message).userId !== 'system' &&
       (prevMessage as Message).userId === message.userId && 
@@ -5265,6 +5415,7 @@ const ChatScreen = () => {
     const isSameUserAsNewer = nextMessage && 
       !('isTyping' in nextMessage) && 
       !('isUserTyping' in nextMessage) && 
+      !('isDateDivider' in nextMessage) &&
       (nextMessage as Message).messageType !== 'system' &&
       (nextMessage as Message).userId !== 'system' &&
       (nextMessage as Message).userId === message.userId && 
@@ -6089,6 +6240,8 @@ const ChatScreen = () => {
             return (
               <GestureDetector gesture={replyTapGesture}>
                 <Reanimated.View
+                  collapsable={false}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   style={{
                     marginLeft: isCurrentUser ? 0 : 4,
                     marginRight: isCurrentUser ? 4 : 0,
@@ -6104,33 +6257,36 @@ const ChatScreen = () => {
                     gap: 8,
                     maxWidth: "100%",
                     alignSelf: isCurrentUser ? "flex-end" : "flex-start",
+                    zIndex: 50, // Ensure it sits above message bubble for touch handling
                   }}
                 >
-                  <Text style={{ fontSize: 12, color: isCurrentUser ? "#60A5FA" : "#9CA3AF", fontWeight: "600" }} numberOfLines={1}>
-                    {replyToMessage?.aiFriendId
-                      ? (replyToMessage?.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage?.aiFriendId)?.name || "AI Friend")
-                      : (replyToMessage?.user?.name || "Unknown User")}
-                  </Text>
-                  
-                  {replyToMessage?.messageType === "image" ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                      {replyToMessage?.imageUrl && (
-                        <Image
-                          source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
-                          style={{ width: 36, height: 36, borderRadius: 6, marginRight: 6 }}
-                          contentFit="cover"
-                        />
-                      )}
-                      <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>Photo</Text>
-                    </View>
-                  ) : (
-                    <Text
-                      style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", flex: 1 }}
-                      numberOfLines={1}
-                    >
-                      {replyToMessage?.content}
+                  <View pointerEvents="none" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 12, color: isCurrentUser ? "#60A5FA" : "#9CA3AF", fontWeight: "600" }} numberOfLines={1}>
+                      {replyToMessage?.aiFriendId
+                        ? (replyToMessage?.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage?.aiFriendId)?.name || "AI Friend")
+                        : (replyToMessage?.user?.name || "Unknown User")}
                     </Text>
-                  )}
+                    
+                    {replyToMessage?.messageType === "image" ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                        {replyToMessage?.imageUrl && (
+                          <Image
+                            source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
+                            style={{ width: 36, height: 36, borderRadius: 6, marginRight: 6 }}
+                            contentFit="cover"
+                          />
+                        )}
+                        <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>Photo</Text>
+                      </View>
+                    ) : (
+                      <Text
+                        style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", flex: 1 }}
+                        numberOfLines={1}
+                      >
+                        {replyToMessage?.content}
+                      </Text>
+                    )}
+                  </View>
                 </Reanimated.View>
               </GestureDetector>
             );
@@ -6142,12 +6298,35 @@ const ChatScreen = () => {
             isCurrentUser={isCurrentUser}
           >
             <View>
-              <Pressable
-                onLongPress={() => !selectionMode && handleLongPress(message)}
-                onPress={() => selectionMode && toggleMessageSelection(message.id)}
-              >
-                {renderMessageContent()}
-              </Pressable>
+              {(() => {
+                const bubbleTap = Gesture.Tap()
+                  .maxDuration(250)
+                  .onEnd(() => {
+                    if (selectionMode) {
+                      runOnJS(toggleMessageSelection)(message.id);
+                    }
+                  });
+
+                const bubbleLongPress = Gesture.LongPress()
+                  .minDuration(500)
+                  .onStart(() => {
+                    if (!selectionMode) {
+                      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+                      runOnJS(handleLongPress)(message);
+                    }
+                  });
+                
+                // Compose gestures: wait for long press to fail before tap, or trigger long press
+                const bubbleGesture = Gesture.Exclusive(bubbleLongPress, bubbleTap);
+
+                return (
+                  <GestureDetector gesture={bubbleGesture}>
+                    <View collapsable={false}>
+                      {renderMessageContent()}
+                    </View>
+                  </GestureDetector>
+                );
+              })()}
               {/* Reactions */}
               {message.reactions && message.reactions.length > 0 && (
                 <View

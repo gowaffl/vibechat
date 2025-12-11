@@ -76,26 +76,12 @@ export const VIBE_CONFIG: Record<
     label: "Sarcastic",
     description: "Don't take literally",
   },
-  chill: {
-    icon: Coffee,
-    color: "#22D3EE",
-    gradient: ["rgba(34, 211, 238, 0.35)", "rgba(34, 211, 238, 0.20)", "rgba(34, 211, 238, 0.10)"],
-    label: "Chill",
-    description: "Relaxed & easy",
-  },
   confused: {
     icon: HelpCircle,
     color: "#FB923C",
     gradient: ["rgba(251, 146, 60, 0.35)", "rgba(251, 146, 60, 0.20)", "rgba(251, 146, 60, 0.10)"],
     label: "Confused",
     description: "Unsure or lost",
-  },
-  bold: {
-    icon: Megaphone,
-    color: "#8B5CF6",
-    gradient: ["rgba(139, 92, 246, 0.35)", "rgba(139, 92, 246, 0.20)", "rgba(139, 92, 246, 0.10)"],
-    label: "Bold",
-    description: "Loud & confident",
   },
 };
 
@@ -106,9 +92,7 @@ const VIBES: VibeType[] = [
   "soft", 
   "hype", 
   "sarcastic", 
-  "chill", 
-  "confused", 
-  "bold"
+  "confused"
 ];
 
 const ITEM_HEIGHT = 52;
@@ -192,11 +176,23 @@ export const VibeSelector: React.FC<VibeSelectorProps> = ({
     
     // Now determine height based on the constrained top and maxBottom
     const availableHeight = maxBottom - top;
-    const height = Math.min(listHeight, Math.max(200, availableHeight));
+    let height = Math.min(listHeight, Math.max(200, availableHeight));
     
     // Recalculate top to anchor to bottom if we are constrained
     // If we are constrained by height, we want the bottom to stay at maxBottom
     if (height < listHeight) {
+      // If we are scrolling, calculate how many items fit
+      // We want to show N.5 items (half of the next item visible) to indicate scrollability
+      
+      // Formula: (N + 0.35) * ITEM_HEIGHT + (CONTAINER_PADDING * 2) <= height
+      // N <= ((height - (CONTAINER_PADDING * 2)) / ITEM_HEIGHT) - 0.35
+      
+      const N = Math.floor(((height - (CONTAINER_PADDING * 2)) / ITEM_HEIGHT) - 0.35);
+      
+      // Calculate the snapped height that shows exactly N.35 items
+      const snappedHeight = (N + 0.35) * ITEM_HEIGHT + (CONTAINER_PADDING * 2);
+      
+      height = Math.max(snappedHeight, 150); // Ensure minimal height
       top = maxBottom - height;
     }
 

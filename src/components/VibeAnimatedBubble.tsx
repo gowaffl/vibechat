@@ -33,22 +33,15 @@ const VIBE_ANIMATIONS = {
     type: "skew",
     color: "#bef264",
   },
-  chill: {
-    type: "drift",
-    color: "#22D3EE",
-  },
   confused: {
     type: "twitch", // Changed from "wobble" to "twitch"
     color: "#FB923C",
   },
-  bold: {
-    type: "loud",
-    color: "#8B5CF6",
-  },
 };
 
 export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubbleProps) => {
-  const config = VIBE_ANIMATIONS[vibeType];
+  // Use default config if vibeType not found (fallback)
+  const config = VIBE_ANIMATIONS[vibeType] || VIBE_ANIMATIONS.genuine;
   
   // Animation values - all native driver compatible
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
@@ -78,14 +71,8 @@ export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubb
   // Sarcastic - skew/tilt
   const skewAnim = useRef(new Animated.Value(0)).current;
 
-  // Chill - slow drift
-  const driftAnim = useRef(new Animated.Value(0)).current;
-
   // Confused - twitch/pause
   const twitchAnim = useRef(new Animated.Value(0)).current;
-
-  // Bold - loud pop
-  const popAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Common entrance animation
@@ -379,26 +366,6 @@ export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubb
         ).start();
         break;
 
-      case "drift":
-        // CHILL: Very slow vertical drift
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(driftAnim, {
-              toValue: 1,
-              duration: 3000,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-            Animated.timing(driftAnim, {
-              toValue: -1,
-              duration: 3000,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-          ])
-        ).start();
-        break;
-
       case "twitch":
         // CONFUSED: Jerky twitch/glitch with pauses (wait... what?)
         Animated.loop(
@@ -425,27 +392,6 @@ export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubb
               duration: 100,
               useNativeDriver: true,
             }),
-          ])
-        ).start();
-        break;
-
-      case "loud":
-        // BOLD: Strong, sharp pulse
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(popAnim, {
-              toValue: 1.05,
-              duration: 200,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }),
-            Animated.timing(popAnim, {
-              toValue: 1,
-              duration: 600,
-              easing: Easing.bounce,
-              useNativeDriver: true,
-            }),
-            Animated.delay(1000),
           ])
         ).start();
         break;
@@ -498,14 +444,6 @@ export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubb
           }),
         });
         break;
-      case "drift":
-        transforms.push({
-          translateY: driftAnim.interpolate({
-            inputRange: [-1, 1],
-            outputRange: [-2, 2],
-          }),
-        });
-        break;
       case "twitch":
         transforms.push({
           rotate: twitchAnim.interpolate({
@@ -519,9 +457,6 @@ export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubb
                 outputRange: [-2, 2],
             })
         });
-        break;
-      case "loud":
-        transforms.push({ scale: popAnim });
         break;
     }
 
@@ -666,36 +601,12 @@ export const VibeAnimatedBubble = memo(({ vibeType, children }: VibeAnimatedBubb
         />
       )}
 
-      {/* CHILL: Cool border */}
-      {config.type === "drift" && (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            styles.chillBorder,
-            { borderColor: config.color },
-          ]}
-          pointerEvents="none"
-        />
-      )}
-
       {/* CONFUSED: Dashed border */}
       {config.type === "twitch" && ( // Changed from wobble to twitch
         <View
           style={[
             StyleSheet.absoluteFill,
             styles.confusedBorder,
-            { borderColor: config.color },
-          ]}
-          pointerEvents="none"
-        />
-      )}
-
-      {/* BOLD: Thick border */}
-      {config.type === "loud" && (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            styles.boldBorder,
             { borderColor: config.color },
           ]}
           pointerEvents="none"
@@ -746,19 +657,10 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     transform: [{ skewX: "-10deg" }], // Static visual skew for border
   },
-  chillBorder: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    opacity: 0.7,
-  },
   confusedBorder: {
     borderRadius: 20,
     borderWidth: 2,
     borderStyle: "dotted",
-  },
-  boldBorder: {
-    borderRadius: 20,
-    borderWidth: 3,
   },
 });
 

@@ -114,7 +114,7 @@ export const chatWithMembersSchema = chatSchema.extend({
 export type ChatWithMembers = z.infer<typeof chatWithMembersSchema>;
 
 // VibeWrapper type for emotional message context
-export const vibeTypeSchema = z.enum(["genuine", "playful", "serious", "soft", "hype", "sarcastic", "chill", "confused", "bold"]);
+export const vibeTypeSchema = z.enum(["genuine", "playful", "serious", "soft", "hype", "sarcastic", "confused"]);
 export type VibeType = z.infer<typeof vibeTypeSchema>;
 
 // Message metadata schema for multi-image and video support
@@ -150,7 +150,7 @@ export const messageSchema: z.ZodType<{
   voiceDuration?: number | null;
   eventId?: string | null;
   pollId?: string | null;
-  vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | "sarcastic" | "chill" | "confused" | "bold" | null;
+    vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | "sarcastic" | "confused" | null;
   metadata?: MessageMetadata | null;
   user: User;
   replyTo?: Message | null;

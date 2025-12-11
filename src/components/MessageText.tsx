@@ -3,6 +3,7 @@ import { Text, Pressable, View, Platform } from "react-native";
 import Markdown from "react-native-markdown-display";
 import type { Mention } from "@shared/contracts";
 import * as Haptics from "expo-haptics";
+import { ShimmeringText } from "./ShimmeringText";
 
 interface MessageTextProps {
   content: string;
@@ -238,20 +239,23 @@ const MessageText: React.FC<MessageTextProps> = ({
               onPress={() => handleMentionPress(part.mention!)}
               style={({ pressed }) => ({
                 opacity: pressed ? 0.7 : 1,
+                backgroundColor: `${mentionColor}15`,
+                borderRadius: 4,
+                paddingHorizontal: 2,
+                // Align vertically with text
+                transform: [{ translateY: 1 }], 
               })}
             >
-              <Text
+              <ShimmeringText
+                text={displayName}
                 style={{
                   color: mentionColor,
                   fontWeight: "700",
-                  // Add subtle background for visibility
-                  backgroundColor: `${mentionColor}15`,
-                  paddingHorizontal: 2,
-                  borderRadius: 4,
+                  fontSize: fontSize,
+                  lineHeight: lineHeight,
                 }}
-              >
-                {displayName}
-              </Text>
+                shimmerColor="rgba(255, 255, 255, 0.6)"
+              />
             </Pressable>
           );
         }

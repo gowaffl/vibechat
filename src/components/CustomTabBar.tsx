@@ -113,10 +113,13 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
   });
 
   const containerAnimatedStyle = useAnimatedStyle(() => {
+    // Only apply keyboard translation if search is active (searchAnim.value > 0)
+    // We multiply by searchAnim.value to smoothly transition and ensure it's 0 when search is closed
+    const keyboardTranslateY = -keyboard.height.value + (keyboard.height.value > 0 ? 25 : 0);
+    
     return {
       transform: [
-        // Subtract 10 extra pixels to pull it down slightly closer to the keyboard
-        { translateY: -keyboard.height.value + (keyboard.height.value > 0 ? 25 : 0) }
+        { translateY: keyboardTranslateY * searchAnim.value }
       ]
     };
   });
