@@ -1761,21 +1761,21 @@ const ChatScreen = () => {
 
 
   // Fetch messages for this chat (with pagination support)
-  const { data: messageData, isLoading } = useQuery({
+  const { data: messageData, isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["messages", chatId],
     queryFn: async () => {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1747',message:'[QUERY REFETCH] Fetching messages from API',data:{chatId:chatId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1747',message:'[QUERY FETCH] Fetching messages from API (actual network call)',data:{chatId:chatId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H'})}).catch(()=>{});
       // #endregion
-      
+
       const response = await api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
         `/api/chats/${chatId}/messages?userId=${user?.id}`
       );
-      
+
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1757',message:'[QUERY REFETCH] API response received',data:{count:response.messages?.length,firstId:response.messages?.[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1757',message:'[QUERY FETCH] API response received',data:{count:response.messages?.length,firstId:response.messages?.[0]?.id,hasContent:response.messages?.[0]?.content?.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H'})}).catch(()=>{});
       // #endregion
-      
+
       return response;
     },
     // Realtime subscription is used instead of polling
@@ -2085,7 +2085,7 @@ const ChatScreen = () => {
   useEffect(() => {
     if (messageData) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2039',message:'[SYNC] messageData changed, syncing to allMessages',data:{newCount:messageData.messages?.length,prevCount:allMessages.length,firstNewId:messageData.messages?.[0]?.id,firstPrevId:allMessages[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2039',message:'[SYNC] messageData changed, syncing to allMessages',data:{newCount:messageData.messages?.length,prevCount:allMessages.length,firstNewId:messageData.messages?.[0]?.id,firstPrevId:allMessages[0]?.id,isFetching:isFetching,hasContent:messageData.messages?.[0]?.content?.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H'})}).catch(()=>{});
       // #endregion
       
       setAllMessages(prev => {

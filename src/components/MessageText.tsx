@@ -234,8 +234,9 @@ const MessageText: React.FC<MessageTextProps> = ({
     return isOwnMessage ? "#A0D4FF" : "#007AFF";
   };
 
+  // Render as a flex row to properly align mentions with text baseline
   return (
-    <Text style={style}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
       {parts.map((part, index) => {
         if (part.isMention && part.mention) {
           // HIGH-16: Display mention name without @ symbol, with distinctive styling
@@ -245,40 +246,38 @@ const MessageText: React.FC<MessageTextProps> = ({
           const mentionColor = getMentionColor(part.mention);
           
           return (
-            <View
+            <Pressable
               key={index}
-              style={{
+              onPress={() => handleMentionPress(part.mention!)}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.7 : 1,
                 backgroundColor: `${mentionColor}15`,
                 borderRadius: 4,
                 paddingHorizontal: 4,
+                paddingVertical: 1,
                 marginHorizontal: 2,
-                // Manually adjust vertical position to align with text baseline
-                marginTop: 3,
-              }}
+              })}
             >
-              <Pressable
-                onPress={() => handleMentionPress(part.mention!)}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Text
-                  style={{
-                    color: mentionColor,
-                    fontWeight: "700",
-                    fontSize: fontSize,
-                    lineHeight: lineHeight,
-                  }}
-                >
-                  {displayName}
-                </Text>
-              </Pressable>
-            </View>
+              <ShimmeringText
+                text={displayName}
+                style={{
+                  color: mentionColor,
+                  fontWeight: "700",
+                  fontSize: fontSize,
+                  lineHeight: lineHeight,
+                }}
+                shimmerColor="rgba(255, 255, 255, 0.6)"
+              />
+            </Pressable>
           );
         }
-        return <Text key={index}>{part.text}</Text>;
+        return (
+          <Text key={index} style={style}>
+            {part.text}
+          </Text>
+        );
       })}
-    </Text>
+    </View>
   );
 };
 

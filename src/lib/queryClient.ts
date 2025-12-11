@@ -119,6 +119,8 @@ const queryClient = new QueryClient({
 queryClient.setQueryDefaults(['messages'], {
   staleTime: Infinity,
   gcTime: 60 * 60 * 1000, // 1 hour
+  refetchOnMount: false, // CRITICAL: Never refetch on mount - realtime is source of truth
+  refetchOnWindowFocus: false, // Don't refetch on focus - realtime handles it
 });
 
 queryClient.setQueryDefaults(['chats'], {
