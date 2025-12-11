@@ -266,67 +266,12 @@ const GroupSettingsScreen = () => {
   // Extract messages array from paginated response
   const messages = messagesData?.messages || [];
 
-  // Extract all media items from messages (flattened to support multi-image messages)
-  const mediaMessages = React.useMemo(() => {
-    const items: any[] = [];
-    
-    messages.forEach((msg: any) => {
-      if (msg.isUnsent) return;
-
-      const metadata = typeof msg.metadata === "string" ? JSON.parse(msg.metadata) : msg.metadata;
-
-      // Handle Video
-      if (msg.messageType === "video" && metadata?.videoUrl) {
-        items.push({
-          id: msg.id,
-          messageId: msg.id,
-          messageType: "video",
-          createdAt: msg.createdAt,
-          user: msg.user,
-          metadata: metadata,
-          imageUrl: msg.imageUrl, // Fallback for thumbnail if metadata missing
-          url: metadata.videoUrl,
-          thumbnailUrl: metadata.videoThumbnailUrl || msg.imageUrl
-        });
-        return;
-      }
-
-      // Handle Images
-      if (msg.messageType === "image") {
-        // Check for multi-image
-        if (metadata?.mediaUrls && Array.isArray(metadata.mediaUrls) && metadata.mediaUrls.length > 0) {
-          metadata.mediaUrls.forEach((url: string, index: number) => {
-            items.push({
-              id: `${msg.id}_${index}`,
-              messageId: msg.id,
-              messageType: "image",
-              createdAt: msg.createdAt,
-              user: msg.user,
-              metadata: metadata,
-              imageUrl: url, // For compatibility
-              url: url,
-              thumbnailUrl: url
-            });
-          });
-        } else if (msg.imageUrl) {
-          // Single image fallback
-          items.push({
-            id: msg.id,
-            messageId: msg.id,
-            messageType: "image",
-            createdAt: msg.createdAt,
-            user: msg.user,
-            metadata: metadata,
-            imageUrl: msg.imageUrl,
-            url: msg.imageUrl,
-            thumbnailUrl: msg.imageUrl
-          });
-        }
-      }
-    });
-
-    return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [messages]);
+  // Fetch all media messages from the dedicated endpoint
+  const { data: mediaMessages = [] } = useQuery({
+    queryKey: ["chatMedia", chatId],
+    queryFn: () => api.get<any[]>(`/api/chats/${chatId}/media?userId=${user?.id}`),
+    enabled: !!user?.id && !!chatId,
+  });
 
   // Extract all links from messages
   const linkMessages = messages.filter((msg: any) => 

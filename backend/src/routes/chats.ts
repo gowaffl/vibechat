@@ -1807,6 +1807,139 @@ chats.get("/:id/typing", async (c) => {
   }
 });
 
+// GET /api/chats/:id/media - Get all media messages for a chat
+chats.get("/:id/media", async (c) => {
+  const chatId = c.req.param("id");
+  const userId = c.req.query("userId");
+
+  if (!userId) {
+    return c.json({ error: "userId is required" }, 400);
+  }
+
+  try {
+    // Check membership (using service role to bypass RLS for reading)
+    const { data: membership, error: membershipError } = await db
+      .from("chat_member")
+      .select("id")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .maybeSingle();
+
+    if (membershipError || !membership) {
+      // Check if chat exists
+      const { data: chatExists } = await db
+        .from("chat")
+        .select("id")
+        .eq("id", chatId)
+        .maybeSingle();
+      
+      if (!chatExists) {
+        return c.json({ error: "Chat not found" }, 404);
+      }
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Fetch all media messages (image and video)
+    // We select specific fields to keep the response light
+    const { data: mediaMessages, error: mediaError } = await db
+      .from("message")
+      .select(`
+        id,
+        content,
+        messageType,
+        imageUrl,
+        voiceUrl,
+        metadata,
+        createdAt,
+        userId,
+        user:userId (
+          id,
+          name,
+          image
+        )
+      `)
+      .eq("chatId", chatId)
+      .in("messageType", ["image", "video"])
+      .is("isUnsent", false) // Exclude unsent messages
+      .order("createdAt", { ascending: false });
+
+    if (mediaError) {
+      console.error("[Chats] Error fetching media messages:", mediaError);
+      return c.json({ error: "Failed to fetch media messages" }, 500);
+    }
+
+    // Process messages to handle encryption and formatting
+    // Note: We don't fully decrypt content as we mostly care about URLs which are not encrypted in these columns
+    // but metadata might be stringified JSON
+    const processedMedia = (mediaMessages || []).map((msg: any) => {
+      let metadata = msg.metadata;
+      if (typeof metadata === "string") {
+        try {
+          metadata = JSON.parse(metadata);
+        } catch {
+          metadata = null;
+        }
+      }
+
+      // Handle multi-image messages (stored in metadata)
+      const items: any[] = [];
+      
+      if (msg.messageType === "video") {
+        // Video messages
+        const videoUrl = metadata?.videoUrl || msg.voiceUrl; // Legacy support or metadata
+        if (videoUrl) {
+          items.push({
+            id: msg.id,
+            messageId: msg.id,
+            messageType: "video",
+            createdAt: msg.createdAt,
+            user: msg.user,
+            url: videoUrl,
+            thumbnailUrl: metadata?.videoThumbnailUrl || msg.imageUrl,
+            metadata
+          });
+        }
+      } else if (msg.messageType === "image") {
+        // Image messages
+        if (metadata?.mediaUrls && Array.isArray(metadata.mediaUrls) && metadata.mediaUrls.length > 0) {
+          // Multi-image message
+          metadata.mediaUrls.forEach((url: string, index: number) => {
+            items.push({
+              id: `${msg.id}_${index}`,
+              messageId: msg.id,
+              messageType: "image",
+              createdAt: msg.createdAt,
+              user: msg.user,
+              url: url,
+              thumbnailUrl: url,
+              metadata
+            });
+          });
+        } else if (msg.imageUrl) {
+          // Single image message
+          items.push({
+            id: msg.id,
+            messageId: msg.id,
+            messageType: "image",
+            createdAt: msg.createdAt,
+            user: msg.user,
+            url: msg.imageUrl,
+            thumbnailUrl: msg.imageUrl,
+            metadata
+          });
+        }
+      }
+
+      return items;
+    }).flat().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return c.json(processedMedia);
+  } catch (error) {
+    console.error("[Chats] Error fetching media:", error);
+    return c.json({ error: "Failed to fetch media" }, 500);
+  }
+});
+
 // POST /api/chats/debug-link-preview - Force refresh link preview for a message
 chats.post("/debug-link-preview", async (c) => {
   try {
