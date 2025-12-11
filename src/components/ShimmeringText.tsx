@@ -53,7 +53,6 @@ export const ShimmeringText: React.FC<ShimmeringTextProps> = ({
 
   return (
     <MaskedView
-      style={{ flexDirection: 'row', alignSelf: 'flex-start' }}
       maskElement={
         <Text style={[textStyle, { backgroundColor: 'transparent' }]}>
           {text}

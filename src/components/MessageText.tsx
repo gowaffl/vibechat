@@ -161,7 +161,18 @@ const MessageText: React.FC<MessageTextProps> = ({
   // Parse the content and identify @mentions
   const parts: Array<{ text: string; isMention: boolean; mention?: Mention }> = [];
   let lastIndex = 0;
-  const regex = /@\w+(\s+\w+)*/g;
+  
+  // Escape regex characters
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
+  // Create a regex pattern that matches exactly the known mention names
+  // Sort names by length to match longest names first (handling substrings)
+  const sortedNames = Array.from(mentionMap.keys()).sort((a, b) => b.length - a.length);
+  const patternString = `@(${sortedNames.map(escapeRegExp).join('|')})(?!\\w)`;
+  const regex = new RegExp(patternString, 'g');
+  
   let match;
 
   while ((match = regex.exec(content)) !== null) {
@@ -234,29 +245,35 @@ const MessageText: React.FC<MessageTextProps> = ({
           const mentionColor = getMentionColor(part.mention);
           
           return (
-            <Pressable
+            <View
               key={index}
-              onPress={() => handleMentionPress(part.mention!)}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.7 : 1,
+              style={{
                 backgroundColor: `${mentionColor}15`,
                 borderRadius: 4,
-                paddingHorizontal: 2,
-                // Align vertically with text
-                transform: [{ translateY: 1 }], 
-              })}
+                paddingHorizontal: 4,
+                marginHorizontal: 2,
+                // Manually adjust vertical position to align with text baseline
+                marginTop: 3,
+              }}
             >
-              <ShimmeringText
-                text={displayName}
-                style={{
-                  color: mentionColor,
-                  fontWeight: "700",
-                  fontSize: fontSize,
-                  lineHeight: lineHeight,
-                }}
-                shimmerColor="rgba(255, 255, 255, 0.6)"
-              />
-            </Pressable>
+              <Pressable
+                onPress={() => handleMentionPress(part.mention!)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text
+                  style={{
+                    color: mentionColor,
+                    fontWeight: "700",
+                    fontSize: fontSize,
+                    lineHeight: lineHeight,
+                  }}
+                >
+                  {displayName}
+                </Text>
+              </Pressable>
+            </View>
           );
         }
         return <Text key={index}>{part.text}</Text>;

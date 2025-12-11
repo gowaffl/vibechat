@@ -1455,6 +1455,25 @@ const ChatScreen = () => {
   const chatId = route.params?.chatId || "default-chat";
   const chatName = route.params?.chatName || "VibeChat";
   const messageId = route.params?.messageId;
+  
+  // #region agent log
+  // Intercept invalidateQueries for logging
+  const originalInvalidate = useRef(queryClient.invalidateQueries.bind(queryClient));
+  useEffect(() => {
+    queryClient.invalidateQueries = ((options: any) => {
+      const queryKey = options?.queryKey || [];
+      if (queryKey[0] === 'messages') {
+        const stack = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:invalidate',message:'[INVALIDATE] Messages query invalidated',data:{chatId:queryKey[1],stack:stack.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      }
+      return originalInvalidate.current(options);
+    }) as any;
+    
+    return () => {
+      queryClient.invalidateQueries = originalInvalidate.current as any;
+    };
+  }, []);
+  // #endregion
 
   const flatListRef = useRef<FlashList<any>>(null);
   const textInputRef = useRef<TextInput>(null);
@@ -1745,9 +1764,18 @@ const ChatScreen = () => {
   const { data: messageData, isLoading } = useQuery({
     queryKey: ["messages", chatId],
     queryFn: async () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1747',message:'[QUERY REFETCH] Fetching messages from API',data:{chatId:chatId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      
       const response = await api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
         `/api/chats/${chatId}/messages?userId=${user?.id}`
       );
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1757',message:'[QUERY REFETCH] API response received',data:{count:response.messages?.length,firstId:response.messages?.[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      
       return response;
     },
     // Realtime subscription is used instead of polling
@@ -1838,13 +1866,25 @@ const ChatScreen = () => {
               setTypingAIFriend(null);
             }
             
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1842',message:'[REALTIME INSERT] Fetching new message',data:{newMessageId:newMessageId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C,E'})}).catch(()=>{});
+            // #endregion
+            
             // Fetch single message from our new endpoint
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
 
             if (newMessage) {
                setAllMessages(prev => {
                  // Deduplicate
-                 if (prev.some(m => m.id === newMessage.id)) return prev;
+                 if (prev.some(m => m.id === newMessage.id)) {
+                   // #region agent log
+                   fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1850',message:'[REALTIME INSERT] Duplicate detected, skipping',data:{newMessageId:newMessage.id,existingCount:prev.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+                   // #endregion
+                   return prev;
+                 }
+                 // #region agent log
+                 fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1856',message:'[REALTIME INSERT] Adding new message',data:{newMessageId:newMessage.id,prevCount:prev.length,prevFirstId:prev[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+                 // #endregion
                  // Prepend to START (Descending order: Newest -> Oldest)
                  return [newMessage, ...prev];
                });
@@ -2036,27 +2076,73 @@ const ChatScreen = () => {
   // IMPORTANT: We merge rather than replace to preserve optimistic messages
   useEffect(() => {
     if (messageData) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2039',message:'[SYNC] messageData changed, syncing to allMessages',data:{newCount:messageData.messages?.length,prevCount:allMessages.length,firstNewId:messageData.messages?.[0]?.id,firstPrevId:allMessages[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       setAllMessages(prev => {
         const newMessages = messageData.messages || [];
-        
+
         // If we have no previous messages, just use the new ones
         if (prev.length === 0) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2044',message:'[SYNC] No prev messages, using new',data:{newCount:newMessages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           return newMessages;
         }
-        
+
         // Preserve any optimistic messages (they have IDs starting with 'optimistic-')
         const optimisticMessages = prev.filter(m => m.id.startsWith('optimistic-'));
+
+        // CRITICAL FIX: Never blindly replace! Realtime adds messages beyond API pagination limit.
+        // Instead, merge intelligently: update existing messages from API, keep realtime-only messages
         
-        // If no optimistic messages, safe to replace entirely
-        if (optimisticMessages.length === 0) {
-          return newMessages;
-        }
+        // Create a map of new messages by ID for O(1) lookup
+        const newMessagesMap = new Map(newMessages.map(m => [m.id, m]));
         
-        // Merge: keep optimistic messages at the front, then add new messages that aren't duplicates
-        const newMessageIds = new Set(newMessages.map(m => m.id));
-        const keptOptimistic = optimisticMessages.filter(m => !newMessageIds.has(m.id));
+        // Update existing messages with API data, preserving realtime-added messages not in API response
+        const merged: Message[] = [];
+        const processedIds = new Set<string>();
         
-        return [...keptOptimistic, ...newMessages];
+        // First, add all optimistic messages
+        optimisticMessages.forEach(msg => {
+          merged.push(msg);
+          processedIds.add(msg.id);
+        });
+        
+        // Then, iterate through previous messages and update with API data where available
+        prev.forEach(msg => {
+          if (processedIds.has(msg.id)) return; // Skip optimistic (already added)
+          
+          const apiVersion = newMessagesMap.get(msg.id);
+          if (apiVersion) {
+            // API has this message - use the API version (it's authoritative)
+            merged.push(apiVersion);
+            processedIds.add(msg.id);
+          } else if (!msg.id.startsWith('optimistic-')) {
+            // Realtime-only message not in API response (likely beyond pagination limit)
+            // KEEP IT - don't discard realtime updates!
+            merged.push(msg);
+            processedIds.add(msg.id);
+          }
+        });
+        
+        // Finally, add any NEW messages from API that we don't have yet
+        newMessages.forEach(msg => {
+          if (!processedIds.has(msg.id)) {
+            merged.push(msg);
+            processedIds.add(msg.id);
+          }
+        });
+        
+        // Sort to maintain newest-first order (descending by createdAt)
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2083',message:'[SYNC] Smart merge complete',data:{prevCount:prev.length,newCount:newMessages.length,mergedCount:merged.length,keptRealtimeOnly:merged.length-newMessages.length-optimisticMessages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+
+        return merged;
       });
       setHasMoreMessages(messageData.hasMore || false);
       setNextCursor(messageData.nextCursor || null);
@@ -2828,21 +2914,33 @@ const ChatScreen = () => {
       Alert.alert("Error", "Failed to send message. Please try again.");
     },
     onSuccess: (newMessage, _variables, context) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2830',message:'[MUTATION SUCCESS] Message sent successfully',data:{newMessageId:newMessage.id,optimisticId:context?.optimisticId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
       // Smoothly replace optimistic message with real one from server
       const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
       if (currentData?.messages) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2838',message:'[MUTATION SUCCESS] Updating queryClient cache',data:{cacheCount:currentData.messages.length,cacheFirstId:currentData.messages[0]?.id,removingOptimistic:context?.optimisticId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C,E'})}).catch(()=>{});
+        // #endregion
+        
         // Remove the specific optimistic message by its ID
         // ALSO remove any existing message with the same ID (from Realtime)
         // We ALWAYS prefer the POST response because it has guaranteed plaintext content
-        const withoutOptimisticOrExisting = currentData.messages.filter(m => 
-          m.id !== context?.optimisticId && 
+        const withoutOptimisticOrExisting = currentData.messages.filter(m =>
+          m.id !== context?.optimisticId &&
           !m.id.startsWith('optimistic-') &&
           m.id !== newMessage.id  // Remove any Realtime-added version
         );
-        
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2850',message:'[MUTATION SUCCESS] After filtering',data:{filteredCount:withoutOptimisticOrExisting.length,removedCount:currentData.messages.length-withoutOptimisticOrExisting.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+
         // Always add the API response (it has the original plaintext content)
         const updatedMessages = [newMessage, ...withoutOptimisticOrExisting];
-          
+
         queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
           {
@@ -2851,6 +2949,11 @@ const ChatScreen = () => {
             nextCursor: currentData.nextCursor,
           }
         );
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2867',message:'[MUTATION SUCCESS] Updating allMessages state',data:{updatedCount:updatedMessages.length,updatedFirstId:updatedMessages[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
         setAllMessages(updatedMessages);
       }
       
