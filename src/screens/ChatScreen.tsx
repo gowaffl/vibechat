@@ -1867,23 +1867,31 @@ const ChatScreen = () => {
             }
             
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1842',message:'[REALTIME INSERT] Fetching new message',data:{newMessageId:newMessageId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C,E'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1842',message:'[REALTIME INSERT] Fetching new message',data:{newMessageId:newMessageId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
             // #endregion
             
             // Fetch single message from our new endpoint
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
 
             if (newMessage) {
+               // #region agent log
+               fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1851',message:'[REALTIME INSERT] Message fetched from API',data:{newMessageId:newMessage.id,hasContent:!!newMessage.content,contentLength:newMessage.content?.length,messageType:newMessage.messageType},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
+               // #endregion
+               
                setAllMessages(prev => {
+                 // #region agent log
+                 fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1859',message:'[REALTIME INSERT] Current state before add',data:{prevCount:prev.length,prevFirstId:prev[0]?.id,prevFirst3:prev.slice(0,3).map(m=>({id:m.id,hasContent:!!m.content}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
+                 // #endregion
+                 
                  // Deduplicate
                  if (prev.some(m => m.id === newMessage.id)) {
                    // #region agent log
-                   fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1850',message:'[REALTIME INSERT] Duplicate detected, skipping',data:{newMessageId:newMessage.id,existingCount:prev.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+                   fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1867',message:'[REALTIME INSERT] Duplicate detected, skipping',data:{newMessageId:newMessage.id,existingCount:prev.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
                    // #endregion
                    return prev;
                  }
                  // #region agent log
-                 fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1856',message:'[REALTIME INSERT] Adding new message',data:{newMessageId:newMessage.id,prevCount:prev.length,prevFirstId:prev[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+                 fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:1873',message:'[REALTIME INSERT] Adding new message to state',data:{newMessageId:newMessage.id,prevCount:prev.length,newCount:prev.length+1},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'G'})}).catch(()=>{});
                  // #endregion
                  // Prepend to START (Descending order: Newest -> Oldest)
                  return [newMessage, ...prev];
@@ -2915,32 +2923,47 @@ const ChatScreen = () => {
     },
     onSuccess: (newMessage, _variables, context) => {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2830',message:'[MUTATION SUCCESS] Message sent successfully',data:{newMessageId:newMessage.id,optimisticId:context?.optimisticId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2830',message:'[MUTATION SUCCESS] Message sent successfully',data:{newMessageId:newMessage.id,optimisticId:context?.optimisticId,hasContent:!!newMessage.content,contentLength:newMessage.content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
       // #endregion
       
-      // Smoothly replace optimistic message with real one from server
-      const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
-      if (currentData?.messages) {
+      // Get current allMessages state (NOT queryClient cache - it might be stale)
+      setAllMessages(prev => {
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2838',message:'[MUTATION SUCCESS] Updating queryClient cache',data:{cacheCount:currentData.messages.length,cacheFirstId:currentData.messages[0]?.id,removingOptimistic:context?.optimisticId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C,E'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2837',message:'[MUTATION SUCCESS] Current allMessages state',data:{prevCount:prev.length,prevFirstId:prev[0]?.id,prevFirst3:prev.slice(0,3).map(m=>({id:m.id,hasContent:!!m.content}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
         // #endregion
         
-        // Remove the specific optimistic message by its ID
-        // ALSO remove any existing message with the same ID (from Realtime)
-        // We ALWAYS prefer the POST response because it has guaranteed plaintext content
+        // Remove optimistic message and any duplicate of the new message
+        const withoutOptimistic = prev.filter(m =>
+          m.id !== context?.optimisticId &&
+          !m.id.startsWith('optimistic-') &&
+          m.id !== newMessage.id
+        );
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2848',message:'[MUTATION SUCCESS] After filtering optimistic',data:{filteredCount:withoutOptimistic.length,removedCount:prev.length-withoutOptimistic.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        
+        // Add the new message at the front, preserving ALL other messages (including realtime-added ones)
+        const updated = [newMessage, ...withoutOptimistic];
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2858',message:'[MUTATION SUCCESS] Final updated messages',data:{updatedCount:updated.length,updatedFirstId:updated[0]?.id,updatedFirst3:updated.slice(0,3).map(m=>({id:m.id,hasContent:!!m.content}))},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        
+        return updated;
+      });
+      
+      // Also update queryClient cache to keep it in sync
+      const currentData = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
+      if (currentData?.messages) {
         const withoutOptimisticOrExisting = currentData.messages.filter(m =>
           m.id !== context?.optimisticId &&
           !m.id.startsWith('optimistic-') &&
-          m.id !== newMessage.id  // Remove any Realtime-added version
+          m.id !== newMessage.id
         );
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2850',message:'[MUTATION SUCCESS] After filtering',data:{filteredCount:withoutOptimisticOrExisting.length,removedCount:currentData.messages.length-withoutOptimisticOrExisting.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-
-        // Always add the API response (it has the original plaintext content)
+        
         const updatedMessages = [newMessage, ...withoutOptimisticOrExisting];
-
+        
         queryClient.setQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
           ["messages", chatId],
           {
@@ -2949,12 +2972,6 @@ const ChatScreen = () => {
             nextCursor: currentData.nextCursor,
           }
         );
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatScreen.tsx:2867',message:'[MUTATION SUCCESS] Updating allMessages state',data:{updatedCount:updatedMessages.length,updatedFirstId:updatedMessages[0]?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
-        setAllMessages(updatedMessages);
       }
       
       // Clear state (these may have already been cleared for text messages, but need to be cleared for image/voice)
