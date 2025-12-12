@@ -71,6 +71,7 @@ const MoreScreen = () => {
         <MenuItem 
           icon={<MessageSquarePlus size={24} color="#FFF" />} 
           label="Feedback/Requests"
+          onPress={() => navigation.navigate("Feedback")}
         />
         <MenuItem 
           icon={<CircleHelp size={24} color="#FFF" />} 

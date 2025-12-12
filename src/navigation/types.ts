@@ -23,6 +23,7 @@ export type RootStackParamList = {
   InviteMembers: { chatId: string; chatName: string };
   Invite: { token: string };
   JoinChat: undefined;
+  Feedback: undefined;
 };
 
 export type TabParamList = {

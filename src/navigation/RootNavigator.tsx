@@ -20,6 +20,7 @@ import PhoneAuthScreen from "@/screens/PhoneAuthScreen";
 import WelcomeScreen from "@/screens/WelcomeScreen";
 import BirthdateScreen from "@/screens/BirthdateScreen";
 import JoinChatScreen from "@/screens/JoinChatScreen";
+import FeedbackScreen from "@/screens/FeedbackScreen";
 import { useUser } from "@/contexts/UserContext";
 
 /**
@@ -168,6 +169,10 @@ const RootNavigator = () => {
           ),
           headerTintColor: "#FFFFFF",
         }}
+      />
+      <RootStack.Screen
+        name="Feedback"
+        component={FeedbackScreen}
       />
       <RootStack.Screen
         name="GroupSettings"

@@ -1,9 +1,3 @@
-
--- ==========================================
--- FEEDBACK GUARDRAILS (December 2025)
--- ==========================================
--- Migration: validate_feature_vote
-
 -- Check function to prevent self-voting
 CREATE OR REPLACE FUNCTION check_self_vote()
 RETURNS TRIGGER AS $$
