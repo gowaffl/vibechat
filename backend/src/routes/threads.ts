@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { db, executeWithRetry } from "../db";
+import { decryptMessages } from "../services/message-encryption";
 import {
   createThreadRequestSchema,
   getThreadsRequestSchema,
@@ -440,16 +441,18 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
     // and better than losing data.
     
     // Assign messages to 'messages' variable for data hydration
-    let messages = collectedMessages;
+    let messages = await decryptMessages(collectedMessages);
 
     // Fetch related data for messages (Only for the ones we are returning!)
     
     // 1. Get ReplyTo Messages first
     const replyToIds = [...new Set(messages.filter((m: any) => m.replyToId).map((m: any) => m.replyToId))];
-    const { data: replyToMessages = [] } = replyToIds.length > 0 ? await db
+    const { data: rawReplyToMessages = [] } = replyToIds.length > 0 ? await db
       .from("message")
       .select("*")
       .in("id", replyToIds) : { data: [] };
+    
+    const replyToMessages = await decryptMessages(rawReplyToMessages);
     const replyToMap = new Map(replyToMessages.map((m: any) => [m.id, m]));
 
     // 2. Get User IDs from both messages and replyTo messages

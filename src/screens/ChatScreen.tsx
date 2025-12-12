@@ -6778,7 +6778,7 @@ const ChatScreen = () => {
                 transform: [{ scaleY: -1 }] // Flip to counteract inverted list
               }}
             >
-              {isLoading ? (
+              {(isLoading || (currentThreadId && isLoadingThreadMessages)) ? (
                 /* Show loading animation while fetching messages */
                 <LuxeLogoLoader size="large" />
               ) : (
