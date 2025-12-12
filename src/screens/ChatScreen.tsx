@@ -1479,6 +1479,7 @@ const ChatScreen = () => {
   const textInputRef = useRef<TextInput>(null);
   const isInputFocused = useRef(false);
   const wasKeyboardOpenForAttachments = useRef(false); // Tracks if keyboard was open when attachments menu opened
+  const wasKeyboardOpenForImageGen = useRef(false); // Tracks if keyboard was open when image generator sheet opened
   const isManualScrolling = useRef(false); // Prevents auto-scroll when viewing searched/bookmarked message (re-enables on new message sent)
   const isAtBottomRef = useRef(true); // Tracks if user is at bottom of list
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -2418,6 +2419,14 @@ const ChatScreen = () => {
     onStart: (type, prompt) => {
       // Immediately open preview modal with loading state
       console.log("[ChatScreen] onStart callback received - type:", type, "prompt:", prompt);
+      
+      // Track keyboard state and dismiss if needed
+      // Check if input is focused OR if we already marked it as open (to avoid overwriting with false due to delays)
+      if (isInputFocused.current) {
+        wasKeyboardOpenForImageGen.current = true;
+        Keyboard.dismiss();
+      }
+      
       setIsGeneratorSheetOpen(true); // Explicitly open sheet
       console.log("[ChatScreen] Setting previewImage to show shimmer loading...");
       setPreviewImage({
@@ -3217,6 +3226,13 @@ const ChatScreen = () => {
       // Immediately open preview modal with loading state
       console.log("[ChatScreen] ===== IMAGE GENERATION MUTATION STARTED =====");
       console.log("[ChatScreen] Setting previewImage state with generating placeholder");
+      
+      // Track keyboard state and dismiss if needed
+      if (isInputFocused.current) {
+        wasKeyboardOpenForImageGen.current = true;
+        Keyboard.dismiss();
+      }
+      
       setIsGeneratorSheetOpen(true); // Explicitly open sheet
       console.log("[ChatScreen] Prompt:", data.prompt);
 
@@ -4061,6 +4077,12 @@ const ChatScreen = () => {
 
             const uploadData = JSON.parse(uploadResult.body);
 
+            // Track keyboard state BEFORE starting mutation (due to useReactor timeout)
+            if (isInputFocused.current) {
+              wasKeyboardOpenForImageGen.current = true;
+              Keyboard.dismiss();
+            }
+
             // Generate meme with reference
             generateMemeMutation.mutate({
               prompt,
@@ -4079,6 +4101,13 @@ const ChatScreen = () => {
           }
         } else {
           // No reference image, just generate from prompt
+          
+          // Track keyboard state BEFORE starting mutation (due to useReactor timeout)
+          if (isInputFocused.current) {
+            wasKeyboardOpenForImageGen.current = true;
+            Keyboard.dismiss();
+          }
+
           generateMemeMutation.mutate({
             prompt,
             userId: user.id,
@@ -7390,7 +7419,14 @@ const ChatScreen = () => {
                   <ImageGenerationPill
                     isVisible={!!previewImage && !isGeneratorSheetOpen}
                     isProcessing={isConfirmingImage || isEditingImage || generateImageMutation.isPending || generateMemeMutation.isPending || isReactorProcessing}
-                    onPress={() => setIsGeneratorSheetOpen(true)}
+                    onPress={() => {
+                      // Track keyboard state and dismiss if needed
+                      wasKeyboardOpenForImageGen.current = isInputFocused.current;
+                      if (isInputFocused.current) {
+                        Keyboard.dismiss();
+                      }
+                      setIsGeneratorSheetOpen(true);
+                    }}
                     style={{ position: 'relative', bottom: 0 }} // Override absolute positioning and bottom offset
                   />
                 </View>
@@ -8961,11 +8997,27 @@ const ChatScreen = () => {
           imageUrl={previewImage?.imageUrl || null}
           initialPrompt={previewImage?.prompt || ""}
           isProcessing={isConfirmingImage || isEditingImage || generateImageMutation.isPending || generateMemeMutation.isPending || isReactorProcessing}
-          onMinimize={() => setIsGeneratorSheetOpen(false)} // Swipe down -> Minimize (show pill)
+          onMinimize={() => {
+            setIsGeneratorSheetOpen(false); // Swipe down -> Minimize (show pill)
+            // Restore keyboard if it was open
+            if (wasKeyboardOpenForImageGen.current) {
+              setTimeout(() => {
+                textInputRef.current?.focus();
+                wasKeyboardOpenForImageGen.current = false;
+              }, 250);
+            }
+          }}
           onClose={() => {
             // Explicit close (X button or Cancel) -> Clear everything
             setPreviewImage(null);
             setIsGeneratorSheetOpen(false);
+            // Restore keyboard if it was open
+            if (wasKeyboardOpenForImageGen.current) {
+              setTimeout(() => {
+                textInputRef.current?.focus();
+                wasKeyboardOpenForImageGen.current = false;
+              }, 250);
+            }
           }}
           onAccept={(caption) => {
                 if (previewImage) {

@@ -50,4 +50,4 @@ backend/generated/
 .env
 
 # Cursor file
-.Cursor/
+.cursor/
