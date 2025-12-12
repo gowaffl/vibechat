@@ -1269,23 +1269,39 @@ const GroupSettingsScreen = () => {
                 {/* Preview Grid */}
                 {mediaMessages.length > 0 && (
                   <View className="flex-row gap-2 mt-4">
-                    {mediaMessages.slice(0, Math.min(5, mediaMessages.length)).map((item: any, index: number) => {
+                    {mediaMessages.slice(0, mediaMessages.length > 5 ? 4 : 5).map((item: any, index: number) => {
                       const isVideo = item.messageType === "video";
-                      const thumbnailUrl = item.thumbnailUrl?.startsWith('http') 
-                        ? item.thumbnailUrl 
-                        : `${BACKEND_URL}${item.thumbnailUrl}`;
+                      const thumbnailUrl = getFullImageUrl(item.thumbnailUrl);
                       
                       return (
-                        <View key={item.id} style={{ position: "relative" }}>
-                          <Image
-                            source={{ uri: thumbnailUrl }}
-                            style={{
-                              width: 50,
-                              height: 50,
-                              borderRadius: 8,
-                            }}
-                            contentFit="cover"
-                          />
+                        <View 
+                          key={item.id} 
+                          style={{ 
+                            position: "relative",
+                            width: 50,
+                            height: 50,
+                            borderRadius: 8,
+                            backgroundColor: "rgba(255, 255, 255, 0.05)",
+                            overflow: "hidden"
+                          }}
+                        >
+                          {thumbnailUrl ? (
+                            <Image
+                              source={{ uri: thumbnailUrl }}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                              }}
+                              contentFit="cover"
+                              transition={200}
+                              cachePolicy="memory-disk"
+                            />
+                          ) : (
+                            <View className="flex-1 items-center justify-center">
+                              <Images size={20} color="rgba(255, 255, 255, 0.3)" />
+                            </View>
+                          )}
+                          
                           {isVideo && (
                             <View style={{
                               position: "absolute",
@@ -1293,7 +1309,6 @@ const GroupSettingsScreen = () => {
                               left: 0,
                               right: 0,
                               bottom: 0,
-                              borderRadius: 8,
                               backgroundColor: "rgba(0,0,0,0.3)",
                               alignItems: "center",
                               justifyContent: "center",
@@ -1316,7 +1331,7 @@ const GroupSettingsScreen = () => {
                         }}
                       >
                         <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "600" }}>
-                          +{mediaMessages.length - 5}
+                          +{mediaMessages.length - 4}
                         </Text>
                       </View>
                     )}
