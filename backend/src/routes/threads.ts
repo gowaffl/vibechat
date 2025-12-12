@@ -443,32 +443,47 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
     let messages = collectedMessages;
 
     // Fetch related data for messages (Only for the ones we are returning!)
-    const messageIds = messages.map((m: any) => m.id);
-    const userIds = [...new Set(messages.map((m: any) => m.userId).filter((id: any) => id !== null))];
+    
+    // 1. Get ReplyTo Messages first
     const replyToIds = [...new Set(messages.filter((m: any) => m.replyToId).map((m: any) => m.replyToId))];
-    const aiFriendIds = [...new Set(messages.map((m: any) => m.aiFriendId).filter((id: any) => id !== null))];
+    const { data: replyToMessages = [] } = replyToIds.length > 0 ? await db
+      .from("message")
+      .select("*")
+      .in("id", replyToIds) : { data: [] };
+    const replyToMap = new Map(replyToMessages.map((m: any) => [m.id, m]));
 
-    // Fetch users
-    const { data: users = [] } = userIds.length > 0 ? await db
+    // 2. Get User IDs from both messages and replyTo messages
+    const userIds = new Set<string>();
+    messages.forEach((m: any) => { if (m.userId) userIds.add(m.userId); });
+    replyToMessages.forEach((m: any) => { if (m.userId) userIds.add(m.userId); });
+    
+    // 3. Get AI Friend IDs from both
+    const aiFriendIds = new Set<string>();
+    messages.forEach((m: any) => { if (m.aiFriendId) aiFriendIds.add(m.aiFriendId); });
+    replyToMessages.forEach((m: any) => { if (m.aiFriendId) aiFriendIds.add(m.aiFriendId); });
+
+    // 4. Fetch Users
+    const { data: users = [] } = userIds.size > 0 ? await db
       .from("user")
       .select("*")
-      .in("id", userIds) : { data: [] };
+      .in("id", Array.from(userIds)) : { data: [] };
     const userMap = new Map(users.map((u: any) => [u.id, u]));
 
-    // Fetch AI friends
-    const { data: aiFriends = [] } = aiFriendIds.length > 0 ? await db
+    // 5. Fetch AI Friends
+    const { data: aiFriends = [] } = aiFriendIds.size > 0 ? await db
       .from("ai_friend")
       .select("*")
-      .in("id", aiFriendIds) : { data: [] };
+      .in("id", Array.from(aiFriendIds)) : { data: [] };
     const aiFriendMap = new Map(aiFriends.map((af: any) => [af.id, af]));
 
-    // Fetch reactions
+    // 6. Fetch Reactions
+    const messageIds = messages.map((m: any) => m.id);
     const { data: reactions = [] } = messageIds.length > 0 ? await db
       .from("reaction")
       .select("*")
       .in("messageId", messageIds) : { data: [] };
     
-    // Fetch reaction users
+    // 7. Fetch Reaction Users
     const reactionUserIds = [...new Set(reactions.map((r: any) => r.userId))];
     const { data: reactionUsers = [] } = reactionUserIds.length > 0 ? await db
       .from("user")
@@ -476,136 +491,131 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       .in("id", reactionUserIds) : { data: [] };
     const reactionUserMap = new Map(reactionUsers.map((u: any) => [u.id, u]));
 
-    // Fetch replyTo messages
-    const { data: replyToMessages = [] } = replyToIds.length > 0 ? await db
-      .from("message")
-      .select("*")
-      .in("id", replyToIds) : { data: [] };
-    const replyToMap = new Map(replyToMessages.map((m: any) => [m.id, m]));
+    // 8. Attach related data to messages
+    const formattedMessages = messages.map((msg: any) => {
+      const user = userMap.get(msg.userId);
+      const aiFriend = msg.aiFriendId ? aiFriendMap.get(msg.aiFriendId) : null;
+      const replyToMsg = msg.replyToId ? replyToMap.get(msg.replyToId) : null;
+      const msgReactions = reactions.filter((r: any) => r.messageId === msg.id);
 
-    // Fetch AI friends for replyTo messages as well
-    const replyToAiFriendIds = [...new Set(replyToMessages.map((m: any) => m.aiFriendId).filter((id: any) => id !== null))];
-    if (replyToAiFriendIds.length > 0) {
-      const { data: replyToAiFriends = [] } = await db
-        .from("ai_friend")
-        .select("*")
-        .in("id", replyToAiFriendIds);
-      replyToAiFriends.forEach((af: any) => {
-        if (!aiFriendMap.has(af.id)) {
-          aiFriendMap.set(af.id, af);
-        }
-      });
-    }
+      let replyToObj = null;
+      if (replyToMsg) {
+        const replyToUser = userMap.get(replyToMsg.userId);
+        const replyToAiFriend = replyToMsg.aiFriendId ? aiFriendMap.get(replyToMsg.aiFriendId) : null;
+        
+        replyToObj = {
+          id: replyToMsg.id,
+          content: replyToMsg.content,
+          messageType: replyToMsg.messageType,
+          imageUrl: replyToMsg.imageUrl,
+          imageDescription: replyToMsg.imageDescription,
+          userId: replyToMsg.userId,
+          chatId: replyToMsg.chatId,
+          replyToId: replyToMsg.replyToId,
+          aiFriendId: replyToMsg.aiFriendId,
+          editedAt: replyToMsg.editedAt ? (typeof replyToMsg.editedAt === 'string' ? replyToMsg.editedAt : new Date(replyToMsg.editedAt).toISOString()) : null,
+          isUnsent: replyToMsg.isUnsent,
+          editHistory: replyToMsg.editHistory,
+          voiceUrl: replyToMsg.voiceUrl,
+          voiceDuration: replyToMsg.voiceDuration,
+          createdAt: typeof replyToMsg.createdAt === 'string' ? replyToMsg.createdAt : new Date(replyToMsg.createdAt).toISOString(),
+          linkPreview: null, // Don't nest link previews in replies
+          mentions: [],
+          reactions: [],
+          user: replyToUser ? {
+            id: replyToUser.id,
+            name: replyToUser.name,
+            bio: replyToUser.bio,
+            image: replyToUser.image,
+            hasCompletedOnboarding: replyToUser.hasCompletedOnboarding,
+            createdAt: typeof replyToUser.createdAt === 'string' ? replyToUser.createdAt : new Date(replyToUser.createdAt).toISOString(),
+            updatedAt: typeof replyToUser.updatedAt === 'string' ? replyToUser.updatedAt : new Date(replyToUser.updatedAt).toISOString(),
+          } : null,
+          aiFriend: replyToAiFriend ? {
+            id: replyToAiFriend.id,
+            name: replyToAiFriend.name,
+            color: replyToAiFriend.color,
+            personality: replyToAiFriend.personality,
+            tone: replyToAiFriend.tone,
+            engagementMode: replyToAiFriend.engagementMode,
+            engagementPercent: replyToAiFriend.engagementPercent,
+            chatId: replyToAiFriend.chatId,
+            sortOrder: replyToAiFriend.sortOrder,
+            createdAt: typeof replyToAiFriend.createdAt === 'string' ? replyToAiFriend.createdAt : new Date(replyToAiFriend.createdAt).toISOString(),
+            updatedAt: typeof replyToAiFriend.updatedAt === 'string' ? replyToAiFriend.updatedAt : new Date(replyToAiFriend.updatedAt).toISOString(),
+          } : null,
+        };
+      }
 
-    // Attach related data to messages
-    const formattedMessages = messages.map((msg: any) => ({
-      id: msg.id,
-      content: msg.content,
-      messageType: msg.messageType,
-      imageUrl: msg.imageUrl,
-      imageDescription: msg.imageDescription,
-      userId: msg.userId,
-      chatId: msg.chatId,
-      replyToId: msg.replyToId,
-      aiFriendId: msg.aiFriendId,
-      editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
-      isUnsent: msg.isUnsent,
-      editHistory: msg.editHistory,
-      voiceUrl: msg.voiceUrl,
-      voiceDuration: msg.voiceDuration,
-      createdAt: new Date(msg.createdAt).toISOString(),
-      linkPreview: msg.linkPreviewUrl ? {
-        url: msg.linkPreviewUrl,
-        title: msg.linkPreviewTitle,
-        description: msg.linkPreviewDescription,
-        image: msg.linkPreviewImage,
-        siteName: msg.linkPreviewSiteName,
-        favicon: msg.linkPreviewFavicon,
-      } : null,
-      mentions: [], // TODO: Add mentions if needed
-      user: msg.user ? {
-        id: msg.user.id,
-        name: msg.user.name,
-        bio: msg.user.bio,
-        image: msg.user.image,
-        hasCompletedOnboarding: msg.user.hasCompletedOnboarding,
-        createdAt: typeof msg.user.createdAt === 'string' ? msg.user.createdAt : msg.user.createdAt.toISOString(),
-        updatedAt: typeof msg.user.updatedAt === 'string' ? msg.user.updatedAt : msg.user.updatedAt.toISOString(),
-      } : null,
-      aiFriend: msg.aiFriend ? {
-        id: msg.aiFriend.id,
-        name: msg.aiFriend.name,
-        color: msg.aiFriend.color,
-        personality: msg.aiFriend.personality,
-        tone: msg.aiFriend.tone,
-        engagementMode: msg.aiFriend.engagementMode,
-        engagementPercent: msg.aiFriend.engagementPercent,
-        chatId: msg.aiFriend.chatId,
-        sortOrder: msg.aiFriend.sortOrder,
-        createdAt: typeof msg.aiFriend.createdAt === 'string' ? msg.aiFriend.createdAt : msg.aiFriend.createdAt.toISOString(),
-        updatedAt: typeof msg.aiFriend.updatedAt === 'string' ? msg.aiFriend.updatedAt : msg.aiFriend.updatedAt.toISOString(),
-      } : null,
-      replyTo: msg.replyTo
-        ? {
-            id: msg.replyTo.id,
-            content: msg.replyTo.content,
-            messageType: msg.replyTo.messageType,
-            imageUrl: msg.replyTo.imageUrl,
-            imageDescription: msg.replyTo.imageDescription,
-            userId: msg.replyTo.userId,
-            chatId: msg.replyTo.chatId,
-            replyToId: msg.replyTo.replyToId,
-            aiFriendId: msg.replyTo.aiFriendId,
-            editedAt: msg.replyTo.editedAt ? (typeof msg.replyTo.editedAt === 'string' ? msg.replyTo.editedAt : msg.replyTo.editedAt.toISOString()) : null,
-            isUnsent: msg.replyTo.isUnsent,
-            editHistory: msg.replyTo.editHistory,
-            voiceUrl: msg.replyTo.voiceUrl,
-            voiceDuration: msg.replyTo.voiceDuration,
-            createdAt: typeof msg.replyTo.createdAt === 'string' ? msg.replyTo.createdAt : msg.replyTo.createdAt.toISOString(),
-            linkPreview: null, // Don't nest link previews in replies
-            mentions: [],
-            reactions: [],
-            user: msg.replyTo.user ? {
-              id: msg.replyTo.user.id,
-              name: msg.replyTo.user.name,
-              bio: msg.replyTo.user.bio,
-              image: msg.replyTo.user.image,
-              hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding,
-              createdAt: typeof msg.replyTo.user.createdAt === 'string' ? msg.replyTo.user.createdAt : msg.replyTo.user.createdAt.toISOString(),
-              updatedAt: typeof msg.replyTo.user.updatedAt === 'string' ? msg.replyTo.user.updatedAt : msg.replyTo.user.updatedAt.toISOString(),
-            } : null,
-            aiFriend: msg.replyTo.aiFriend ? {
-              id: msg.replyTo.aiFriend.id,
-              name: msg.replyTo.aiFriend.name,
-              color: msg.replyTo.aiFriend.color,
-              personality: msg.replyTo.aiFriend.personality,
-              tone: msg.replyTo.aiFriend.tone,
-              engagementMode: msg.replyTo.aiFriend.engagementMode,
-              engagementPercent: msg.replyTo.aiFriend.engagementPercent,
-              chatId: msg.replyTo.aiFriend.chatId,
-              sortOrder: msg.replyTo.aiFriend.sortOrder,
-              createdAt: typeof msg.replyTo.aiFriend.createdAt === 'string' ? msg.replyTo.aiFriend.createdAt : msg.replyTo.aiFriend.createdAt.toISOString(),
-              updatedAt: typeof msg.replyTo.aiFriend.updatedAt === 'string' ? msg.replyTo.aiFriend.updatedAt : msg.replyTo.aiFriend.updatedAt.toISOString(),
-            } : null,
-          }
-        : null,
-      reactions: msg.reactions.map((reaction: any) => ({
-        id: reaction.id,
-        emoji: reaction.emoji,
-        userId: reaction.userId,
-        messageId: reaction.messageId,
-        createdAt: typeof reaction.createdAt === 'string' ? reaction.createdAt : reaction.createdAt.toISOString(),
-        user: reaction.user ? {
-          id: reaction.user.id,
-          name: reaction.user.name,
-          bio: reaction.user.bio,
-          image: reaction.user.image,
-          hasCompletedOnboarding: reaction.user.hasCompletedOnboarding,
-          createdAt: typeof reaction.user.createdAt === 'string' ? reaction.user.createdAt : reaction.user.createdAt.toISOString(),
-          updatedAt: typeof reaction.user.updatedAt === 'string' ? reaction.user.updatedAt : reaction.user.updatedAt.toISOString(),
+      return {
+        id: msg.id,
+        content: msg.content,
+        messageType: msg.messageType,
+        imageUrl: msg.imageUrl,
+        imageDescription: msg.imageDescription,
+        userId: msg.userId,
+        chatId: msg.chatId,
+        replyToId: msg.replyToId,
+        aiFriendId: msg.aiFriendId,
+        editedAt: msg.editedAt ? (typeof msg.editedAt === 'string' ? msg.editedAt : new Date(msg.editedAt).toISOString()) : null,
+        isUnsent: msg.isUnsent,
+        editHistory: msg.editHistory,
+        voiceUrl: msg.voiceUrl,
+        voiceDuration: msg.voiceDuration,
+        createdAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
+        linkPreview: msg.linkPreviewUrl ? {
+          url: msg.linkPreviewUrl,
+          title: msg.linkPreviewTitle,
+          description: msg.linkPreviewDescription,
+          image: msg.linkPreviewImage,
+          siteName: msg.linkPreviewSiteName,
+          favicon: msg.linkPreviewFavicon,
         } : null,
-      })),
-    }));
+        mentions: [], // TODO: Add mentions if needed
+        user: user ? {
+          id: user.id,
+          name: user.name,
+          bio: user.bio,
+          image: user.image,
+          hasCompletedOnboarding: user.hasCompletedOnboarding,
+          createdAt: typeof user.createdAt === 'string' ? user.createdAt : new Date(user.createdAt).toISOString(),
+          updatedAt: typeof user.updatedAt === 'string' ? user.updatedAt : new Date(user.updatedAt).toISOString(),
+        } : null,
+        aiFriend: aiFriend ? {
+          id: aiFriend.id,
+          name: aiFriend.name,
+          color: aiFriend.color,
+          personality: aiFriend.personality,
+          tone: aiFriend.tone,
+          engagementMode: aiFriend.engagementMode,
+          engagementPercent: aiFriend.engagementPercent,
+          chatId: aiFriend.chatId,
+          sortOrder: aiFriend.sortOrder,
+          createdAt: typeof aiFriend.createdAt === 'string' ? aiFriend.createdAt : new Date(aiFriend.createdAt).toISOString(),
+          updatedAt: typeof aiFriend.updatedAt === 'string' ? aiFriend.updatedAt : new Date(aiFriend.updatedAt).toISOString(),
+        } : null,
+        replyTo: replyToObj,
+        reactions: msgReactions.map((reaction: any) => {
+          const rUser = reactionUserMap.get(reaction.userId);
+          return {
+            id: reaction.id,
+            emoji: reaction.emoji,
+            userId: reaction.userId,
+            messageId: reaction.messageId,
+            createdAt: typeof reaction.createdAt === 'string' ? reaction.createdAt : new Date(reaction.createdAt).toISOString(),
+            user: rUser ? {
+              id: rUser.id,
+              name: rUser.name,
+              bio: rUser.bio,
+              image: rUser.image,
+              hasCompletedOnboarding: rUser.hasCompletedOnboarding,
+              createdAt: typeof rUser.createdAt === 'string' ? rUser.createdAt : new Date(rUser.createdAt).toISOString(),
+              updatedAt: typeof rUser.updatedAt === 'string' ? rUser.updatedAt : new Date(rUser.updatedAt).toISOString(),
+            } : null,
+          };
+        }),
+      };
+    });
 
     return c.json({
       messages: formattedMessages,
