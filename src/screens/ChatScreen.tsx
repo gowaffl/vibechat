@@ -53,6 +53,7 @@ import { BACKEND_URL } from "@/config";
 import { authClient, supabaseClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
+import { useDraftStore } from "@/stores/draftStore";
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import type { AIFriend } from "@shared/contracts";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
@@ -74,11 +75,11 @@ import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/componen
 import { CreateCustomCommandModal } from "@/components/CustomCommands";
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ReplyPreviewModal } from "@/components/ReplyPreviewModal";
-import { ImagePreviewModal } from "@/components/ImagePreviewModal";
+import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
 import { ProfileImage } from "@/components/ProfileImage";
-import { SwipeableMessage } from "@/components/SwipeableMessage";
+import { SwipeableMessage, MessageBubbleMeasurer } from "@/components/SwipeableMessage";
 import { TruncatedText } from "@/components/TruncatedText";
 import { VibeSelector, VIBE_CONFIG, VibeSelectorStatic } from "@/components/VibeSelector";
 import { VibeAnimatedBubble } from "@/components/VibeAnimatedBubble";
@@ -1564,10 +1565,22 @@ const ChatScreen = () => {
   const [mentionStartIndex, setMentionStartIndex] = useState<number>(-1);
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
 
-  // Image Preview State
-  const [previewImage, setPreviewImage] = useState<ImagePreviewResponse | null>(null);
+  // Image Preview State (Persisted)
+  const setImageDraft = useDraftStore((state) => state.setImageDraft);
+  const previewImage = useDraftStore((state) => state.imageDrafts[chatId] || null);
+  const setPreviewImage = useCallback((draft: ImagePreviewResponse | null) => {
+    setImageDraft(chatId, draft);
+  }, [chatId, setImageDraft]);
+  const [isGeneratorSheetOpen, setIsGeneratorSheetOpen] = useState(true);
   const [originalPreviewPrompt, setOriginalPreviewPrompt] = useState<string>("");
   const [previewType, setPreviewType] = useState<"image" | "meme" | "remix">("image");
+  
+  // Auto-open sheet when new preview image arrives
+  useEffect(() => {
+    if (previewImage) {
+      setIsGeneratorSheetOpen(true);
+    }
+  }, [previewImage]);
   const [isConfirmingImage, setIsConfirmingImage] = useState(false);
   const [isEditingImage, setIsEditingImage] = useState(false);
 
@@ -2302,6 +2315,7 @@ const ChatScreen = () => {
     onStart: (type, prompt) => {
       // Immediately open preview modal with loading state
       console.log("[ChatScreen] onStart callback received - type:", type, "prompt:", prompt);
+      setIsGeneratorSheetOpen(true); // Explicitly open sheet
       console.log("[ChatScreen] Setting previewImage to show shimmer loading...");
       setPreviewImage({
         imageUrl: '', // Empty triggers loading/shimmer state
@@ -3178,7 +3192,11 @@ const ChatScreen = () => {
     },
     onMutate: (data) => {
       // Immediately open preview modal with loading state
-      console.log("[ChatScreen] Image generation started, opening preview modal");
+      console.log("[ChatScreen] ===== IMAGE GENERATION MUTATION STARTED =====");
+      console.log("[ChatScreen] Setting previewImage state with generating placeholder");
+      setIsGeneratorSheetOpen(true); // Explicitly open sheet
+      console.log("[ChatScreen] Prompt:", data.prompt);
+
       setPreviewImage({
         imageUrl: '', // Empty triggers loading/shimmer state
         previewId: 'generating',
@@ -3186,12 +3204,18 @@ const ChatScreen = () => {
       });
       setOriginalPreviewPrompt(data.prompt);
       setPreviewType("image");
+      
+      console.log("[ChatScreen] previewImage state should now be set, sheet should appear");
     },
     onSuccess: (data) => {
       // Preview mode - show the preview modal
       if ('previewId' in data) {
         console.log("[ChatScreen] Image preview received:", data.previewId);
         const previewData = data as ImagePreviewResponse;
+        
+        // Update the preview with the generated image
+        // IMPORTANT: We use setPreviewImage to update the *existing* generating state
+        // The sheet is already visible due to onMutate, this just replaces the "generating" placeholder
         setPreviewImage(previewData);
         setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("image");
@@ -3310,6 +3334,7 @@ const ChatScreen = () => {
     onMutate: (data) => {
       // Immediately open preview modal with loading state
       console.log("[ChatScreen] Meme generation started, opening preview modal");
+      setIsGeneratorSheetOpen(true); // Explicitly open sheet
       setPreviewImage({
         imageUrl: '', // Empty triggers loading/shimmer state
         previewId: 'generating',
@@ -3323,6 +3348,9 @@ const ChatScreen = () => {
       if ('previewId' in data) {
         console.log("[ChatScreen] Meme preview received:", data.previewId);
         const previewData = data as ImagePreviewResponse;
+        
+        // Update the preview with the generated meme
+        // IMPORTANT: We use setPreviewImage to update the *existing* generating state
         setPreviewImage(previewData);
         setOriginalPreviewPrompt(previewData.prompt);
         setPreviewType("meme");
@@ -6442,9 +6470,9 @@ const ChatScreen = () => {
 
                 return (
                   <GestureDetector gesture={bubbleGesture}>
-                    <View collapsable={false}>
+                    <MessageBubbleMeasurer collapsable={false}>
                       {renderMessageContent()}
-                    </View>
+                    </MessageBubbleMeasurer>
                   </GestureDetector>
                 );
               })()}
@@ -6574,6 +6602,14 @@ const ChatScreen = () => {
     }
   };
 
+  // Debug logging for previewImage state
+  console.log('[ChatScreen] Render - previewImage state:', {
+    hasPreviewImage: !!previewImage,
+    imageUrl: previewImage?.imageUrl,
+    prompt: previewImage?.prompt,
+    previewType,
+  });
+
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>
       {/* Animated Gradient Background */}
@@ -6684,7 +6720,7 @@ const ChatScreen = () => {
           }}
           // Spacer for Input Bar (Glassmorphism effect)
           // Dynamic height: 95px default, 120px when smart replies are showing
-          ListHeaderComponent={<View style={{ height: areSmartRepliesVisible ? 120 : 95 }} />}
+          ListHeaderComponent={<View style={{ height: previewImage ? 140 : (areSmartRepliesVisible ? 120 : 95) }} />}
           // HIGH-8: Load earlier messages button (appears at top in inverted list)
           ListFooterComponent={
             hasMoreMessages ? (
@@ -6939,7 +6975,7 @@ const ChatScreen = () => {
         )}
 
         <Reanimated.ScrollView
-          style={{ width: "100%", backgroundColor: 'transparent' }}
+          style={{ width: "100%", backgroundColor: 'transparent', overflow: 'visible' }}
           contentContainerStyle={[
             {
               paddingTop: 6,
@@ -7315,7 +7351,17 @@ const ChatScreen = () => {
                 onCancel={() => setIsRecordingVoice(false)}
               />
             ) : (
-              <Reanimated.View className="flex-row items-end gap-3" style={inputRowAnimatedStyle}>
+              <Reanimated.View className="flex-row items-end gap-3" style={[inputRowAnimatedStyle, { zIndex: 50, elevation: 5 }]}>
+                {/* Image Generation Docked Pill - Floats above input */}
+                <View style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, alignItems: 'center', zIndex: 100, paddingBottom: 24 }} pointerEvents="box-none">
+                  <ImageGenerationPill
+                    isVisible={!!previewImage && !isGeneratorSheetOpen}
+                    isProcessing={isConfirmingImage || isEditingImage || generateImageMutation.isPending || generateMemeMutation.isPending || isReactorProcessing}
+                    onPress={() => setIsGeneratorSheetOpen(true)}
+                    style={{ position: 'relative', bottom: 0 }} // Override absolute positioning and bottom offset
+                  />
+                </View>
+
               {/* Attachments menu button */}
               <Pressable
                 onPress={() => {
@@ -8690,18 +8736,36 @@ const ChatScreen = () => {
           onCaption={() => {
             if (reactorMessageId) {
               console.log("[ChatScreen] Triggering caption generation for:", reactorMessageId);
-              generateCaption(reactorMessageId);
-              setShowReactorMenu(false);
-              setReactorMessageId(null);
-            }
-          }}
-          onRemix={(prompt) => {
+          generateCaption(reactorMessageId);
+          setShowReactorMenu(false);
+          setReactorMessageId(null);
+          // Set preview image to show generating state
+          setIsGeneratorSheetOpen(true);
+          setPreviewImage({
+            imageUrl: '',
+            previewId: 'generating',
+            prompt: 'Generating caption...',
+          });
+          setPreviewType('image'); // Treating caption generation as related to image flow for UI purposes
+        }
+      }}
+      onRemix={(prompt) => {
             if (reactorMessageId && prompt.trim()) {
               console.log("[ChatScreen] Triggering remix for:", reactorMessageId, "prompt:", prompt);
               setIsAITyping(true); // Show AI typing animation
               remix({ messageId: reactorMessageId, remixPrompt: prompt, preview: true });
               setShowReactorMenu(false);
               setReactorMessageId(null);
+              
+              // Set preview image to show generating state immediately
+              setIsGeneratorSheetOpen(true);
+              setPreviewImage({
+                imageUrl: '',
+                previewId: 'generating',
+                prompt: prompt,
+              });
+              setPreviewType('remix');
+              
               // Auto-scroll removed per user request
               /*
               // Scroll to show AI typing indicator
@@ -8715,12 +8779,22 @@ const ChatScreen = () => {
           }}
           onMeme={(prompt) => {
             if (reactorMessageId) {
-              console.log("[ChatScreen] Triggering meme generation for:", reactorMessageId, "prompt:", prompt || "(AI will decide)");
-              setIsAITyping(true); // Show AI typing animation
-              createMeme({ messageId: reactorMessageId, memePrompt: prompt || undefined, preview: true });
-              setShowReactorMenu(false);
-              setReactorMessageId(null);
-              // Scroll to show AI typing indicator
+          console.log("[ChatScreen] Triggering meme generation for:", reactorMessageId, "prompt:", prompt || "(AI will decide)");
+          setIsAITyping(true); // Show AI typing animation
+          createMeme({ messageId: reactorMessageId, memePrompt: prompt || undefined, preview: true });
+          setShowReactorMenu(false);
+          setReactorMessageId(null);
+
+          // Set preview image to show generating state immediately
+          setIsGeneratorSheetOpen(true);
+          setPreviewImage({
+            imageUrl: '',
+            previewId: 'generating',
+            prompt: prompt || 'Generating meme...',
+          });
+          setPreviewType('meme');
+          
+          // Scroll to show AI typing indicator
               requestAnimationFrame(() => {
                 setTimeout(() => {
                   flatListRef.current?.scrollToEnd({ animated: true });
@@ -8848,51 +8922,47 @@ const ChatScreen = () => {
           aiFriends={aiFriends}
         />
 
-        {/* Image Preview Modal for AI generations */}
-        <ImagePreviewModal
-          visible={!!previewImage}
+        {/* Image Generator Sheet (Replaces Modal) - Always mounted to maintain state */}
+        <ImageGeneratorSheet
+          isVisible={!!previewImage && isGeneratorSheetOpen}
           imageUrl={previewImage?.imageUrl || null}
           initialPrompt={previewImage?.prompt || ""}
-          previewType={previewType}
-          defaultCaption={(() => {
-            if (!previewImage) return "";
-            if (originalPreviewPrompt && originalPreviewPrompt !== previewImage.prompt) {
-              return `Original: ${originalPreviewPrompt}\nEdit: ${previewImage.prompt}`;
-            }
-            return previewImage.prompt;
-          })()}
-          isProcessing={isConfirmingImage || isEditingImage}
+          isProcessing={isConfirmingImage || isEditingImage || generateImageMutation.isPending || generateMemeMutation.isPending || isReactorProcessing}
+          onMinimize={() => setIsGeneratorSheetOpen(false)} // Swipe down -> Minimize (show pill)
+          onClose={() => {
+            // Explicit close (X button or Cancel) -> Clear everything
+            setPreviewImage(null);
+            setIsGeneratorSheetOpen(false);
+          }}
           onAccept={(caption) => {
-            if (previewImage) {
-              confirmImageMutation.mutate({
-                imageUrl: previewImage.imageUrl,
-                prompt: caption,
-                userId: user?.id || "",
-                chatId,
-                type: previewType,
-                metadata: {
-                  ...previewImage.metadata,
-                  // Add slash command badge for AI-generated images/memes
-                  slashCommand: {
-                    command: `/${previewType}`, // "/image", "/meme", or "/remix"
-                  },
-                },
-              });
-            }
-          }}
-          onEdit={(newPrompt) => {
-            if (previewImage) {
-              editImageMutation.mutate({
-                previousImageUrl: previewImage.imageUrl,
-                editPrompt: newPrompt,
-                userId: user?.id || "",
-                chatId,
-                type: previewType,
-              });
-            }
-          }}
-          onCancel={() => setPreviewImage(null)}
-        />
+                if (previewImage) {
+                  confirmImageMutation.mutate({
+                    imageUrl: previewImage.imageUrl,
+                    prompt: caption,
+                    userId: user?.id || "",
+                    chatId,
+                    type: previewType,
+                    metadata: {
+                      ...previewImage.metadata,
+                      slashCommand: {
+                        command: `/${previewType}`,
+                      },
+                    },
+                  });
+                }
+              }}
+              onEdit={(newPrompt) => {
+                if (previewImage) {
+                  editImageMutation.mutate({
+                    previousImageUrl: previewImage.imageUrl,
+                    editPrompt: newPrompt,
+                    userId: user?.id || "",
+                    chatId,
+                    type: previewType,
+                  });
+                }
+              }}
+            />
       </View>
     );
 };

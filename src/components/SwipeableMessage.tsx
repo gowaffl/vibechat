@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, Text, Pressable, Platform } from "react-native";
+import React, { useState, createContext, useContext } from "react";
+import { View, Text, ViewProps } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -18,6 +18,27 @@ interface SwipeableMessageProps {
 const SWIPE_THRESHOLD = 80; // How far to swipe to reveal timestamp (absolute value)
 const MAX_SWIPE = 120; // Maximum swipe distance (absolute value)
 
+type SwipeableMessageContextType = {
+  setBubbleHeight: (height: number) => void;
+};
+
+const SwipeableMessageContext = createContext<SwipeableMessageContextType | null>(null);
+
+export const MessageBubbleMeasurer: React.FC<ViewProps> = (props) => {
+  const context = useContext(SwipeableMessageContext);
+  
+  return (
+    <View
+      {...props}
+      onLayout={(event) => {
+        const { height } = event.nativeEvent.layout;
+        context?.setBubbleHeight(height);
+        props.onLayout?.(event);
+      }}
+    />
+  );
+};
+
 /**
  * SwipeableMessage - Wraps a message bubble to enable swipe-to-reveal timestamp
  * HIGH-9: Bidirectional swipe support
@@ -33,7 +54,7 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
   const maxSwipeDistance = useSharedValue(MAX_SWIPE);
   const [isRevealed, setIsRevealed] = useState(false);
   const [bubbleHeight, setBubbleHeight] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(0);
+  const [timestampHeight, setTimestampHeight] = useState(20); // Default approx height
 
   const triggerHaptic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -99,105 +120,67 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
           translateX: translateX.value * 0.3,
         },
         {
-          // Center the text vertically
-          translateY: -10, // Half of approximate text height for perfect centering
+          // Center the text vertically relative to the top anchor
+          translateY: -timestampHeight / 2, 
         },
       ],
     };
   });
 
-  // Clone children to add onLayout to the first child (message bubble)
-  const childrenArray = React.Children.toArray(children);
-  const modifiedChildren = React.Children.map(childrenArray, (child, index) => {
-    // Only add onLayout to the outermost View (which contains both bubble and reactions)
-    if (index === 0 && React.isValidElement(child)) {
-      return React.cloneElement(child as React.ReactElement<any>, {
-        onLayout: (event: any) => {
-          // This captures the full height including reactions
-          const { height } = event.nativeEvent.layout;
-          setContainerHeight(height);
-          
-          // If the child has its own onLayout, call it too
-          const existingOnLayout = (child as React.ReactElement<any>).props?.onLayout;
-          if (existingOnLayout) {
-            existingOnLayout(event);
-          }
-        },
-        children: React.Children.map((child as React.ReactElement<any>).props.children, (innerChild: any, innerIndex: number) => {
-          // First child is the Pressable with the message bubble
-          if (innerIndex === 0 && React.isValidElement(innerChild)) {
-            return React.cloneElement(innerChild as React.ReactElement<any>, {
-              onLayout: (event: any) => {
-                // This captures just the message bubble height
-                const { height } = event.nativeEvent.layout;
-                setBubbleHeight(height);
-                
-                // If the Pressable has its own onLayout, call it too
-                const existingOnLayout = (innerChild as React.ReactElement<any>).props?.onLayout;
-                if (existingOnLayout) {
-                  existingOnLayout(event);
-                }
-              },
-            });
-          }
-          return innerChild;
-        }),
-      });
-    }
-    return child;
-  });
-
   return (
-    <View style={{ position: "relative" }}>
-      {/* Timestamp - revealed behind the message */}
-      <Animated.View
-        style={[
-          {
-            position: "absolute",
-            right: isCurrentUser ? 8 : undefined,
-            left: !isCurrentUser ? 8 : undefined,
-            // Position timestamp at the vertical center of just the message bubble
-            top: bubbleHeight > 0 ? bubbleHeight / 2 : 0,
-            paddingHorizontal: 12,
-            zIndex: 0,
-          },
-          timestampAnimatedStyle,
-        ]}
-        onLayout={(event) => {
-          // Calculate required swipe distance based on timestamp width
-          const width = event.nativeEvent.layout.width;
-          // We need enough space for the timestamp plus some padding
-          // The timestamp moves at 0.3x speed, so we create 0.7x relative space
-          // required_swipe * 0.7 = width + padding
-          const padding = 20;
-          const requiredSwipe = (width + padding) / 0.7;
-          
-          // Only update if significantly different to avoid jitter, but ensure at least MAX_SWIPE
-          if (requiredSwipe > MAX_SWIPE) {
-             maxSwipeDistance.value = requiredSwipe;
-          }
-        }}
-      >
-        <Text
-          numberOfLines={1}
-          style={{
-            color: "#8E8E93",
-            fontSize: 13,
-            fontWeight: "500",
-            minWidth: 50, // Ensure it has some width
+    <SwipeableMessageContext.Provider value={{ setBubbleHeight }}>
+      <View style={{ position: "relative" }}>
+        {/* Timestamp - revealed behind the message */}
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              right: isCurrentUser ? 8 : undefined,
+              left: !isCurrentUser ? 8 : undefined,
+              // Position timestamp at the vertical center of just the message bubble
+              top: bubbleHeight > 0 ? bubbleHeight / 2 : "50%",
+              paddingHorizontal: 12,
+              zIndex: 0,
+            },
+            timestampAnimatedStyle,
+          ]}
+          onLayout={(event) => {
+            // Calculate required swipe distance based on timestamp width
+            const { width, height } = event.nativeEvent.layout;
+            setTimestampHeight(height);
+
+            // We need enough space for the timestamp plus some padding
+            // The timestamp moves at 0.3x speed, so we create 0.7x relative space
+            // required_swipe * 0.7 = width + padding
+            const padding = 20;
+            const requiredSwipe = (width + padding) / 0.7;
+            
+            // Only update if significantly different to avoid jitter, but ensure at least MAX_SWIPE
+            if (requiredSwipe > MAX_SWIPE) {
+               maxSwipeDistance.value = requiredSwipe;
+            }
           }}
         >
-          {timestamp}
-        </Text>
-      </Animated.View>
-
-      {/* Message Content - swipeable */}
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[{ zIndex: 1 }, animatedStyle]}>
-          {modifiedChildren}
+          <Text
+            numberOfLines={1}
+            style={{
+              color: "#8E8E93",
+              fontSize: 13,
+              fontWeight: "500",
+              minWidth: 50, // Ensure it has some width
+            }}
+          >
+            {timestamp}
+          </Text>
         </Animated.View>
-      </GestureDetector>
-    </View>
+
+        {/* Message Content - swipeable */}
+        <GestureDetector gesture={panGesture}>
+          <Animated.View style={[{ zIndex: 1 }, animatedStyle]}>
+            {children}
+          </Animated.View>
+        </GestureDetector>
+      </View>
+    </SwipeableMessageContext.Provider>
   );
 };
-

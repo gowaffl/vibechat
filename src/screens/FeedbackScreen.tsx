@@ -86,22 +86,29 @@ const FeedbackScreen = () => {
   const TabButton = ({ id, label, icon: Icon }: { id: Tab, label: string, icon: any }) => (
     <TouchableOpacity 
       onPress={() => setActiveTab(id)}
-      style={[
-        styles.tabButton, 
-        activeTab === id && styles.activeTabButton
-      ]}
+      style={styles.tabWrapper}
     >
-      <Icon 
-        size={16} 
-        color={activeTab === id ? "#FFF" : "rgba(255,255,255,0.5)"} 
-        style={styles.tabIcon}
-      />
-      <Text style={[
-        styles.tabLabel, 
-        activeTab === id && styles.activeTabLabel
-      ]}>
-        {label}
-      </Text>
+      {activeTab === id && (
+        <LinearGradient
+          colors={["rgba(79, 195, 247, 0.15)", "rgba(0, 168, 232, 0.05)"]}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      )}
+      <View style={styles.tabContent}>
+        <Icon 
+          size={16} 
+          color={activeTab === id ? "#4FC3F7" : "rgba(255,255,255,0.5)"} 
+          style={styles.tabIcon}
+        />
+        <Text style={[
+          styles.tabLabel, 
+          activeTab === id && styles.activeTabLabel
+        ]}>
+          {label}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -212,20 +219,25 @@ const styles = StyleSheet.create({
   },
   tabsBackground: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(20, 20, 25, 0.6)',
+    borderRadius: 16,
     padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  tabButton: {
+  tabWrapper: {
     flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  tabContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
   },
   activeTabButton: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    // Removed
   },
   tabIcon: {
     marginRight: 6,
@@ -236,7 +248,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
   },
   activeTabLabel: {
-    color: '#FFF',
+    color: '#4FC3F7',
+    textShadowColor: 'rgba(79, 195, 247, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   content: {
     flex: 1,

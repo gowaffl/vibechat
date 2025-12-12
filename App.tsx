@@ -2,6 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { queryClient, persistOptions } from "@/lib/queryClient";
 import RootStackNavigator from "@/navigation/RootNavigator";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -167,43 +168,45 @@ export default function App() {
       <ToastProvider>
         <UserProvider>
           <KeyboardProvider>
-            <GestureHandlerRootView>
-              <SafeAreaProvider>
-                <NavigationContainer
-                  linking={linking}
-                  theme={DarkTheme}
-                  ref={navigationRef}
-                  onReady={() => {
-                    console.log("[Navigation] ✅ Navigation container ready");
-                    // If there's a pending invite token, navigate to it now
-                    if (pendingInviteToken.current && navigationRef.current) {
-                      console.log("[DeepLink] 🚀 Late navigation to Invite with token:", pendingInviteToken.current);
-                      setTimeout(() => {
-                        if (navigationRef.current && pendingInviteToken.current) {
-                          navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
-                          pendingInviteToken.current = null;
-                        }
-                      }, 100);
-                    }
-                    // If there's a pending notification, navigate to it now
-                    if (pendingNotification.current && navigationRef.current) {
-                      console.log("[Notifications] 🚀 Late navigation to Chat:", pendingNotification.current.chatId);
-                      setTimeout(() => {
-                        if (navigationRef.current && pendingNotification.current) {
-                          navigationRef.current.navigate('Chat', pendingNotification.current);
-                          pendingNotification.current = null;
-                        }
-                      }, 100);
-                    }
-                  }}
-                  onStateChange={() => {
-                    // Haptics are now handled in the navigator listeners for more precise timing
-                  }}
-                >
-                  <RootStackNavigator />
-                  <StatusBar style="auto" />
-                </NavigationContainer>
-              </SafeAreaProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <BottomSheetModalProvider>
+                <SafeAreaProvider>
+                  <NavigationContainer
+                    linking={linking}
+                    theme={DarkTheme}
+                    ref={navigationRef}
+                    onReady={() => {
+                      console.log("[Navigation] ✅ Navigation container ready");
+                      // If there's a pending invite token, navigate to it now
+                      if (pendingInviteToken.current && navigationRef.current) {
+                        console.log("[DeepLink] 🚀 Late navigation to Invite with token:", pendingInviteToken.current);
+                        setTimeout(() => {
+                          if (navigationRef.current && pendingInviteToken.current) {
+                            navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
+                            pendingInviteToken.current = null;
+                          }
+                        }, 100);
+                      }
+                      // If there's a pending notification, navigate to it now
+                      if (pendingNotification.current && navigationRef.current) {
+                        console.log("[Notifications] 🚀 Late navigation to Chat:", pendingNotification.current.chatId);
+                        setTimeout(() => {
+                          if (navigationRef.current && pendingNotification.current) {
+                            navigationRef.current.navigate('Chat', pendingNotification.current);
+                            pendingNotification.current = null;
+                          }
+                        }, 100);
+                      }
+                    }}
+                    onStateChange={() => {
+                      // Haptics are now handled in the navigator listeners for more precise timing
+                    }}
+                  >
+                    <RootStackNavigator />
+                    <StatusBar style="auto" />
+                  </NavigationContainer>
+                </SafeAreaProvider>
+              </BottomSheetModalProvider>
             </GestureHandlerRootView>
           </KeyboardProvider>
         </UserProvider>
