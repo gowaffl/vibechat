@@ -5270,10 +5270,13 @@ const ChatScreen = () => {
     }
   }, [isAIMessage, hasContent]);
 
+  // Determine if send button should be shown
+  const showSend = useMemo(() => {
+    return !!(messageText.trim() || selectedImages.length > 0 || selectedVideo);
+  }, [messageText, selectedImages.length, selectedVideo]);
+
   // Animate button icon transition with rotation
   useEffect(() => {
-    const showSend = messageText.trim() || selectedImages.length > 0 || selectedVideo;
-    
     // Add subtle haptic feedback on transition
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -5307,7 +5310,7 @@ const ChatScreen = () => {
       // Subtle haptic on animation complete
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     });
-  }, [messageText.trim().length > 0, selectedImages.length > 0, selectedVideo]);
+  }, [showSend]);
 
   // Interpolated animated colors for input border
   const animatedBorderColor = colorAnimValue.interpolate({
@@ -6248,9 +6251,15 @@ const ChatScreen = () => {
                               marginVertical: 8,
                               fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"
                             },
-                            bullet_list: { marginVertical: 4 },
-                            ordered_list: { marginVertical: 4 },
-                            list_item: { color: "#FFFFFF", fontSize: 15.5, marginVertical: 2 },
+                            bullet_list: { marginVertical: 8, paddingLeft: 8 },
+                            ordered_list: { marginVertical: 8, paddingLeft: 8 },
+                            list_item: { 
+                              flexDirection: "row",
+                              alignItems: "flex-start",
+                              marginVertical: 4,
+                              color: "#FFFFFF",
+                              fontSize: 15.5,
+                            },
                             paragraph: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20, marginVertical: 3 },
                             text: { color: "#FFFFFF", fontSize: 15.5 },
                             hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
