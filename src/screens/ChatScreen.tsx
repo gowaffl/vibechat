@@ -6233,6 +6233,23 @@ const ChatScreen = () => {
                       >
                         {/* HIGH-14: Adjusted font sizes for density */}
                         <Markdown
+                          rules={{
+                            list_item: (node: any, children: any, parent: any, styles: any) => {
+                              const isOrdered = parent?.tag === 'ordered_list';
+                              const index = parent?.children?.findIndex((n: any) => n === node) || 0;
+                              
+                              return (
+                                <View key={node.key} style={[styles.list_item, { flexDirection: 'row', alignItems: 'flex-start' }]}>
+                                  <Text style={[styles.text, { fontWeight: 'bold', marginRight: 8, minWidth: isOrdered ? 16 : 8 }]}>
+                                    {isOrdered ? `${index + 1}.` : '•'}
+                                  </Text>
+                                  <View style={{ flexShrink: 1 }}>
+                                    {children}
+                                  </View>
+                                </View>
+                              );
+                            }
+                          }}
                           style={{
                             body: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20 },
                             heading1: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
@@ -6279,11 +6296,7 @@ const ChatScreen = () => {
                             bullet_list: { marginVertical: 8, paddingLeft: 8 },
                             ordered_list: { marginVertical: 8, paddingLeft: 8 },
                             list_item: { 
-                              flexDirection: "row",
-                              alignItems: "flex-start",
                               marginVertical: 4,
-                              color: "#FFFFFF",
-                              fontSize: 15.5,
                             },
                             paragraph: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20, marginVertical: 3 },
                             text: { color: "#FFFFFF", fontSize: 15.5 },

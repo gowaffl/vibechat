@@ -60,8 +60,28 @@ const MessageText: React.FC<MessageTextProps> = ({
       });
     }
 
+    // Custom markdown rules for list items to ensure full width
+    const markdownRules = {
+      list_item: (node: any, children: any, parent: any, styles: any) => {
+        const isOrdered = parent?.tag === 'ordered_list';
+        const index = parent?.children?.findIndex((n: any) => n === node) || 0;
+        
+        return (
+          <View key={node.key} style={[styles.list_item, { flexDirection: 'row', alignItems: 'flex-start' }]}>
+            <Text style={[styles.text, { fontWeight: 'bold', marginRight: 8, minWidth: isOrdered ? 16 : 8 }]}>
+              {isOrdered ? `${index + 1}.` : '•'}
+            </Text>
+            <View style={{ flexShrink: 1 }}>
+              {children}
+            </View>
+          </View>
+        );
+      }
+    };
+
     return (
       <Markdown
+        rules={markdownRules}
         style={{
           body: { color: textColor, fontSize, lineHeight },
           heading1: { color: textColor, fontSize: fontSize + 8, fontWeight: "700", marginVertical: 4 },
@@ -114,12 +134,7 @@ const MessageText: React.FC<MessageTextProps> = ({
           bullet_list: { marginVertical: 8, paddingLeft: 8 },
           ordered_list: { marginVertical: 8, paddingLeft: 8 },
           list_item: { 
-            flexDirection: "row",
-            alignItems: "flex-start",
             marginVertical: 4,
-            color: textColor,
-            fontSize,
-            lineHeight,
           },
           paragraph: { color: textColor, fontSize, lineHeight, marginVertical: 4 },
           text: { color: textColor, fontSize, lineHeight },
