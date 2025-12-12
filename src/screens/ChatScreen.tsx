@@ -96,6 +96,9 @@ import { format, isSameDay, isToday, isYesterday } from "date-fns";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
+// Performance optimization: Limit cached messages to avoid MMKV/Memory bloat
+const MAX_CACHED_MESSAGES = 500;
+
 // Define PendingMessage type locally extending Message
 type PendingMessage = Message & {
   isPending?: boolean;
@@ -1815,7 +1818,12 @@ const ChatScreen = () => {
            
            if (uniqueNewMessages.length === 0) return prev;
            
-           return [...uniqueNewMessages, ...prev];
+           const updated = [...uniqueNewMessages, ...prev];
+           // Prune to prevent memory issues
+           if (updated.length > MAX_CACHED_MESSAGES) {
+             updated.length = MAX_CACHED_MESSAGES;
+           }
+           return updated;
         });
         
         // CRITICAL FIX: Update cache for persistence
@@ -1829,9 +1837,15 @@ const ChatScreen = () => {
              
              if (uniqueNewMessages.length === 0) return oldData;
              
+             const updatedMessages = [...uniqueNewMessages, ...oldData.messages];
+             // Prune to prevent memory issues
+             if (updatedMessages.length > MAX_CACHED_MESSAGES) {
+               updatedMessages.length = MAX_CACHED_MESSAGES;
+             }
+
              return {
                ...oldData,
-               messages: [...uniqueNewMessages, ...oldData.messages]
+               messages: updatedMessages
              };
            }
          );
@@ -1976,7 +1990,12 @@ const ChatScreen = () => {
                    return prev;
                  }
                  // Prepend to START (Descending order: Newest -> Oldest)
-                 return [newMessage, ...prev];
+                 const updated = [newMessage, ...prev];
+                 // Prune to prevent memory issues
+                 if (updated.length > MAX_CACHED_MESSAGES) {
+                   updated.length = MAX_CACHED_MESSAGES;
+                 }
+                 return updated;
                });
                
                // CRITICAL FIX: Also update React Query cache so it persists when navigating away/back
@@ -1987,9 +2006,15 @@ const ChatScreen = () => {
                    // Deduplicate against cache
                    if (oldData.messages.some(m => m.id === newMessage.id)) return oldData;
                    
+                   const updatedMessages = [newMessage, ...oldData.messages];
+                   // Prune to prevent memory issues
+                   if (updatedMessages.length > MAX_CACHED_MESSAGES) {
+                     updatedMessages.length = MAX_CACHED_MESSAGES;
+                   }
+
                    return {
                      ...oldData,
-                     messages: [newMessage, ...oldData.messages]
+                     messages: updatedMessages
                    };
                  }
                );
