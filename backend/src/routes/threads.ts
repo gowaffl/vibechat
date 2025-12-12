@@ -264,91 +264,185 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
     if (!hasAccess) {
       return c.json({ error: "User not authorized" }, 403);
     }
-    const whereConditions: any = {
-      chatId: thread.chatId,
-    };
-
-    // Apply date range filter
-    if (filterRules.dateRange) {
-      whereConditions.createdAt = {};
-      if (filterRules.dateRange.start) {
-        whereConditions.createdAt.gte = new Date(filterRules.dateRange.start);
-      }
-      if (filterRules.dateRange.end) {
-        whereConditions.createdAt.lte = new Date(filterRules.dateRange.end);
-      }
-    }
-
-    // Apply people filter (specific users)
-    if (filterRules.people && filterRules.people.length > 0) {
-      // FIX: Check if values are UUIDs (User IDs) or Names
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const isAllUUIDs = filterRules.people.every((p: string) => uuidRegex.test(p));
-
-      // Only filter by userId in DB if all values are UUIDs (likely User IDs)
-      // If we have names (e.g. "AJ"), we can't filter by userId here effectively
-      if (isAllUUIDs) {
-        whereConditions.userId = { in: filterRules.people };
-      }
-    }
 
     // Pagination parameters
     const limit = parseInt(c.req.query("limit") || "100");
-    const cursor = c.req.query("cursor");
+    let cursor = c.req.query("cursor");
 
-    // Apply keyword filter (content search)
-    // This is now INTEGRATED with the tag filtering below for a unified OR condition
-    // We do NOT apply it here as a strict AND condition anymore.
+    // Unified Filtering Logic
+    // We scan DB in batches until we find enough messages or exhaust DB.
+    
+    const hasSemanticFilters = 
+      (filterRules.topics && filterRules.topics.length > 0) ||
+      (filterRules.entities && filterRules.entities.length > 0) ||
+      (filterRules.keywords && filterRules.keywords.length > 0) ||
+      filterRules.sentiment;
 
-    // Get messages matching base filters (Chat ID, Date Range, People)
-    let query = db
-      .from("message")
-      .select("*")
-      .eq("chatId", thread.chatId);
+    // Search terms for filtering
+    const searchTerms = [
+      ...(filterRules.topics || []),
+      ...(filterRules.keywords || [])
+    ];
+    
+    let collectedMessages: any[] = [];
+    let hasMore = true;
+    let nextCursor: string | null = null;
+    let scannedCount = 0;
+    const MAX_SCAN = 2000; // Scan up to 2000 messages deep to find matches
+    const BATCH_SIZE = 200; // Fetch 200 raw messages at a time
 
-    // Apply date range filter
-    if (filterRules.dateRange) {
-      if (filterRules.dateRange.start) {
-        query = query.gte("createdAt", new Date(filterRules.dateRange.start).toISOString());
+    console.log(`[GET /api/threads/:threadId/messages] Starting scan with limit=${limit}, cursor=${cursor}, semantic=${hasSemanticFilters}`);
+
+    while (collectedMessages.length < limit && scannedCount < MAX_SCAN) {
+      // 1. Build Query for this batch
+      let query = db
+        .from("message")
+        .select("*")
+        .eq("chatId", thread.chatId);
+
+      // Apply date range filter (DB level)
+      if (filterRules.dateRange) {
+        if (filterRules.dateRange.start) {
+          query = query.gte("createdAt", new Date(filterRules.dateRange.start).toISOString());
+        }
+        if (filterRules.dateRange.end) {
+          query = query.lte("createdAt", new Date(filterRules.dateRange.end).toISOString());
+        }
       }
-      if (filterRules.dateRange.end) {
-        query = query.lte("createdAt", new Date(filterRules.dateRange.end).toISOString());
-      }
-    }
 
-    // Apply people filter
-    if (filterRules.people && filterRules.people.length > 0) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const isAllUUIDs = filterRules.people.every((p: string) => uuidRegex.test(p));
+      // Apply people filter (DB level if UUIDs)
+      if (filterRules.people && filterRules.people.length > 0) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const isAllUUIDs = filterRules.people.every((p: string) => uuidRegex.test(p));
+        
+        if (isAllUUIDs) {
+          query = query.in("userId", filterRules.people);
+        }
+      }
+
+      // Apply cursor
+      if (cursor) {
+        query = query.lt("createdAt", cursor);
+      }
+
+      // Fetch batch
+      const { data: batch = [], error: batchError } = await query
+        .order("createdAt", { ascending: false })
+        .limit(BATCH_SIZE);
+
+      if (batchError) {
+        console.error("Error fetching message batch:", batchError);
+        throw batchError;
+      }
+
+      if (batch.length === 0) {
+        hasMore = false;
+        nextCursor = null;
+        break;
+      }
+
+      scannedCount += batch.length;
       
-      if (isAllUUIDs) {
-        query = query.in("userId", filterRules.people);
+      // Update cursor for next iteration (tracking scan progress)
+      // If we stop here and return, the frontend needs to resume from the last SCANNED message,
+      // not the last FOUND message.
+      const lastMsg = batch[batch.length - 1];
+      cursor = lastMsg.createdAt;
+      nextCursor = cursor;
+
+      let validBatch = batch;
+
+      // 2. Apply Semantic Filters (In-Memory)
+      if (hasSemanticFilters) {
+        const batchIds = batch.map((m: any) => m.id);
+
+        // Fetch tags for this batch
+        const { data: batchTags = [] } = batchIds.length > 0 ? await db
+          .from("message_tag")
+          .select("messageId, tagType, tagValue")
+          .in("messageId", batchIds) : { data: [] };
+
+        // Find matches
+        const matchingMessageIds = new Set<string>();
+        
+        batchTags.forEach((tag: any) => {
+          let matches = false;
+
+          // Check search terms
+          if (searchTerms.length > 0) {
+            if (["topic", "theme", "entity", "keyword", "thread"].includes(tag.tagType)) {
+              matches = searchTerms.some(term => 
+                tag.tagValue.toLowerCase().includes(term.toLowerCase())
+              );
+            }
+          }
+
+          // Check guaranteed @thread tag match
+          if (tag.tagType === "thread" && tag.tagValue === thread.name) {
+            matches = true;
+          }
+
+          // Check entities
+          if (filterRules.entities && filterRules.entities.length > 0) {
+            if (tag.tagType === "entity") {
+              matches = filterRules.entities.some((entity: string) =>
+                tag.tagValue.toLowerCase().includes(entity.toLowerCase())
+              );
+            }
+          }
+
+          // Check sentiment
+          if (filterRules.sentiment && tag.tagType === "sentiment" && tag.tagValue === filterRules.sentiment) {
+            matches = true;
+          }
+
+          if (matches) {
+            matchingMessageIds.add(tag.messageId);
+          }
+        });
+
+        // Filter batch
+        validBatch = batch.filter((m: any) => {
+          // A. Check Tags
+          if (matchingMessageIds.has(m.id)) return true;
+
+          // B. Check Content
+          if (searchTerms.length > 0 && m.content) {
+            const contentLower = m.content.toLowerCase();
+            return searchTerms.some((term: string) => contentLower.includes(term.toLowerCase()));
+          }
+
+          return false;
+        });
+      }
+
+      // Add to collection
+      collectedMessages.push(...validBatch);
+
+      // If we've reached end of DB (batch < limit), stop
+      if (batch.length < BATCH_SIZE) {
+        hasMore = false;
+        nextCursor = null;
+        break;
       }
     }
 
-    // Apply cursor pagination
-    if (cursor) {
-      query = query.lt("createdAt", cursor);
-    }
+    // Limit the results strictly to requested limit?
+    // User requested up to 100. If we found 150 in one batch, we can slice.
+    // However, if we slice, we MUST ensure nextCursor allows re-fetching the extras?
+    // No, with this "scan until filled" logic, 'nextCursor' is the end of the scan range.
+    // If we return fewer messages than we found (e.g. found 105, need 100), the next 5 are effectively "lost" 
+    // because nextCursor is already past them.
+    // So, we should return ALL messages we found in the batches we processed, 
+    // OR we should have stopped processing immediately when collectedMessages >= limit.
+    // The loop condition `collectedMessages.length < limit` handles this mostly, but the last batch might overflow.
+    // Since this is a specialized "Smart Thread" view, returning slightly more than 100 (e.g. 150) is fine 
+    // and better than losing data.
+    
+    // Assign messages to 'messages' variable for data hydration
+    let messages = collectedMessages;
 
-    // Order by newest first (descending) to match main chat
-    let { data: messages = [], error: messagesError } = await query
-      .order("createdAt", { ascending: false })
-      .limit(limit + 1);
-
-    if (messagesError) {
-      console.error("[GET /api/threads/:threadId/messages] Error fetching messages:", messagesError);
-      return c.json({ error: "Failed to fetch messages" }, 500);
-    }
-
-    // Handle pagination
-    const hasMore = messages.length > limit;
-    messages = messages.slice(0, limit); // Remove the extra item
-    const nextCursor = hasMore && messages.length > 0 
-      ? messages[messages.length - 1].createdAt 
-      : null;
-
-    // Fetch related data for messages
+    // Fetch related data for messages (Only for the ones we are returning!)
     const messageIds = messages.map((m: any) => m.id);
     const userIds = [...new Set(messages.map((m: any) => m.userId).filter((id: any) => id !== null))];
     const replyToIds = [...new Set(messages.filter((m: any) => m.replyToId).map((m: any) => m.replyToId))];
@@ -404,116 +498,6 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
     }
 
     // Attach related data to messages
-    messages = messages.map((msg: any) => ({
-      ...msg,
-      user: userMap.get(msg.userId),
-      aiFriend: msg.aiFriendId ? aiFriendMap.get(msg.aiFriendId) : null,
-      replyTo: msg.replyToId && replyToMap.get(msg.replyToId) ? {
-        ...replyToMap.get(msg.replyToId),
-        user: userMap.get(replyToMap.get(msg.replyToId).userId),
-        aiFriend: replyToMap.get(msg.replyToId).aiFriendId ? aiFriendMap.get(replyToMap.get(msg.replyToId).aiFriendId) : null,
-      } : null,
-      reactions: reactions.filter((r: any) => r.messageId === msg.id).map((r: any) => ({
-        ...r,
-        user: reactionUserMap.get(r.userId),
-      })),
-    }));
-
-    // Apply Unified Tag & Keyword Filter
-    // Goal: Message is included if it matches ANY of the criteria:
-    // 1. Tag matches Topic/Entity/Theme
-    // 2. Tag matches Sentiment
-    // 3. Content matches Keyword/Topic (Case-insensitive)
-    // 4. Tag matches Keyword/Topic
-
-    const hasSemanticFilters = 
-      (filterRules.topics && filterRules.topics.length > 0) ||
-      (filterRules.entities && filterRules.entities.length > 0) ||
-      (filterRules.keywords && filterRules.keywords.length > 0) ||
-      filterRules.sentiment;
-
-    if (hasSemanticFilters) {
-      const messageIds = messages.map((m: any) => m.id);
-
-      // 1. Find messages with matching TAGS
-      const tagOrConditions: string[] = [];
-
-      // Topics/Keywords from settings -> Match against Topic, Theme, Entity, Keyword tags
-      const searchTerms = [
-        ...(filterRules.topics || []),
-        ...(filterRules.keywords || [])
-      ];
-
-      // Fetch all tags for these messages
-      const { data: allTags = [] } = messageIds.length > 0 ? await db
-        .from("message_tag")
-        .select("messageId, tagType, tagValue")
-        .in("messageId", messageIds) : { data: [] };
-
-      // Find matching message IDs based on tags
-      const matchingMessageIds = new Set<string>();
-      
-      allTags.forEach((tag: any) => {
-        let matches = false;
-
-        // Check search terms (topics/keywords)
-        if (searchTerms.length > 0) {
-          if (["topic", "theme", "entity", "keyword", "thread"].includes(tag.tagType)) {
-            matches = searchTerms.some(term => 
-              tag.tagValue.toLowerCase().includes(term.toLowerCase())
-            );
-          }
-        }
-
-        // Check guaranteed @thread tag match
-        if (tag.tagType === "thread" && tag.tagValue === thread.name) {
-          matches = true;
-        }
-
-        // Check entities
-        if (filterRules.entities && filterRules.entities.length > 0) {
-          if (tag.tagType === "entity") {
-            matches = filterRules.entities.some((entity: string) =>
-              tag.tagValue.toLowerCase().includes(entity.toLowerCase())
-            );
-          }
-        }
-
-        // Check sentiment
-        if (filterRules.sentiment && tag.tagType === "sentiment" && tag.tagValue === filterRules.sentiment) {
-          matches = true;
-        }
-
-        if (matches) {
-          matchingMessageIds.add(tag.messageId);
-        }
-      });
-
-      // 2. Filter the messages in memory
-      // Keep message if:
-      // A) It has a matching tag (found above)
-      // B) OR its CONTENT matches any keyword/topic directly
-      
-      messages = messages.filter((m: any) => {
-        // A. Check Tags
-        if (matchingMessageIds.has(m.id)) return true;
-
-        // B. Check Content (Case-insensitive search for all terms)
-        if (searchTerms.length > 0 && m.content) {
-          const contentLower = m.content.toLowerCase();
-          return searchTerms.some((term: string) => contentLower.includes(term.toLowerCase()));
-        }
-
-        return false;
-      });
-    }
-
-    console.log("[GET /api/threads/:threadId/messages] Returning messages:", {
-      count: messages.length,
-      messageIds: messages.map(m => m.id).slice(0, 5), // First 5 IDs
-    });
-
-    // Format messages to match the Message type with linkPreview
     const formattedMessages = messages.map((msg: any) => ({
       id: msg.id,
       content: msg.content,
@@ -605,7 +589,7 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
             } : null,
           }
         : null,
-      reactions: msg.reactions.map((reaction) => ({
+      reactions: msg.reactions.map((reaction: any) => ({
         id: reaction.id,
         emoji: reaction.emoji,
         userId: reaction.userId,

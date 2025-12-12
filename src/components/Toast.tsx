@@ -88,7 +88,7 @@ const Toast = ({ id, message, title, type, onHide }: ToastProps) => {
 };
 
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
-  const [toasts, setToasts] = useState<Array<ToastProps & { duration: number }>>([]);
+  const [toasts, setToasts] = useState<Array<Omit<ToastProps, 'onHide'> & { duration: number }>>([]);
 
   const showToast = useCallback(({ message, type = 'success', duration = 3000, title }: ToastOptions) => {
     const id = Math.random().toString(36).substring(7);

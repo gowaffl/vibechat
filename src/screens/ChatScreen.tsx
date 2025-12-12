@@ -1912,23 +1912,6 @@ const ChatScreen = () => {
     syncRealtimeAuth();
   }, [user?.id]);
 
-  // Scroll to message if provided
-  useEffect(() => {
-    if (messageId && allMessages.length > 0 && flatListRef.current) {
-      const index = allMessages.findIndex((m) => m.id === messageId);
-      if (index !== -1) {
-        console.log(`[ChatScreen] Scrolling to message ${messageId} at index ${index}`);
-        setTimeout(() => {
-          flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-          setHighlightedMessageId(messageId);
-          // Remove highlight after a delay
-          setTimeout(() => setHighlightedMessageId(null), 3000);
-        }, 500); 
-      } else {
-        console.log(`[ChatScreen] Message ${messageId} not found in loaded messages`);
-      }
-    }
-  }, [messageId, allMessages]);
 
   // Realtime subscription for messages and reactions
   // NOTE: We don't use filters because Supabase Realtime doesn't support camelCase column names
@@ -2494,6 +2477,95 @@ const ChatScreen = () => {
     }
   }, [catchUpError]);
 
+  // Define active messages based on thread view or main chat
+  const activeMessages = useMemo(() => {
+    if (currentThreadId) {
+      // Use state variable which accumulates pagination results
+      if (allThreadMessages.length > 0) {
+        return allThreadMessages;
+      }
+      // While loading initial data, we can optionally show client-side matches if any
+      if (isLoadingThreadMessages) {
+          const currentThread = threads?.find(t => t.id === currentThreadId);
+          if (currentThread && messages.length > 0) {
+             const filtered = filterMessages(messages, currentThread);
+             if (filtered.length > 0) return filtered;
+          }
+      }
+      return [];
+    }
+    return messages;
+  }, [currentThreadId, allThreadMessages, messages, threads, filterMessages, isLoadingThreadMessages]);
+
+  // Scroll to message handler
+  const scrollToMessage = useCallback((messageId: string) => {
+    if (!activeMessages) return;
+    
+    const originalIndex = activeMessages.findIndex(msg => msg.id === messageId);
+    
+    if (originalIndex === -1) {
+      console.log(`[ScrollToMessage] Message ${messageId} not found in active messages`);
+      return;
+    }
+
+    // Calculate display index for displayData
+    // activeMessages is New -> Old (descending order)
+    // displayData is Typing indicators -> New -> Old (same order, just with typing at front)
+    // So index is typingOffset + originalIndex
+    let typingOffset = 0;
+    if (isAITyping && !currentThreadId) typingOffset++;
+    if (typingUsers.length > 0 && !currentThreadId) typingOffset++;
+
+    const displayIndex = typingOffset + originalIndex;
+
+    console.log(`[ScrollToMessage] Found message ${messageId} at original index ${originalIndex}, display index ${displayIndex}`);
+    
+    if (!flatListRef.current) {
+      console.log(`[ScrollToMessage] FlatList ref not available`);
+      return;
+    }
+    
+    // Set flag to prevent auto-scroll from interfering
+    isManualScrolling.current = true;
+    console.log(`[ScrollToMessage] Disabled auto-scroll (will re-enable when new message sent)`);
+    
+    // Close modals
+    setShowSearchModal(false);
+    setShowBookmarksModal(false);
+    setSearchQuery("");
+    
+    // Highlight immediately for visual feedback
+    setHighlightedMessageId(messageId);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Delay to allow modal to close
+    setTimeout(() => {
+      console.log(`[ScrollToMessage] Attempting scrollToIndex to ${displayIndex}`);
+      
+      try {
+        // Try to scroll to the index
+        flatListRef.current?.scrollToIndex({
+          index: displayIndex,
+          animated: true,
+          viewPosition: 0.5, // Center the message
+        });
+      } catch (error) {
+        console.log(`[ScrollToMessage] scrollToIndex failed:`, error);
+        // Fallback: scroll to approximate position
+        const estimatedOffset = displayIndex * 100; 
+        flatListRef.current?.scrollToOffset({
+          offset: estimatedOffset,
+          animated: true,
+        });
+      }
+      
+      // Remove highlight after 2 seconds (but keep auto-scroll disabled)
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+    }, 300);
+  }, [activeMessages, isAITyping, typingUsers, currentThreadId]);
+
   // Filter messages to get media (images and videos) for gallery (memoized for performance)
   const mediaMessages = useMemo(
     () => messages.filter(
@@ -2581,74 +2653,7 @@ const ChatScreen = () => {
     }
   }, []);
 
-  // Scroll to message handler
-  const scrollToMessage = useCallback((messageId: string) => {
-    if (!activeMessages) return;
-    
-    const originalIndex = activeMessages.findIndex(msg => msg.id === messageId);
-    
-    if (originalIndex === -1) {
-      console.log(`[ScrollToMessage] Message ${messageId} not found in active messages`);
-      return;
-    }
 
-    // Calculate display index for displayData
-    // activeMessages is New -> Old (descending order)
-    // displayData is Typing indicators -> New -> Old (same order, just with typing at front)
-    // So index is typingOffset + originalIndex
-    let typingOffset = 0;
-    if (isAITyping && !currentThreadId) typingOffset++;
-    if (typingUsers.length > 0 && !currentThreadId) typingOffset++;
-
-    const displayIndex = typingOffset + originalIndex;
-
-    console.log(`[ScrollToMessage] Found message ${messageId} at original index ${originalIndex}, display index ${displayIndex}`);
-    
-    if (!flatListRef.current) {
-      console.log(`[ScrollToMessage] FlatList ref not available`);
-      return;
-    }
-    
-    // Set flag to prevent auto-scroll from interfering
-    isManualScrolling.current = true;
-    console.log(`[ScrollToMessage] Disabled auto-scroll (will re-enable when new message sent)`);
-    
-    // Close modals
-    setShowSearchModal(false);
-    setShowBookmarksModal(false);
-    setSearchQuery("");
-    
-    // Highlight immediately for visual feedback
-    setHighlightedMessageId(messageId);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    // Delay to allow modal to close
-    setTimeout(() => {
-      console.log(`[ScrollToMessage] Attempting scrollToIndex to ${displayIndex}`);
-      
-      try {
-        // Try to scroll to the index
-        flatListRef.current?.scrollToIndex({
-          index: displayIndex,
-          animated: true,
-          viewPosition: 0.5, // Center the message
-        });
-      } catch (error) {
-        console.log(`[ScrollToMessage] scrollToIndex failed:`, error);
-        // Fallback: scroll to approximate position
-        const estimatedOffset = displayIndex * 100; 
-        flatListRef.current?.scrollToOffset({
-          offset: estimatedOffset,
-          animated: true,
-        });
-      }
-      
-      // Remove highlight after 2 seconds (but keep auto-scroll disabled)
-      setTimeout(() => {
-        setHighlightedMessageId(null);
-      }, 2000);
-    }, 300);
-  }, [activeMessages, isAITyping, typingUsers, currentThreadId]);
 
   // Create a Set of bookmarked message IDs for quick lookup
   const bookmarkedMessageIds = useMemo(
