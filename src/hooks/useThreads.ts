@@ -103,13 +103,13 @@ export function useThreads(chatId: string, userId: string) {
 
 // Hook to get messages for a specific thread
 export function useThreadMessages(threadId: string | null, userId: string) {
-  const query = useQuery<Message[]>({
+  const query = useQuery<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>({
     queryKey: ["thread-messages", threadId],
     queryFn: async () => {
       if (!threadId) {
-        return [];
+        return { messages: [], hasMore: false, nextCursor: null };
       }
-      return api.get<Message[]>(`/api/threads/${threadId}/messages?userId=${userId}`);
+      return api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(`/api/threads/${threadId}/messages?userId=${userId}`);
     },
     enabled: !!threadId, // Only run query if threadId is provided
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes

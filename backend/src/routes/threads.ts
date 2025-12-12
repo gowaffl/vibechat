@@ -292,6 +292,10 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       }
     }
 
+    // Pagination parameters
+    const limit = parseInt(c.req.query("limit") || "100");
+    const cursor = c.req.query("cursor");
+
     // Apply keyword filter (content search)
     // This is now INTEGRATED with the tag filtering below for a unified OR condition
     // We do NOT apply it here as a strict AND condition anymore.
@@ -322,12 +326,27 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       }
     }
 
-    let { data: messages = [], error: messagesError } = await query.order("createdAt", { ascending: true });
+    // Apply cursor pagination
+    if (cursor) {
+      query = query.lt("createdAt", cursor);
+    }
+
+    // Order by newest first (descending) to match main chat
+    let { data: messages = [], error: messagesError } = await query
+      .order("createdAt", { ascending: false })
+      .limit(limit + 1);
 
     if (messagesError) {
       console.error("[GET /api/threads/:threadId/messages] Error fetching messages:", messagesError);
       return c.json({ error: "Failed to fetch messages" }, 500);
     }
+
+    // Handle pagination
+    const hasMore = messages.length > limit;
+    messages = messages.slice(0, limit); // Remove the extra item
+    const nextCursor = hasMore && messages.length > 0 
+      ? messages[messages.length - 1].createdAt 
+      : null;
 
     // Fetch related data for messages
     const messageIds = messages.map((m: any) => m.id);
@@ -604,7 +623,11 @@ threads.get("/:threadId/messages", zValidator("query", getThreadMessagesRequestS
       })),
     }));
 
-    return c.json(formattedMessages);
+    return c.json({
+      messages: formattedMessages,
+      hasMore,
+      nextCursor
+    });
   } catch (error) {
     console.error("Error fetching thread messages:", error);
     return c.json({ error: "Failed to fetch thread messages" }, 500);

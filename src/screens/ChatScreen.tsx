@@ -1558,6 +1558,103 @@ const ChatScreen = () => {
   const [catchUpDismissed, setCatchUpDismissed] = useState(false);
   const [showCreateCustomCommand, setShowCreateCustomCommand] = useState(false);
   const [showCreateAIFriend, setShowCreateAIFriend] = useState(false);
+
+  // MOVED UP: Thread hooks and state for Realtime updates
+  const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
+  const { data: threadData, isLoading: isLoadingThreadMessages, error: threadMessagesError } = useThreadMessages(currentThreadId, user?.id || "");
+
+  // Thread pagination state
+  const [allThreadMessages, setAllThreadMessages] = useState<Message[]>([]);
+  const [threadHasMore, setThreadHasMore] = useState(false);
+  const [threadNextCursor, setThreadNextCursor] = useState<string | null>(null);
+  const [isLoadingMoreThread, setIsLoadingMoreThread] = useState(false);
+
+  // Sync thread data when it loads
+  useEffect(() => {
+    if (threadData) {
+      setAllThreadMessages(threadData.messages || []);
+      setThreadHasMore(threadData.hasMore || false);
+      setThreadNextCursor(threadData.nextCursor || null);
+    } else if (!currentThreadId) {
+      setAllThreadMessages([]);
+      setThreadHasMore(false);
+      setThreadNextCursor(null);
+    }
+  }, [threadData, currentThreadId]);
+
+  // Load more thread messages
+  const loadMoreThreadMessages = useCallback(async () => {
+    if (!threadNextCursor || isLoadingMoreThread || !currentThreadId || !user?.id) return;
+    
+    setIsLoadingMoreThread(true);
+    try {
+      const response = await api.get<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(
+        `/api/threads/${currentThreadId}/messages?userId=${user.id}&cursor=${encodeURIComponent(threadNextCursor)}`
+      );
+      
+      if (response.messages && response.messages.length > 0) {
+        setAllThreadMessages(prev => [...prev, ...response.messages]);
+        setThreadHasMore(response.hasMore || false);
+        setThreadNextCursor(response.nextCursor || null);
+      } else {
+        setThreadHasMore(false);
+        setThreadNextCursor(null);
+      }
+    } catch (error) {
+      console.error("[ChatScreen] Error loading more thread messages:", error);
+    } finally {
+      setIsLoadingMoreThread(false);
+    }
+  }, [threadNextCursor, isLoadingMoreThread, currentThreadId, user?.id]);
+
+  // Client-side message filtering for Smart Threads (moved up for realtime updates)
+  const filterMessages = useCallback((msgs: Message[], thread: Thread) => {
+    const rules = thread.filterRules;
+    if (!rules) return msgs;
+
+    try {
+      const parsedRules = typeof rules === 'string' ? JSON.parse(rules) : rules;
+      
+      return msgs.filter(msg => {
+        if (parsedRules.keywords && parsedRules.keywords.length > 0) {
+          const contentLower = msg.content.toLowerCase();
+          const matchesKeyword = parsedRules.keywords.some((k: string) => contentLower.includes(k.toLowerCase()));
+          if (!matchesKeyword) return false;
+        }
+        if (parsedRules.people && parsedRules.people.length > 0) {
+          if (!parsedRules.people.includes(msg.userId)) return false;
+        }
+        if (parsedRules.dateRange) {
+          const msgDate = new Date(msg.createdAt).getTime();
+          if (parsedRules.dateRange.start && msgDate < new Date(parsedRules.dateRange.start).getTime()) return false;
+          if (parsedRules.dateRange.end && msgDate > new Date(parsedRules.dateRange.end).getTime()) return false;
+        }
+        const hasTopicRules = (parsedRules.topics?.length ?? 0) > 0;
+        const hasEntityRules = (parsedRules.entities?.length ?? 0) > 0;
+        const hasSentimentRules = !!parsedRules.sentiment;
+
+        if (hasTopicRules || hasEntityRules || hasSentimentRules) {
+          if (!msg.tags || msg.tags.length === 0) return false;
+          if (hasTopicRules) {
+              const hasTopic = msg.tags.some(t => t.tagType === 'topic' && parsedRules.topics!.includes(t.tagValue));
+              if (!hasTopic) return false;
+          }
+          if (hasEntityRules) {
+              const hasEntity = msg.tags.some(t => t.tagType === 'entity' && parsedRules.entities!.includes(t.tagValue));
+              if (!hasEntity) return false;
+          }
+          if (hasSentimentRules) {
+               const hasSentiment = msg.tags.some(t => t.tagType === 'sentiment' && t.tagValue === parsedRules.sentiment);
+               if (!hasSentiment) return false;
+          }
+        }
+        return true;
+      });
+    } catch (e) {
+      console.error("Error filtering messages:", e);
+      return msgs;
+    }
+  }, []);
   
   // Mentions state
   const [showMentionPicker, setShowMentionPicker] = useState(false);
@@ -2213,8 +2310,8 @@ const ChatScreen = () => {
     }
   }, [nextCursor, isLoadingMore, chatId, user?.id]);
 
-  // Use allMessages instead of direct data
-  const messages = allMessages;
+  // Use allMessages for main chat, allThreadMessages for threads
+  const messages = currentThreadId ? allThreadMessages : allMessages;
 
   // Fetch unread counts for this chat using shared hook
   const { data: unreadCounts = [] } = useUnreadCounts(user?.id);
@@ -2331,89 +2428,6 @@ const ChatScreen = () => {
       setPreviewImage(null);
     },
   });
-  const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
-  const { data: threadMessages, isLoading: isLoadingThreadMessages, error: threadMessagesError } = useThreadMessages(currentThreadId, user?.id || "");
-
-  // Client-side message filtering for Smart Threads
-  const filterMessages = useCallback((msgs: Message[], thread: Thread) => {
-    const rules = thread.filterRules;
-    if (!rules) return msgs;
-
-    try {
-      // Parse rules if they are a string (from DB)
-      const parsedRules = typeof rules === 'string' ? JSON.parse(rules) : rules;
-      
-      return msgs.filter(msg => {
-        // 1. Keywords (Content search)
-        if (parsedRules.keywords && parsedRules.keywords.length > 0) {
-          const contentLower = msg.content.toLowerCase();
-          const matchesKeyword = parsedRules.keywords.some((k: string) => contentLower.includes(k.toLowerCase()));
-          if (!matchesKeyword) return false;
-        }
-
-        // 2. People (Sender)
-        if (parsedRules.people && parsedRules.people.length > 0) {
-          if (!parsedRules.people.includes(msg.userId)) return false;
-        }
-
-        // 3. Date Range
-        if (parsedRules.dateRange) {
-          const msgDate = new Date(msg.createdAt).getTime();
-          if (parsedRules.dateRange.start && msgDate < new Date(parsedRules.dateRange.start).getTime()) return false;
-          if (parsedRules.dateRange.end && msgDate > new Date(parsedRules.dateRange.end).getTime()) return false;
-        }
-
-        // 4. AI Tags (Topics, Entities, Sentiment)
-        const hasTopicRules = (parsedRules.topics?.length ?? 0) > 0;
-        const hasEntityRules = (parsedRules.entities?.length ?? 0) > 0;
-        const hasSentimentRules = !!parsedRules.sentiment;
-
-        if (hasTopicRules || hasEntityRules || hasSentimentRules) {
-          // If message has no tags but rules require them, exclude it
-          if (!msg.tags || msg.tags.length === 0) return false;
-
-          // Check Topics
-          if (hasTopicRules) {
-              const hasTopic = msg.tags.some(t => t.tagType === 'topic' && parsedRules.topics!.includes(t.tagValue));
-              if (!hasTopic) return false;
-          }
-
-          // Check Entities
-          if (hasEntityRules) {
-              const hasEntity = msg.tags.some(t => t.tagType === 'entity' && parsedRules.entities!.includes(t.tagValue));
-              if (!hasEntity) return false;
-          }
-
-          // Check Sentiment
-          if (hasSentimentRules) {
-               const hasSentiment = msg.tags.some(t => t.tagType === 'sentiment' && t.tagValue === parsedRules.sentiment);
-               if (!hasSentiment) return false;
-          }
-        }
-
-        return true;
-      });
-    } catch (e) {
-      console.error("Error filtering messages:", e);
-      return msgs;
-    }
-  }, []);
-
-  // Define active messages based on thread view or main chat
-  const activeMessages = useMemo(() => {
-    if (currentThreadId) {
-      // Optimization: Try filtering client-side first for instant switch
-      const currentThread = threads?.find(t => t.id === currentThreadId);
-      
-      if (currentThread && messages.length > 0) {
-         const filtered = filterMessages(messages, currentThread);
-         console.log(`[ChatScreen] Client-side filtered ${filtered.length} messages for thread ${currentThread.name}`);
-         return filtered;
-      }
-      return threadMessages || [];
-    }
-    return messages;
-  }, [currentThreadId, threadMessages, messages, threads, filterMessages]);
 
   // Sync reactor processing state with AI typing indicator
   const wasRemixingRef = React.useRef(false);
@@ -2433,15 +2447,6 @@ const ChatScreen = () => {
       console.log("[ChatScreen] Remix completed, stopping AI typing animation");
       wasRemixingRef.current = false;
       setIsAITyping(false);
-      // Auto-scroll removed per user request
-      /*
-      // Scroll to show the new remixed message
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 300);
-      });
-      */
     }
     
     if (wasCreatingMemeRef.current && !isCreatingMeme) {
@@ -2457,16 +2462,6 @@ const ChatScreen = () => {
     }
   }, [isRemixing, isCreatingMeme]);
 
-  // Debug thread messages query
-  React.useEffect(() => {
-    console.log('[useThreadMessages] Query state:', {
-      currentThreadId,
-      hasThreadMessages: !!threadMessages,
-      threadMessagesCount: threadMessages?.length,
-      isLoading: isLoadingThreadMessages,
-      error: threadMessagesError,
-    });
-  }, [currentThreadId, threadMessages, isLoadingThreadMessages, threadMessagesError]);
 
   // Handle catch-up errors
   React.useEffect(() => {
@@ -6723,10 +6718,10 @@ const ChatScreen = () => {
           ListHeaderComponent={<View style={{ height: previewImage ? 140 : (areSmartRepliesVisible ? 120 : 95) }} />}
           // HIGH-8: Load earlier messages button (appears at top in inverted list)
           ListFooterComponent={
-            hasMoreMessages ? (
+            (currentThreadId ? threadHasMore : hasMoreMessages) ? (
               <TouchableOpacity
-                onPress={loadMoreMessages}
-                disabled={isLoadingMore}
+                onPress={currentThreadId ? loadMoreThreadMessages : loadMoreMessages}
+                disabled={currentThreadId ? isLoadingMoreThread : isLoadingMore}
                 style={{
                   paddingVertical: 12,
                   paddingHorizontal: 20,
@@ -6734,7 +6729,7 @@ const ChatScreen = () => {
                   marginBottom: 20,
                 }}
               >
-                {isLoadingMore ? (
+                {(currentThreadId ? isLoadingMoreThread : isLoadingMore) ? (
                   <ActivityIndicator size="small" color="rgba(255, 255, 255, 0.6)" />
                 ) : (
                   <Text style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: 14 }}>
