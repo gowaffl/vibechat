@@ -1,9 +1,8 @@
 import React from "react";
-import { Text, Pressable, View, Platform } from "react-native";
+import { Text, View, Platform } from "react-native";
 import Markdown from "react-native-markdown-display";
 import type { Mention } from "@shared/contracts";
 import * as Haptics from "expo-haptics";
-import { ShimmeringText } from "./ShimmeringText";
 import { getColorFromName } from "../utils/avatarHelpers";
 
 interface MessageTextProps {
@@ -258,9 +257,9 @@ const MessageText: React.FC<MessageTextProps> = ({
     return isOwnMessage ? "#A0D4FF" : "#007AFF";
   };
 
-  // Render as a flex row to properly align mentions with text baseline
+  // Render as a single Text component to ensure proper inline alignment
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+    <Text style={style}>
       {parts.map((part, index) => {
         if (part.isMention && part.mention) {
           // HIGH-16: Display mention name without @ symbol, with distinctive styling
@@ -270,38 +269,32 @@ const MessageText: React.FC<MessageTextProps> = ({
           const mentionColor = getMentionColor(part.mention);
           
           return (
-            <Pressable
+            <Text
               key={index}
               onPress={() => handleMentionPress(part.mention!)}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.7 : 1,
-                backgroundColor: `${mentionColor}15`,
-                borderRadius: 4,
-                paddingHorizontal: 4,
-                paddingVertical: 1,
-                marginHorizontal: 2,
-              })}
+              style={{
+                color: mentionColor,
+                fontWeight: "700",
+                // iOS supports these for inline text, Android support varies but basic bg works
+                // We prioritize text alignment over the 'pill' shape if necessary, 
+                // but this generally works well on iOS for mentions.
+              }}
             >
-              <ShimmeringText
-                text={displayName}
-                style={{
-                  color: mentionColor,
-                  fontWeight: "700",
-                  fontSize: fontSize,
-                  lineHeight: lineHeight,
-                }}
-                shimmerColor="rgba(255, 255, 255, 0.6)"
-              />
-            </Pressable>
+              {/* Add a zero-width space or regular space if needed, but text flow usually handles it.
+                  If we want the 'pill' look, we can try backgroundColor. 
+                  For now, purely inline text avoids the alignment issues.
+              */}
+              {displayName}
+            </Text>
           );
         }
         return (
-          <Text key={index} style={style}>
+          <Text key={index}>
             {part.text}
           </Text>
         );
       })}
-    </View>
+    </Text>
   );
 };
 

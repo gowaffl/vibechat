@@ -1766,11 +1766,9 @@ const ChatScreen = () => {
   // Extract chat members from the chat data (members are included in the chat response)
   const chatMembers = useMemo(() => {
     if (!chat?.members) {
-      console.log('[ChatMembers] No members in chat data yet');
       return [];
     }
     const members = chat.members.map((m) => m.user);
-    console.log('[ChatMembers] Extracted members:', members.length, members.map((m) => m.name));
     return members;
   }, [chat?.members]);
 
@@ -5632,15 +5630,8 @@ const ChatScreen = () => {
       minute: "2-digit",
     });
 
-    // Debug voice messages
-    if (isVoice) {
-      console.log("[ChatScreen] Rendering voice message:", {
-        id: message.id,
-        voiceUrl: message.voiceUrl,
-        voiceDuration: message.voiceDuration,
-        messageType: message.messageType,
-      });
-    }
+    // Debug voice messages - REMOVED
+
 
     // Render system messages (like "X joined the chat")
     if (isSystem) {
@@ -6649,13 +6640,8 @@ const ChatScreen = () => {
     }
   };
 
-  // Debug logging for previewImage state
-  console.log('[ChatScreen] Render - previewImage state:', {
-    hasPreviewImage: !!previewImage,
-    imageUrl: previewImage?.imageUrl,
-    prompt: previewImage?.prompt,
-    previewType,
-  });
+  // Debug logging for previewImage state - REMOVED
+
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>

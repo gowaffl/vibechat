@@ -92,22 +92,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
       )
     : [];
 
-  console.log('[MentionPicker] Rendering:', {
-    visible,
-    totalUsers: users.length,
-    totalThreads: threads.length,
-    totalAIFriends: aiFriends.length,
-    searchQuery,
-    filteredUsersCount: filteredUsers.length,
-    filteredThreadsCount: filteredThreads.length,
-    filteredAIFriendsCount: filteredAIFriends.length,
-    filteredUserNames: filteredUsers.map(u => u.name),
-    filteredThreadNames: filteredThreads.map(t => t.name),
-    filteredAIFriendNames: filteredAIFriends.map(f => f.name),
-  });
-
   if (filteredUsers.length === 0 && filteredThreads.length === 0 && filteredAIFriends.length === 0) {
-    console.log('[MentionPicker] No users, threads, or AI friends match search query');
     return null;
   }
 
