@@ -74,6 +74,7 @@ export const chatSchema = z.object({
   aiName: z.string().nullable(),
   aiEngagementMode: z.enum(["on-call", "percentage", "off"]).default("on-call"),
   aiEngagementPercent: z.number().int().min(0).max(100).nullable(),
+  isRestricted: z.boolean().default(false),
   lastAvatarGenDate: z.string().nullable(),
   avatarPromptUsed: z.string().nullable(),
   inviteToken: z.string().nullable(),
@@ -300,6 +301,12 @@ export type SearchMessagesResponse = z.infer<typeof searchMessagesResponseSchema
 export const editMessageRequestSchema = z.object({
   content: z.string(),
   userId: z.string(),
+  messageType: z.enum(["text", "image", "voice", "video"]).optional(),
+  imageUrl: z.string().optional(),
+  voiceUrl: z.string().optional(),
+  voiceDuration: z.number().optional(),
+  mentionedUserIds: z.array(z.string()).optional(),
+  metadata: messageMetadataSchema.optional(),
 });
 export type EditMessageRequest = z.infer<typeof editMessageRequestSchema>;
 export const editMessageResponseSchema = messageSchema;
@@ -654,6 +661,7 @@ export const updateChatRequestSchema = z.object({
   aiName: z.string().nullable().optional(),
   aiEngagementMode: z.enum(["on-call", "percentage", "off"]).optional(),
   aiEngagementPercent: z.number().int().min(0).max(100).nullable().optional(),
+  isRestricted: z.boolean().optional(),
 });
 export type UpdateChatRequest = z.infer<typeof updateChatRequestSchema>;
 export const updateChatResponseSchema = chatSchema;

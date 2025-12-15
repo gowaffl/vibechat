@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Camera, Image as ImageIcon, Sparkles, Wand2, Plus, Zap, Video, BarChart3 } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Sparkles, Wand2, Plus, Zap, Video, BarChart3, AlignLeft } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import Animated, {
   useSharedValue,
@@ -177,6 +177,12 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
       icon: Sparkles,
       description: "Create funny meme images with text",
       color: "#FFD93D",
+    },
+    {
+      command: "/tldr",
+      icon: AlignLeft,
+      description: "Summarize recent messages",
+      color: "#9D4EDD",
     },
   ];
 

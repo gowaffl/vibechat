@@ -96,6 +96,20 @@ aiFriends.post("/", zValidator("json", createAIFriendRequestSchema), async (c) =
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
+    // Check for restricted mode: If restricted, only creator can add AI friends
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", data.chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === data.userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can add AI friends in restricted mode" }, 403);
+      }
+    }
+
     // HIGH-A: Any chat member can now add AI friends (not just creator)
     // Get existing AI friends to determine next sortOrder and color
     const { data: existingFriends, error: friendsError } = await db
@@ -196,6 +210,20 @@ aiFriends.patch("/:id", zValidator("json", updateAIFriendRequestSchema), async (
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
+    // Check for restricted mode: If restricted, only creator can update AI friends
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", aiFriend.chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === data.userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can edit AI friends in restricted mode" }, 403);
+      }
+    }
+
     // Build update object
     const updateData = buildUpdateObject({
       name: data.name,
@@ -282,6 +310,20 @@ aiFriends.delete("/:id", zValidator("json", deleteAIFriendRequestSchema), async 
 
     if (!membership) {
       return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode: If restricted, only creator can delete AI friends
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", aiFriend.chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can delete AI friends in restricted mode" }, 403);
+      }
     }
 
     // Check if this is the last AI friend

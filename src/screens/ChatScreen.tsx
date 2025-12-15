@@ -33,10 +33,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy, Paperclip } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
+import { Video, ResizeMode } from "expo-av";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
@@ -1514,6 +1515,11 @@ const ChatScreen = () => {
     reactions: Reaction[];
   } | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  // Edit mode state
+  const [editSelectedImages, setEditSelectedImages] = useState<string[]>([]);
+  const [editSelectedVideo, setEditSelectedVideo] = useState<{ uri: string; duration?: number } | null>(null);
+  const [editMentionedUserIds, setEditMentionedUserIds] = useState<string[]>([]);
+  
   const [editText, setEditText] = useState("");
   const [activeInput, setActiveInput] = useState<"main" | "edit">("main");
   const [catchUpCount, setCatchUpCount] = useState(0);
@@ -3538,7 +3544,14 @@ const ChatScreen = () => {
         );
 
         console.log(`Compressed image dimensions: ${width}x${height}`);
-        setSelectedImages([manipulatedImage.uri]);
+        
+        if (activeInput === "edit") {
+          setEditSelectedImages(prev => [...prev, manipulatedImage.uri]);
+          // Open edit modal again if it was closed? No, it should be open.
+          // Focus might be lost but we are in modal.
+        } else {
+          setSelectedImages([manipulatedImage.uri]);
+        }
       }
     } catch (error) {
       console.error("Error taking photo:", error);
@@ -3593,7 +3606,11 @@ const ChatScreen = () => {
           processedImages.push(manipulatedImage.uri);
         }
 
-        setSelectedImages(processedImages);
+        if (activeInput === "edit") {
+          setEditSelectedImages(processedImages);
+        } else {
+          setSelectedImages(processedImages);
+        }
         console.log(`Selected ${processedImages.length} image(s)`);
       }
     } catch (error) {
@@ -3729,10 +3746,16 @@ const ChatScreen = () => {
         console.log(`[ChatScreen] Selected video: ${pickedVideo.uri}`);
         console.log(`[ChatScreen] Video duration: ${pickedVideo.duration}ms`);
         
-        setSelectedVideo({
+        const videoData = {
           uri: pickedVideo.uri,
           duration: pickedVideo.duration ? Math.round(pickedVideo.duration / 1000) : undefined,
-        });
+        };
+
+        if (activeInput === "edit") {
+          setEditSelectedVideo(videoData);
+        } else {
+          setSelectedVideo(videoData);
+        }
       }
     } catch (error) {
       console.error("Error picking video:", error);
@@ -4034,6 +4057,72 @@ const ChatScreen = () => {
         }
       } else {
         console.log("[ChatScreen /image] ⚠️ No prompt provided after /image command");
+      }
+      return;
+    }
+
+    // Check for TLDR command (/tldr)
+    if (trimmedMessage.startsWith("/tldr")) {
+      const parts = trimmedMessage.split(" ");
+      let limit = 25; // Default limit
+      if (parts.length > 1) {
+        const parsedLimit = parseInt(parts[1], 10);
+        if (!isNaN(parsedLimit) && parsedLimit > 0) {
+          limit = Math.min(parsedLimit, 100); // Max 100
+        }
+      }
+
+      setMessageText(""); // Clear input immediately
+      clearDraftMessage(); // Clear draft immediately
+      setIsAITyping(true); // Show AI typing indicator
+
+      // Determine thread context
+      const threadId = currentThreadId; // Already in scope
+
+      try {
+        const response = await api.post("/api/ai/tldr", {
+          chatId,
+          userId: user.id,
+          threadId: threadId || null,
+          limit,
+        });
+        
+        // Create local ephemeral message for the user
+        const tldrMessage: Message = {
+          id: `tldr-${Date.now()}`,
+          chatId: chatId,
+          userId: "system", 
+          content: response.content,
+          messageType: "system",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          user: {
+            id: "system",
+            name: "TL;DR",
+            phone: "",
+            hasCompletedOnboarding: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            bio: null,
+            image: null
+          },
+          metadata: { isTldr: true } as any, // Cast to match type if strict
+          reactions: [],
+          isUnsent: false,
+        };
+
+        // Inject into local state
+        setIsAITyping(false);
+        if (threadId) {
+          setAllThreadMessages(prev => [tldrMessage, ...prev]);
+        } else {
+          setAllMessages(prev => [tldrMessage, ...prev]);
+        }
+
+      } catch (error) {
+        console.error("Failed to generate TLDR:", error);
+        Alert.alert("Error", "Failed to generate summary. Please try again.");
+        setIsAITyping(false);
       }
       return;
     }
@@ -4398,6 +4487,121 @@ const ChatScreen = () => {
   const handleEdit = (message: Message) => {
     setEditingMessage(message);
     setEditText(message.content);
+    setActiveInput("edit");
+    
+    // Initialize edit state
+    setEditSelectedImages(
+      message.metadata?.mediaUrls || (message.imageUrl ? [message.imageUrl] : [])
+    );
+    
+    const videoUrl = message.metadata?.videoUrl || (message.messageType === 'video' ? message.videoUrl : null);
+    setEditSelectedVideo(
+      videoUrl
+      ? { 
+          uri: videoUrl, 
+          duration: message.metadata?.videoDuration
+        } 
+      : null
+    );
+    
+    // Initialize mentions
+    const mentionedIds = message.mentions?.map(m => m.mentionedUserId) || [];
+    setEditMentionedUserIds(mentionedIds);
+  };
+
+  // Handle edit message submission with attachments support
+  const handleEditMessageSubmit = async () => {
+    if (!editingMessage || (!editText.trim() && editSelectedImages.length === 0 && !editSelectedVideo) || !user) return;
+    
+    // Check if we have any pending uploads (local files)
+    const localImages = editSelectedImages.filter(uri => !uri.startsWith("http"));
+    const remoteImages = editSelectedImages.filter(uri => uri.startsWith("http"));
+    
+    // Check if video is local
+    const isLocalVideo = editSelectedVideo?.uri && !editSelectedVideo.uri.startsWith("http");
+    
+    let finalImages = [...remoteImages];
+    let finalVideoUrl = editSelectedVideo?.uri.startsWith("http") ? editSelectedVideo.uri : null;
+    let finalVideoDuration = editSelectedVideo?.duration;
+    
+    try {
+      const token = await authClient.getToken();
+      
+      // Upload new images
+      for (const imageUri of localImages) {
+         const uploadResult = await FileSystem.uploadAsync(
+          `${BACKEND_URL}/api/upload/image`,
+          imageUri,
+          {
+            httpMethod: "POST",
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            fieldName: "image",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          }
+        );
+        
+        if (uploadResult.status === 200) {
+           const uploadData = JSON.parse(uploadResult.body);
+           if (uploadData.success && uploadData.url) {
+             finalImages.push(uploadData.url);
+           }
+        }
+      }
+      
+      // Upload video if local
+      if (isLocalVideo && editSelectedVideo) {
+         const uploadResult = await FileSystem.uploadAsync(
+          `${BACKEND_URL}/api/upload/video`,
+          editSelectedVideo.uri,
+          {
+            httpMethod: "POST",
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            fieldName: "video",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          }
+        );
+        
+        if (uploadResult.status === 200) {
+           const uploadData = JSON.parse(uploadResult.body);
+           if (uploadData.success && uploadData.url) {
+             finalVideoUrl = uploadData.url;
+             if (uploadData.duration) finalVideoDuration = uploadData.duration;
+           }
+        }
+      }
+      
+      // Construct payload
+      const payload: any = {
+        messageId: editingMessage.id,
+        content: editText.trim(),
+        userId: user.id,
+        mentionedUserIds: editMentionedUserIds,
+      };
+      
+      // Determine message type
+      if (finalVideoUrl) {
+        payload.messageType = "video";
+        payload.videoUrl = finalVideoUrl;
+        payload.metadata = {
+          videoUrl: finalVideoUrl,
+          videoDuration: finalVideoDuration,
+        };
+      } else if (finalImages.length > 0) {
+        payload.messageType = "image";
+        payload.imageUrl = finalImages[0];
+        payload.metadata = { mediaUrls: finalImages };
+      } else {
+        payload.messageType = "text";
+        payload.imageUrl = null;
+        payload.metadata = null;
+      }
+      
+      editMessageMutation.mutate(payload);
+      
+    } catch (error) {
+      console.error("Error updating message:", error);
+      Alert.alert("Error", "Failed to update message");
+    }
   };
 
   // PanResponder for Edit Message modal swipe-down gesture
@@ -4448,6 +4652,13 @@ const ChatScreen = () => {
   useEffect(() => {
     if (!editingMessage) {
       editModalDragY.setValue(0);
+      // Clear edit state
+      setEditSelectedImages([]);
+      setEditSelectedVideo(null);
+      setEditMentionedUserIds([]);
+      if (activeInput === "edit") {
+        setActiveInput("main");
+      }
     }
   }, [editingMessage]);
 
@@ -5055,7 +5266,10 @@ const ChatScreen = () => {
       textInputRef.current?.focus();
     } else {
       setEditText(newText);
-      // No focus management needed for edit modal usually as it stays open
+      // Track mentioned user in edit mode
+      if (!editMentionedUserIds.includes(selectedUser.id)) {
+        setEditMentionedUserIds([...editMentionedUserIds, selectedUser.id]);
+      }
     }
     
     setShowMentionPicker(false);
@@ -5104,6 +5318,10 @@ const ChatScreen = () => {
       textInputRef.current?.focus();
     } else {
       setEditText(newText);
+      // Track mentioned AI in edit mode
+      if (!editMentionedUserIds.includes(aiFriend.id)) {
+        setEditMentionedUserIds([...editMentionedUserIds, aiFriend.id]);
+      }
     }
     
     setShowMentionPicker(false);
@@ -5664,6 +5882,42 @@ const ChatScreen = () => {
 
     // Render system messages (like "X joined the chat")
     if (isSystem) {
+      // Check for TLDR message
+      if ((message.metadata as any)?.isTldr) {
+        return (
+          <View style={{ marginVertical: 8, paddingHorizontal: 16 }}>
+            <View style={{
+              backgroundColor: "rgba(142, 142, 147, 0.15)",
+              borderRadius: 16,
+              padding: 12,
+              borderWidth: 1,
+              borderColor: "rgba(142, 142, 147, 0.3)",
+              alignSelf: "stretch",
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 }}>
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#9D4EDD', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={14} color="#FFF" />
+                </View>
+                <Text style={{
+                  color: "#8E8E93",
+                  fontSize: 12,
+                  fontWeight: "700",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5
+                }}>
+                  TL;DR Summary
+                </Text>
+              </View>
+              <MessageText 
+                message={message} 
+                isCurrentUser={false} 
+                textColor={Platform.OS === 'ios' ? '#000000' : '#E0E0E0'} 
+              />
+            </View>
+          </View>
+        );
+      }
+
       // Check if this is an event notification message
       if (message.eventId) {
         const event = events.find((e) => e.id === message.eventId);
@@ -7908,7 +8162,7 @@ const ChatScreen = () => {
         {/* Edit Message Modal */}
         <Modal visible={!!editingMessage} transparent animationType="slide" onRequestClose={() => setEditingMessage(null)}>
           <KeyboardAvoidingView
-            behavior="padding"
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ flex: 1 }}
           >
             <Pressable
@@ -7978,67 +8232,132 @@ const ChatScreen = () => {
                     </View>
                   )}
 
-                <TextInput
-                  value={editText}
-                  onChangeText={handleEditTyping}
-                  multiline
-                  autoFocus
-                  keyboardAppearance="dark"
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    borderRadius: 12,
-                    padding: 16,
-                    color: "#FFFFFF",
-                    fontSize: 16,
-                    minHeight: 100,
-                    maxHeight: 200,
-                    marginBottom: 16,
-                  }}
-                  placeholder="Edit your message..."
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                />
+                  {/* Attachment Previews */}
+                  {(editSelectedImages.length > 0 || editSelectedVideo) && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                      {editSelectedImages.map((uri, index) => (
+                        <View key={index} style={{ marginRight: 8, position: "relative" }}>
+                          <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 12 }} />
+                          <TouchableOpacity 
+                            style={{ position: "absolute", top: -6, right: -6, backgroundColor: "rgba(0,0,0,0.8)", borderRadius: 10, padding: 2 }}
+                            onPress={() => setEditSelectedImages(prev => prev.filter((_, i) => i !== index))}
+                          >
+                            <X size={14} color="white" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                      {editSelectedVideo && (
+                        <View style={{ marginRight: 8, position: "relative" }}>
+                           <View style={{ width: 80, height: 80, borderRadius: 12, overflow: "hidden", backgroundColor: "black" }}>
+                             <Video 
+                               source={{ uri: editSelectedVideo.uri }} 
+                               style={{ width: "100%", height: "100%" }} 
+                               resizeMode={ResizeMode.COVER} 
+                               shouldPlay={false}
+                             />
+                             <View style={{ position: "absolute", bottom: 4, right: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, borderRadius: 4 }}>
+                               <Text style={{ color: "white", fontSize: 10 }}>
+                                 {editSelectedVideo.duration ? `${Math.floor(editSelectedVideo.duration / 60)}:${(editSelectedVideo.duration % 60).toString().padStart(2, '0')}` : "VIDEO"}
+                               </Text>
+                             </View>
+                           </View>
+                           <TouchableOpacity 
+                            style={{ position: "absolute", top: -6, right: -6, backgroundColor: "rgba(0,0,0,0.8)", borderRadius: 10, padding: 2 }}
+                            onPress={() => setEditSelectedVideo(null)}
+                          >
+                            <X size={14} color="white" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </ScrollView>
+                  )}
 
-                <View style={{ flexDirection: "row", gap: 12 }}>
-                  <Pressable
-                    onPress={() => setEditingMessage(null)}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
-                      borderRadius: 12,
-                      padding: 16,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Cancel</Text>
-                  </Pressable>
+                  {/* Input Row */}
+                  <View style={{ flexDirection: "row", alignItems: "flex-end", marginBottom: 16 }}>
+                    <TouchableOpacity 
+                      onPress={() => setShowAttachmentsMenu(true)}
+                      style={{ padding: 10, marginRight: 8, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12 }}
+                    >
+                      <Paperclip color="white" size={20} />
+                    </TouchableOpacity>
 
-                  <Pressable
-                    onPress={() => {
-                      if (editingMessage && editText.trim()) {
-                        editMessageMutation.mutate({
-                          messageId: editingMessage.id,
-                          content: editText.trim(),
-                        });
-                      }
-                    }}
-                    disabled={!editText.trim() || editMessageMutation.isPending}
-                    style={{
-                      flex: 1,
-                      backgroundColor: editText.trim() ? "#007AFF" : "rgba(0, 122, 255, 0.3)",
-                      borderRadius: 12,
-                      padding: 16,
-                      alignItems: "center",
-                    }}
-                  >
-                    {editMessageMutation.isPending ? (
-                      <LuxeLogoLoader size={20} />
-                    ) : (
-                      <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Save</Text>
-                    )}
-                  </Pressable>
-                </View>
+                    <TextInput
+                      value={editText}
+                      onChangeText={handleEditTyping}
+                      multiline
+                      autoFocus
+                      keyboardAppearance="dark"
+                      style={{
+                        flex: 1,
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
+                        borderRadius: 12,
+                        padding: 12,
+                        color: "#FFFFFF",
+                        fontSize: 16,
+                        minHeight: 40,
+                        maxHeight: 150,
+                      }}
+                      placeholder="Edit your message..."
+                      placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                    />
+                  </View>
+
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <Pressable
+                      onPress={() => setEditingMessage(null)}
+                      style={{
+                        flex: 1,
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
+                        borderRadius: 12,
+                        padding: 16,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Cancel</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={handleEditMessageSubmit}
+                      disabled={!editText.trim() && editSelectedImages.length === 0 && !editSelectedVideo || editMessageMutation.isPending}
+                      style={{
+                        flex: 1,
+                        backgroundColor: (editText.trim() || editSelectedImages.length > 0 || editSelectedVideo) ? "#007AFF" : "rgba(0, 122, 255, 0.3)",
+                        borderRadius: 12,
+                        padding: 16,
+                        alignItems: "center",
+                      }}
+                    >
+                      {editMessageMutation.isPending ? (
+                        <LuxeLogoLoader size={20} />
+                      ) : (
+                        <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Save</Text>
+                      )}
+                    </Pressable>
+                  </View>
                 </View>
               </Animated.View>
+              
+              {/* Attachments Menu Inside Modal */}
+              <AttachmentsMenu
+                visible={showAttachmentsMenu}
+                onClose={() => setShowAttachmentsMenu(false)}
+                onTakePhoto={takePhoto}
+                onPickImage={pickImage}
+                onPickVideo={pickVideo}
+                onSelectCommand={(cmd) => setEditText(prev => prev + cmd + " ")}
+                onCreateCommand={() => {
+                  setShowAttachmentsMenu(false);
+                  setTimeout(() => setShowCreateCustomCommand(true), 300);
+                }}
+                onCreatePoll={() => {
+                   setShowAttachmentsMenu(false);
+                   setTimeout(() => setShowCreatePoll(true), 300);
+                }}
+                onOpenSettings={() => {
+                  navigation.navigate("GroupSettings", { chatId });
+                }}
+                customCommands={customCommands}
+              />
             </Pressable>
           </KeyboardAvoidingView>
         </Modal>
@@ -8145,6 +8464,7 @@ const ChatScreen = () => {
         )}
 
         {/* Attachments Menu */}
+        {!editingMessage && (
         <AttachmentsMenu
           visible={showAttachmentsMenu}
           onClose={() => {
@@ -8177,6 +8497,7 @@ const ChatScreen = () => {
           }}
           customCommands={customCommands}
         />
+        )}
 
         {/* Search Modal */}
         <Modal

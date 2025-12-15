@@ -26,6 +26,7 @@ import {
   logSafetyEvent,
 } from "../services/content-safety";
 import { setAITypingStatus } from "./chats";
+import { decryptMessages } from "../services/message-encryption";
 
 const app = new Hono<AppType>();
 
@@ -70,6 +71,51 @@ app.post("/", async (c) => {
   try {
     const body = await c.req.json();
     const validatedData = createCustomCommandRequestSchema.parse(body);
+    
+    // Add userId to schema or extract from request if auth middleware puts it there?
+    // The schema doesn't have userId, so we assume we need to pass it or get it.
+    // However, createCustomCommandRequestSchema in shared/contracts.ts ONLY has command, prompt, chatId.
+    // The previous implementation didn't check membership!
+    
+    // We need userId to check membership. Assuming it's passed in body or header.
+    // Let's assume passed in body for now, but we might need to update schema.
+    // Actually, usually userId comes from auth middleware or client sends it.
+    // Looking at other routes, userId is often in body or query.
+    // Let's modify the schema in contracts.ts? No, I should avoid changing contracts if possible unless necessary.
+    // Wait, createCustomCommandRequestSchema doesn't have userId. 
+    // I should check how the client sends it.
+    // If client sends it but schema doesn't validate it, I can still access it from body if I cast to any.
+    const userId = (body as any).userId;
+
+    if (!userId) {
+       return c.json({ error: "userId is required" }, 400);
+    }
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", validatedData.chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode: If restricted, only creator can create custom commands
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", validatedData.chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can create custom commands in restricted mode" }, 403);
+      }
+    }
 
     // Validate command starts with /
     let command = validatedData.command.trim();
@@ -127,6 +173,49 @@ app.patch("/:id", async (c) => {
     const body = await c.req.json();
     const validatedData = updateCustomCommandRequestSchema.parse(body);
 
+    // Need userId for permission checks.
+    const userId = (body as any).userId;
+    if (!userId) {
+       return c.json({ error: "userId is required" }, 400);
+    }
+
+    // Fetch command to get chatId
+    const { data: commandToUpdate, error: fetchError } = await db
+      .from("custom_slash_command")
+      .select("chatId")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !commandToUpdate) {
+      return c.json({ error: "Command not found" }, 404);
+    }
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", commandToUpdate.chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode: If restricted, only creator can update
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", commandToUpdate.chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can update custom commands in restricted mode" }, 403);
+      }
+    }
+
     const updateData: any = {};
     if (validatedData.command) {
       let command = validatedData.command.trim();
@@ -171,6 +260,51 @@ app.patch("/:id", async (c) => {
 app.delete("/:id", async (c) => {
   try {
     const id = c.req.param("id");
+    // We need userId for permission check. It should be in query or body.
+    // DELETE requests might not have body, or might.
+    // Let's check if we can get it from query params like other DELETE endpoints.
+    const userId = c.req.query("userId"); // Assuming passed as query param
+
+    if (!userId) {
+       return c.json({ error: "userId is required" }, 400);
+    }
+
+    // Fetch command to get chatId
+    const { data: commandToDelete, error: fetchError } = await db
+      .from("custom_slash_command")
+      .select("chatId")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !commandToDelete) {
+      return c.json({ error: "Command not found" }, 404);
+    }
+
+    // Verify user is a member of this chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", commandToDelete.chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", commandToDelete.chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can delete custom commands in restricted mode" }, 403);
+      }
+    }
 
     const { error } = await db
       .from("custom_slash_command")
@@ -299,23 +433,29 @@ app.post("/execute", async (c) => {
         .single();
       
       if (replyMsg) {
+        // Decrypt the reply message
+        const [decryptedReply] = await decryptMessages([replyMsg]);
+
         const { data: replyUser } = await db
           .from("user")
           .select("*")
-          .eq("id", replyMsg.userId)
+          .eq("id", decryptedReply.userId)
           .single();
         
-        replyToMessage = replyUser ? { ...replyMsg, user: replyUser } : null;
+        replyToMessage = replyUser ? { ...decryptedReply, user: replyUser } : null;
       }
     }
 
     // Fetch last 100 messages from this chat for context
-    const { data: messages = [] } = await db
+    const { data: rawMessages = [] } = await db
       .from("message")
       .select("*")
       .eq("chatId", validatedData.chatId)
       .order("createdAt", { ascending: false })
       .limit(100);
+
+    // Decrypt messages
+    const messages = await decryptMessages(rawMessages);
 
     // Fetch users for messages
     const userIds = [...new Set(messages.map((m: any) => m.userId))];

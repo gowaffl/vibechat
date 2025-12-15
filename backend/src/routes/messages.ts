@@ -1181,7 +1181,16 @@ messages.patch("/:id/description", zValidator("json", updateMessageDescriptionRe
 messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) => {
   try {
     const messageId = c.req.param("id");
-    const { content, userId } = c.req.valid("json");
+    const { 
+      content, 
+      userId, 
+      messageType, 
+      imageUrl, 
+      voiceUrl, 
+      voiceDuration, 
+      mentionedUserIds, 
+      metadata 
+    } = c.req.valid("json");
 
     console.log(`✏️  [Messages] Edit request for message ${messageId} by user ${userId}`);
 
@@ -1234,6 +1243,11 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
         content,
         editedAt: now.toISOString(),
         editHistory: JSON.stringify(editHistory),
+        ...(messageType ? { messageType } : {}),
+        ...(imageUrl !== undefined ? { imageUrl } : {}),
+        ...(voiceUrl !== undefined ? { voiceUrl } : {}),
+        ...(voiceDuration !== undefined ? { voiceDuration } : {}),
+        ...(metadata ? { metadata: JSON.stringify(metadata) } : {}),
       })
       .eq("id", messageId)
       .select("*")
@@ -1243,6 +1257,41 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
       console.error("Error updating message:", updateError);
       return c.json({ error: "Failed to edit message" }, 500);
     }
+
+    // Handle mentions if provided
+    let mentions: any[] = [];
+    
+    if (mentionedUserIds !== undefined) {
+      // 1. Delete existing mentions
+      await db.from("mention").delete().eq("messageId", messageId);
+      
+      // 2. Insert new mentions if any
+      if (mentionedUserIds.length > 0) {
+        console.log(`[@] Updating mentions for message ${messageId}: ${mentionedUserIds.length} users`);
+        
+        const { error: mentionError } = await db
+          .from("mention")
+          .insert(
+            mentionedUserIds.map(mentionedUserId => ({
+              messageId: messageId,
+              mentionedUserId,
+              mentionedByUserId: userId,
+            }))
+          );
+        
+        if (mentionError) {
+          console.error("[Messages] Error creating mentions:", mentionError);
+        }
+      }
+    }
+
+    // Fetch final mentions
+    const { data: currentMentions } = await db
+      .from("mention")
+      .select("*, mentionedUser:user!mentionedUserId(*), mentionedBy:user!mentionedByUserId(*)")
+      .eq("messageId", messageId);
+      
+    mentions = currentMentions || [];
 
     // Fetch user
     const { data: user } = await db
@@ -1338,22 +1387,43 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
           messageId: reaction.messageId,
           createdAt: new Date(reaction.createdAt).toISOString(),
         })),
+        mentions: mentions.map((m: any) => ({
+          id: m.id,
+          messageId: m.messageId,
+          mentionedUserId: m.mentionedUserId,
+          mentionedByUserId: m.mentionedByUserId,
+          createdAt: new Date(m.createdAt).toISOString(),
+          mentionedUser: m.mentionedUser ? {
+            id: m.mentionedUser.id,
+            name: m.mentionedUser.name,
+            phone: m.mentionedUser.phone || "",
+            bio: m.mentionedUser.bio,
+            image: m.mentionedUser.image,
+            hasCompletedOnboarding: m.mentionedUser.hasCompletedOnboarding || false,
+            createdAt: new Date(m.mentionedUser.createdAt).toISOString(),
+            updatedAt: new Date(m.mentionedUser.updatedAt).toISOString(),
+          } : undefined,
+          mentionedBy: m.mentionedBy ? {
+            id: m.mentionedBy.id,
+            name: m.mentionedBy.name,
+            phone: m.mentionedBy.phone || "",
+            bio: m.mentionedBy.bio,
+            image: m.mentionedBy.image,
+            hasCompletedOnboarding: m.mentionedBy.hasCompletedOnboarding || false,
+            createdAt: new Date(m.mentionedBy.createdAt).toISOString(),
+            updatedAt: new Date(m.mentionedBy.updatedAt).toISOString(),
+          } : undefined,
+        })),
+        metadata: updatedMessage.metadata ? (typeof updatedMessage.metadata === 'string' ? JSON.parse(updatedMessage.metadata) : updatedMessage.metadata) : null,
       });
 
       return c.json(response);
     } catch (parseError) {
       console.error("Error parsing edit message response:", parseError);
-      console.error("Data that failed to parse:", {
-        updatedMessage,
-        user,
-        replyTo,
-        reactions: reactions.length,
-      });
       // Return success anyway since the message was actually edited
-      // IMPORTANT: Return the new content from request, not encrypted content
       return c.json({ 
         id: updatedMessage.id,
-        content: content, // Use original content, not encrypted
+        content: content,
         messageType: updatedMessage.messageType,
         userId: updatedMessage.userId,
         chatId: updatedMessage.chatId,

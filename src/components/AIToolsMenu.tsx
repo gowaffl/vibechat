@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from "react-native";
 import { BlurView } from "expo-blur";
-import { X, Sparkles, Image as ImageIcon, Smile, Plus, Settings, Zap, Search } from "lucide-react-native";
+import { X, Sparkles, Image as ImageIcon, Smile, Plus, Settings, Zap, Search, AlignLeft } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import type { CustomSlashCommand } from "@/shared/contracts";
 
@@ -83,6 +83,12 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
       icon: Smile,
       description: "Create funny meme images with text",
       color: "#FFD93D",
+    },
+    {
+      command: "/tldr",
+      icon: AlignLeft,
+      description: "Summarize recent messages",
+      color: "#9D4EDD",
     },
   ];
 

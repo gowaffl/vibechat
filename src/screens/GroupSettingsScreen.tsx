@@ -280,6 +280,9 @@ const GroupSettingsScreen = () => {
 
   // Check if current user is the creator
   const isCreator = chat?.creatorId === user?.id;
+  const isRestricted = chat?.isRestricted || false;
+  // Permissions: In restricted mode, only creator can edit. In unrestricted mode, any member can edit.
+  const canEdit = !isRestricted || isCreator;
 
   // Check if notifications are muted
   const currentMember = chat?.members?.find(m => m.userId === user?.id);
@@ -289,12 +292,40 @@ const GroupSettingsScreen = () => {
   const muteChatMutation = useMutation({
     mutationFn: ({ chatId, isMuted }: { chatId: string; isMuted: boolean }) =>
       api.patch(`/api/chats/${chatId}/mute`, { userId: user!.id, isMuted }),
+    onMutate: async ({ isMuted }) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ["chat", chatId] });
+
+      // Snapshot the previous value
+      const previousChat = queryClient.getQueryData(["chat", chatId]);
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(["chat", chatId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          members: old.members?.map((m: any) =>
+            m.userId === user?.id ? { ...m, isMuted } : m
+          ) || [],
+        };
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousChat };
+    },
     onSuccess: () => {
+      // We don't need to invalidate immediately because we updated optimally
+      // But we should invalidate eventually to ensure consistency
       queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
       queryClient.invalidateQueries({ queryKey: ["user-chats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: any) => {
+    onError: (error: any, _, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousChat) {
+        queryClient.setQueryData(["chat", chatId], context.previousChat);
+      }
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const errorMessage = error?.message || "Failed to update mute status";
       Alert.alert("Error", errorMessage);
@@ -328,12 +359,14 @@ const GroupSettingsScreen = () => {
           <View className="items-center">
             <View className="flex-row items-center gap-2">
               <Text className="text-lg font-bold text-white">{chat?.name || "Group Settings"}</Text>
-              <Pressable
-                onPress={() => setShowEditProfileModal(true)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-              >
-                <Edit2 size={16} color="#FFFFFF" />
-              </Pressable>
+              {canEdit && (
+                <Pressable
+                  onPress={() => setShowEditProfileModal(true)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                >
+                  <Edit2 size={16} color="#FFFFFF" />
+                </Pressable>
+              )}
             </View>
             {chat?.bio ? (
               <Text className="text-xs text-gray-400 mt-0.5" numberOfLines={1}>
@@ -383,9 +416,40 @@ const GroupSettingsScreen = () => {
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: Omit<UpdateChatRequest, 'userId'>) =>
       api.patch<Chat>(`/api/chats/${chatId}`, { ...updates, userId: user?.id }),
+    onMutate: async (updates) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["chat", chatId] });
+
+      // Snapshot the previous value
+      const previousChat = queryClient.getQueryData(["chat", chatId]);
+
+      // Optimistically update to the new value
+      if (updates.isRestricted !== undefined) {
+        queryClient.setQueryData(["chat", chatId], (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            isRestricted: updates.isRestricted,
+          };
+        });
+      }
+
+      // Return a context object with the snapshotted value
+      return { previousChat };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error, _, context) => {
+      // Rollback on error
+      if (context?.previousChat) {
+        queryClient.setQueryData(["chat", chatId], context.previousChat);
+      }
+      
+      console.error("[GroupSettings] Failed to update settings:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", "Failed to update settings");
     },
   });
 
@@ -1145,6 +1209,7 @@ const GroupSettingsScreen = () => {
                   )}
                   
                   {/* AI Avatar Generation Button */}
+                  {canEdit && (
                   <View
                     style={{
                       position: 'absolute',
@@ -1201,8 +1266,10 @@ const GroupSettingsScreen = () => {
                       </LinearGradient>
                     </BlurView>
                   </View>
+                  )}
 
                   {/* Camera Button (Moved to bottom left) */}
+                  {canEdit && (
                   <View
                     style={{
                       position: 'absolute',
@@ -1227,6 +1294,7 @@ const GroupSettingsScreen = () => {
                       </View>
                     </Pressable>
                   </View>
+                  )}
                 </View>
               </Pressable>
             </View>
@@ -1440,24 +1508,26 @@ const GroupSettingsScreen = () => {
                     AI FRIENDS
                   </Text>
                 </View>
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    handleCreateAIFriend();
-                  }}
-                >
-                  <View
-                    style={{
-                      backgroundColor: "rgba(52, 199, 89, 0.15)",
-                      padding: 8,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: "rgba(52, 199, 89, 0.3)",
+                {canEdit && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      handleCreateAIFriend();
                     }}
                   >
-                    <Plus size={16} color="#34C759" />
-                  </View>
-                </Pressable>
+                    <View
+                      style={{
+                        backgroundColor: "rgba(52, 199, 89, 0.15)",
+                        padding: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: "rgba(52, 199, 89, 0.3)",
+                      }}
+                    >
+                      <Plus size={16} color="#34C759" />
+                    </View>
+                  </Pressable>
+                )}
               </View>
 
               {/* AI Friend Selector Dropdown - Only show if 2+ friends */}
@@ -1839,26 +1909,28 @@ const GroupSettingsScreen = () => {
                     CUSTOM SLASH COMMANDS
                   </Text>
                 </View>
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    handleCancelEditing();
-                    setIsAddingCommand(true);
-                  }}
-                  disabled={isAddingCommand || editingCommandId !== null}
-                >
-                  <View
-                    style={{
-                      backgroundColor: "rgba(255, 159, 10, 0.15)",
-                      padding: 8,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 159, 10, 0.3)",
+                {canEdit && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      handleCancelEditing();
+                      setIsAddingCommand(true);
                     }}
+                    disabled={isAddingCommand || editingCommandId !== null}
                   >
-                    <Plus size={16} color="#FF9F0A" />
-                  </View>
-                </Pressable>
+                    <View
+                      style={{
+                        backgroundColor: "rgba(255, 159, 10, 0.15)",
+                        padding: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: "rgba(255, 159, 10, 0.3)",
+                      }}
+                    >
+                      <Plus size={16} color="#FF9F0A" />
+                    </View>
+                  </Pressable>
+                )}
               </View>
 
               <Text className="text-xs mb-3" style={{ color: "#8E8E93" }}>
@@ -2025,7 +2097,6 @@ const GroupSettingsScreen = () => {
                 </View>
               )}
 
-              {/* Commands List */}
               {customCommands.length > 0 ? (
                 <View>
                   {customCommands.map((cmd) => (
@@ -2043,18 +2114,22 @@ const GroupSettingsScreen = () => {
                           {cmd.command}
                         </Text>
                         <View className="flex-row gap-2">
-                          <Pressable
-                            onPress={() => handleEditCommand(cmd)}
-                            disabled={isAddingCommand || editingCommandId !== null}
-                          >
-                            <Edit2 size={16} color="#FFFFFF" />
-                          </Pressable>
-                          <Pressable
-                            onPress={() => handleDeleteCommand(cmd.id)}
-                            disabled={deleteCommandMutation.isPending}
-                          >
-                            <Trash2 size={16} color="#FF3B30" />
-                          </Pressable>
+                          {canEdit && (
+                            <>
+                              <Pressable
+                                onPress={() => handleEditCommand(cmd)}
+                                disabled={isAddingCommand || editingCommandId !== null}
+                              >
+                                <Edit2 size={16} color="#FFFFFF" />
+                              </Pressable>
+                              <Pressable
+                                onPress={() => handleDeleteCommand(cmd.id)}
+                                disabled={deleteCommandMutation.isPending}
+                              >
+                                <Trash2 size={16} color="#FF3B30" />
+                              </Pressable>
+                            </>
+                          )}
                         </View>
                       </View>
                       <Text className="text-sm" style={{ color: "#8E8E93" }} numberOfLines={2}>
@@ -2124,6 +2199,73 @@ const GroupSettingsScreen = () => {
               </View>
             </View>
 
+            {/* Admin Settings - Restricted Mode (Creator Only) */}
+            {isCreator && (
+              <View
+                className="rounded-2xl p-5 mb-4"
+                style={{
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 255, 255, 0.2)",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 2,
+                }}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-3 flex-1 pr-4">
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        backgroundColor: "rgba(255, 59, 48, 0.15)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <View style={{ position: 'relative' }}>
+                        <Users size={20} color="#FF3B30" />
+                        <View 
+                          style={{ 
+                            position: 'absolute', 
+                            bottom: -2, 
+                            right: -2, 
+                            backgroundColor: '#1A1A1A', 
+                            borderRadius: 6 
+                          }}
+                        >
+                          <View style={{ backgroundColor: '#FF3B30', borderRadius: 5, width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="lock-closed" size={6} color="#FFFFFF" />
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                        Restricted Mode
+                      </Text>
+                      <Text className="text-xs text-gray-400">
+                        Only the creator can invite members and change group settings
+                      </Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={isRestricted}
+                    onValueChange={(value) => {
+                      Haptics.selectionAsync();
+                      updateSettingsMutation.mutate({ isRestricted: value });
+                    }}
+                    trackColor={{ false: "#3A3A3C", true: "#FF3B30" }}
+                    thumbColor={"#FFFFFF"}
+                    ios_backgroundColor="#3A3A3C"
+                  />
+                </View>
+              </View>
+            )}
+
             {/* Members List */}
             <View
               className="rounded-2xl p-5 mb-4"
@@ -2142,29 +2284,32 @@ const GroupSettingsScreen = () => {
                 <Text className="text-sm font-semibold" style={{ color: "#8E8E93" }}>
                   MEMBERS ({chat?.members?.length || 0})
                 </Text>
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    handleGenerateInviteLink();
-                  }}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.7 : 1,
-                  })}
-                >
-                  <View
-                    className="flex-row items-center px-3 py-2 rounded-lg"
-                    style={{
-                      backgroundColor: "rgba(0, 122, 255, 0.15)",
-                      borderWidth: 1,
-                      borderColor: "rgba(0, 122, 255, 0.3)",
+                {/* Invite Button - Hide in Restricted Mode if not Creator */}
+                {(!isRestricted || isCreator) && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      handleGenerateInviteLink();
                     }}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                    })}
                   >
-                    <UserPlus size={16} color="#007AFF" />
-                    <Text className="ml-2 font-semibold text-sm" style={{ color: "#007AFF" }}>
-                      Invite
-                    </Text>
-                  </View>
-                </Pressable>
+                    <View
+                      className="flex-row items-center px-3 py-2 rounded-lg"
+                      style={{
+                        backgroundColor: "rgba(0, 122, 255, 0.15)",
+                        borderWidth: 1,
+                        borderColor: "rgba(0, 122, 255, 0.3)",
+                      }}
+                    >
+                      <UserPlus size={16} color="#007AFF" />
+                      <Text className="ml-2 font-semibold text-sm" style={{ color: "#007AFF" }}>
+                        Invite
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
               </View>
               {chat?.members?.map((member) => (
                 <View

@@ -74,6 +74,14 @@ const editImageRequestSchema = z.object({
   preview: z.boolean().optional().default(true),
 });
 
+// Request schema for TLDR summary
+const tldrRequestSchema = z.object({
+  chatId: z.string(),
+  userId: z.string(),
+  threadId: z.string().optional().nullable(),
+  limit: z.number().min(1).max(100).default(25),
+});
+
 // POST /api/ai/chat - Get AI response
 ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
   const { userId, userMessage, chatId, aiFriendId } = c.req.valid("json");
@@ -1692,6 +1700,219 @@ Coffee time? ☕`,
     // Smart replies are a nice-to-have feature, not critical
     console.log("[Smart Replies] Returning empty replies due to error");
     return c.json({ replies: [] });
+  }
+});
+
+// POST /api/ai/tldr - Generate conversation summary
+ai.post("/tldr", zValidator("json", tldrRequestSchema), async (c) => {
+  const { chatId, userId, threadId, limit } = c.req.valid("json");
+
+  try {
+    const requestId = `tldr-${chatId}-${Date.now()}`;
+    console.log(`[AI TLDR] [${requestId}] Generating summary for chat ${chatId} (thread: ${threadId || 'main'})`);
+
+    // RACE CONDITION PREVENTION: Acquire lock
+    if (!acquireAIResponseLock(chatId)) {
+      console.log(`[AI TLDR] [${requestId}] ❌ BLOCKED: Lock already held`);
+      return c.json({
+        error: "AI is busy. Please wait.",
+        blocked: true
+      }, 429);
+    }
+
+    // Verify user is a member
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      releaseAIResponseLock(chatId);
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    let messagesToSummarize: any[] = [];
+    let contextDescription = "";
+
+    // Fetch messages based on context (Smart Thread vs Main Chat)
+    if (threadId) {
+      // Smart Thread Mode
+      const { data: thread } = await db
+        .from("thread")
+        .select("*")
+        .eq("id", threadId)
+        .single();
+
+      if (!thread) {
+        releaseAIResponseLock(chatId);
+        return c.json({ error: "Thread not found" }, 404);
+      }
+
+      contextDescription = `Specific Smart Thread: "${thread.name}"`;
+      const filterRules = JSON.parse(thread.filterRules || "{}");
+      
+      // Simplified message fetching for thread (scan last 500 messages to find matches)
+      const searchTerms = [
+        ...(filterRules.topics || []),
+        ...(filterRules.keywords || [])
+      ];
+
+      // Fetch a larger batch to scan
+      const { data: batch = [] } = await db
+        .from("message")
+        .select("*, user:user(*)")
+        .eq("chatId", chatId)
+        .order("createdAt", { ascending: false })
+        .limit(500);
+
+      // Decrypt first
+      const decryptedBatch = await decryptMessages(batch);
+
+      // Filter in memory (simplified logic matching threads.ts)
+      messagesToSummarize = decryptedBatch.filter((m: any) => {
+        // Basic keyword matching
+        if (searchTerms.length > 0 && m.content) {
+          const contentLower = m.content.toLowerCase();
+          return searchTerms.some((term: string) => contentLower.includes(term.toLowerCase()));
+        }
+        return false; 
+      });
+
+      // If no semantic rules, try to match the "People" filter if exists.
+      if (messagesToSummarize.length === 0) {
+         if (filterRules.people && filterRules.people.length > 0) {
+            messagesToSummarize = decryptedBatch.filter((m: any) => filterRules.people.includes(m.userId));
+         }
+      }
+
+      // Limit to requested amount
+      messagesToSummarize = messagesToSummarize.slice(0, limit);
+
+    } else {
+      // Main Chat Mode
+      contextDescription = "Main Chat (Recent Messages)";
+      
+      const { data: recentMessages = [] } = await db
+        .from("message")
+        .select("*, user:user(*)")
+        .eq("chatId", chatId)
+        .order("createdAt", { ascending: false })
+        .limit(limit);
+
+      messagesToSummarize = await decryptMessages(recentMessages);
+    }
+
+    if (messagesToSummarize.length === 0) {
+      releaseAIResponseLock(chatId);
+      return c.json({ error: "No messages found to summarize." }, 400);
+    }
+
+    // Sort chronologically for the AI
+    const chronologicalMessages = messagesToSummarize.reverse();
+
+    // Format for AI
+    const messageText = chronologicalMessages.map(msg => {
+      const user = msg.user?.name || "Unknown";
+      const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const content = msg.messageType === 'image' ? `[Image: ${msg.imageDescription || 'No description'}]` : msg.content;
+      return `[${time}] ${user}: ${content}`;
+    }).join("\n");
+
+    // Get an AI friend to "speak" as (for personality)
+    const { data: aiFriend } = await db
+      .from("ai_friend")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .single();
+    
+    const aiName = aiFriend?.name || "AI Assistant";
+    const aiPersonality = aiFriend?.personality ? `\nPersonality: ${aiFriend.personality}` : "";
+
+    const systemPrompt = `You are ${aiName}, a helpful AI assistant in a group chat.${aiPersonality}
+    
+YOUR TASK: Create a "TL;DR" (Too Long; Didn't Read) summary of the provided conversation messages.
+
+CONTEXT: ${contextDescription}
+MESSAGE COUNT: ${messagesToSummarize.length}
+
+INSTRUCTIONS:
+1.  **Summary**: Provide a concise, bulleted summary of the key points, decisions, or funny moments.
+2.  **Format**: Use clean Markdown. Use bold for emphasis.
+3.  **Tone**: Casual, helpful, and matching your personality.
+4.  **Citations**: When referring to specific important points, mention who said it (e.g., "Alice suggested...").
+5.  **Structure**:
+    *   **Headline**: A fun, 1-line title for the summary.
+    *   **Key Points**: Bullet points of what happened.
+    *   **Takeaway**: A 1-sentence conclusion or "vibe check" of the conversation.
+
+Do not be overly formal. Keep it useful for someone catching up.`;
+
+    const userPrompt = `Here are the last ${messagesToSummarize.length} messages from the ${threadId ? 'thread' : 'chat'}:
+
+${messageText}
+
+Please summarize this for me.`;
+
+    // Set typing indicator
+    if (aiFriend) {
+      setAITypingStatus(chatId, aiFriend.id, true, aiName, aiFriend.color || "#14B8A6");
+    }
+
+    // Call GPT-5.1 (using same service as chat)
+    const response = await executeGPT51Response({
+      systemPrompt,
+      userPrompt,
+      tools: [],
+      reasoningEffort: "low",
+      temperature: 0.7,
+      maxTokens: 1000,
+    });
+
+    const summaryText = response.content || "Could not generate summary.";
+
+    // DO NOT Save summary as a message - return it directly for local display
+    // This ensures it is ephemeral and only visible to the requester
+    /*
+    const { data: message, error: insertError } = await db
+      .from("message")
+      .insert({
+        content: summaryText,
+        messageType: "text",
+        userId: null, // AI message
+        chatId: chatId,
+        aiFriendId: aiFriend?.id,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("[AI TLDR] Failed to save message:", insertError);
+      throw new Error("Failed to save summary.");
+    }
+    */
+
+    // Clear typing
+    if (aiFriend) {
+      setAITypingStatus(chatId, aiFriend.id, false);
+    }
+
+    releaseAIResponseLock(chatId);
+
+    // Return content directly
+    return c.json({
+      content: summaryText,
+      chatId: chatId,
+      createdAt: new Date().toISOString(),
+    });
+
+  } catch (error) {
+    console.error("[AI TLDR] Error:", error);
+    releaseAIResponseLock(chatId);
+    return c.json({ error: "Failed to generate summary" }, 500);
   }
 });
 

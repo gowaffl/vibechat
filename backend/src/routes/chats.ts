@@ -212,6 +212,7 @@ chats.get("/", async (c) => {
         isPinned: membership.isPinned,
         pinnedAt: membership.pinnedAt ? new Date(membership.pinnedAt).toISOString() : null,
         isMuted: membership.isMuted,
+        isRestricted: chat.isRestricted,
       };
     }).filter(Boolean);
 
@@ -428,6 +429,7 @@ chats.get("/:id", async (c) => {
       avatarPromptUsed: chat.avatarPromptUsed,
       inviteToken: chat.inviteToken,
       creatorId: chat.creatorId,
+      isRestricted: chat.isRestricted,
       createdAt: new Date(chat.createdAt).toISOString(),
       updatedAt: new Date(chat.updatedAt).toISOString(),
       members: members.map((m: any) => {
@@ -451,6 +453,7 @@ chats.get("/:id", async (c) => {
         };
       }),
       isCreator: chat.creatorId === userId,
+      isRestricted: chat.isRestricted,
     });
   } catch (error) {
     console.error("[Chats] Error fetching chat:", error);
@@ -477,8 +480,35 @@ chats.patch("/:id", async (c) => {
       return c.json({ error: "Chat not found" }, 404);
     }
 
-    if (chat.creatorId !== validated.userId) {
-      return c.json({ error: "Only the creator can update chat settings" }, 403);
+    const isCreator = chat.creatorId === validated.userId;
+
+    // Check permissions based on what is being updated and chat mode
+    
+    // 1. Changing restricted mode: Only creator allowed
+    if (validated.isRestricted !== undefined) {
+      if (!isCreator) {
+        return c.json({ error: "Only the creator can change restricted mode settings" }, 403);
+      }
+    }
+
+    // 2. Updating other settings
+    if (!isCreator) {
+      // If chat is restricted, only creator can update settings
+      if (chat.isRestricted) {
+        return c.json({ error: "Only the creator can update chat settings in restricted mode" }, 403);
+      }
+
+      // If chat is unrestricted, verify user is a member
+      const { data: membership } = await db
+        .from("chat_member")
+        .select("id")
+        .eq("chatId", chatId)
+        .eq("userId", validated.userId)
+        .single();
+
+      if (!membership) {
+        return c.json({ error: "You must be a member to update chat settings" }, 403);
+      }
     }
 
     // Build update object
@@ -491,6 +521,7 @@ chats.patch("/:id", async (c) => {
     if (validated.aiName !== undefined) updateData.aiName = validated.aiName;
     if (validated.aiEngagementMode !== undefined) updateData.aiEngagementMode = validated.aiEngagementMode;
     if (validated.aiEngagementPercent !== undefined) updateData.aiEngagementPercent = validated.aiEngagementPercent;
+    if (validated.isRestricted !== undefined) updateData.isRestricted = validated.isRestricted;
 
     // Update chat
     const { data: updatedChat, error: updateError } = await db
@@ -519,6 +550,7 @@ chats.patch("/:id", async (c) => {
       avatarPromptUsed: updatedChat.avatarPromptUsed,
       inviteToken: updatedChat.inviteToken,
       creatorId: updatedChat.creatorId,
+      isRestricted: updatedChat.isRestricted,
       createdAt: new Date(updatedChat.createdAt).toISOString(),
       updatedAt: new Date(updatedChat.updatedAt).toISOString(),
     });
@@ -590,6 +622,20 @@ chats.post("/:id/invite", async (c) => {
 
     if (!inviterMembership) {
       return c.json({ error: "You must be a member to invite others" }, 403);
+    }
+
+    // Check for restricted mode: If restricted, only creator can invite
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === validated.inviterId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can invite members in restricted mode" }, 403);
+      }
     }
 
     // Check if user to invite exists
