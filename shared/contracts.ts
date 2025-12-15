@@ -302,11 +302,11 @@ export const editMessageRequestSchema = z.object({
   content: z.string(),
   userId: z.string(),
   messageType: z.enum(["text", "image", "voice", "video"]).optional(),
-  imageUrl: z.string().optional(),
-  voiceUrl: z.string().optional(),
-  voiceDuration: z.number().optional(),
+  imageUrl: z.string().nullable().optional(),
+  voiceUrl: z.string().nullable().optional(),
+  voiceDuration: z.number().nullable().optional(),
   mentionedUserIds: z.array(z.string()).optional(),
-  metadata: messageMetadataSchema.optional(),
+  metadata: messageMetadataSchema.nullable().optional(),
 });
 export type EditMessageRequest = z.infer<typeof editMessageRequestSchema>;
 export const editMessageResponseSchema = messageSchema;

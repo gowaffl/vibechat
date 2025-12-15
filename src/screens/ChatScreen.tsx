@@ -33,7 +33,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy, Paperclip } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -3098,12 +3098,19 @@ const ChatScreen = () => {
 
   // Edit message mutation
   const editMessageMutation = useMutation({
-    mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
+    mutationFn: ({ messageId, ...data }: { messageId: string; content: string; [key: string]: any }) =>
       api.patch<Message>(`/api/messages/${messageId}`, {
-        content,
+        ...data,
         userId: user?.id,
       }),
-    onSuccess: () => {
+    onSuccess: (updatedMessage) => {
+      // Optimistically update the message in the list to avoid flicker
+      if (currentThreadId) {
+        setAllThreadMessages(prev => prev.map(msg => msg.id === updatedMessage.id ? updatedMessage : msg));
+      } else {
+        setAllMessages(prev => prev.map(msg => msg.id === updatedMessage.id ? updatedMessage : msg));
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setEditingMessage(null);
@@ -8278,7 +8285,7 @@ const ChatScreen = () => {
                       onPress={() => setShowAttachmentsMenu(true)}
                       style={{ padding: 10, marginRight: 8, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12 }}
                     >
-                      <Paperclip color="white" size={20} />
+                      <Plus color="white" size={24} />
                     </TouchableOpacity>
 
                     <TextInput

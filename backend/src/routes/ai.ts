@@ -1867,7 +1867,7 @@ Please summarize this for me.`;
       systemPrompt,
       userPrompt,
       tools: [],
-      reasoningEffort: "low",
+      reasoningEffort: "none",
       temperature: 0.7,
       maxTokens: 1000,
     });
@@ -1909,10 +1909,10 @@ Please summarize this for me.`;
       createdAt: new Date().toISOString(),
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("[AI TLDR] Error:", error);
     releaseAIResponseLock(chatId);
-    return c.json({ error: "Failed to generate summary" }, 500);
+    return c.json({ error: "Failed to generate summary", details: error.message || String(error) }, 500);
   }
 });
 

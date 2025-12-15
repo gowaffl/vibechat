@@ -1247,7 +1247,7 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
         ...(imageUrl !== undefined ? { imageUrl } : {}),
         ...(voiceUrl !== undefined ? { voiceUrl } : {}),
         ...(voiceDuration !== undefined ? { voiceDuration } : {}),
-        ...(metadata ? { metadata: JSON.stringify(metadata) } : {}),
+        ...(metadata !== undefined ? { metadata: metadata ? JSON.stringify(metadata) : null } : {}),
       })
       .eq("id", messageId)
       .select("*")
