@@ -81,19 +81,24 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }
   }, [visible]);
 
+  // Worklet friendly toggle handler
+  const handleDockToggle = useCallback((shouldDock: boolean) => {
+    setIsDocked(shouldDock);
+  }, []);
+
   const onGestureEvent = useAnimatedGestureHandler({
     onStart: (_, ctx: any) => {
       ctx.startY = dockProgress.value;
     },
     onActive: (event, ctx) => {
       // Swipe down to dock: 0 -> 1
-      // If expanded (0), swiping down increases Y, so we want to increase progress
+      // If expanded (0), swiping down increases Y
       // Map translationY to progress (approx 300px swipe to fully dock)
       if (!isDocked) {
           const progress = ctx.startY + event.translationY / 300;
           dockProgress.value = Math.max(0, Math.min(1, progress));
       } else {
-          // If docked (1), swiping up decreases Y, so we want to decrease progress
+          // If docked (1), swiping up decreases Y
           const progress = ctx.startY + event.translationY / 300;
           dockProgress.value = Math.max(0, Math.min(1, progress));
       }
@@ -103,7 +108,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         // If swiped down enough or flicked down, dock it
         if (event.translationY > 100 || event.velocityY > 500) {
            dockProgress.value = withSpring(1, SPRING_CONFIG);
-           runOnJS(setIsDocked)(true);
+           runOnJS(handleDockToggle)(true);
         } else {
            dockProgress.value = withSpring(0, SPRING_CONFIG);
         }
@@ -111,13 +116,13 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         // If swiped up enough or flicked up, expand it
         if (event.translationY < -50 || event.velocityY < -500) {
            dockProgress.value = withSpring(0, SPRING_CONFIG);
-           runOnJS(setIsDocked)(false);
+           runOnJS(handleDockToggle)(false);
         } else {
            dockProgress.value = withSpring(1, SPRING_CONFIG);
         }
       }
     },
-  });
+  }, [isDocked]);
 
   const toggleDock = () => {
     const nextState = !isDocked;
