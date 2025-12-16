@@ -79,6 +79,7 @@ export const useVoiceRoom = (chatId: string) => {
 
   const joinRoom = async () => {
     if (!user) return;
+    console.log('[useVoiceRoom] Starting joinRoom...');
     setIsJoining(true);
     setError(null);
     try {
@@ -88,9 +89,18 @@ export const useVoiceRoom = (chatId: string) => {
         { chatId, userId: user.id },
         10000 // 10 second timeout
       );
+      console.log('[useVoiceRoom] API response received:', {
+        hasToken: !!response.token,
+        hasServerUrl: !!response.serverUrl,
+        tokenLength: response.token?.length,
+        serverUrl: response.serverUrl
+      });
+      
       setToken(response.token);
-      if (response.serverUrl) setServerUrl(response.serverUrl);
+      setServerUrl(response.serverUrl || '');
       setActiveRoom(response.room);
+      
+      console.log('[useVoiceRoom] State updated - Token:', !!response.token, 'ServerUrl:', !!response.serverUrl);
       return response;
     } catch (err: any) {
       console.error("[useVoiceRoom] Failed to join room:", err);
@@ -104,6 +114,7 @@ export const useVoiceRoom = (chatId: string) => {
       throw err;
     } finally {
       setIsJoining(false);
+      console.log('[useVoiceRoom] joinRoom completed, isJoining set to false');
     }
   };
 
@@ -124,6 +135,11 @@ export const useVoiceRoom = (chatId: string) => {
       console.error("[useVoiceRoom] Failed to leave room:", err);
     }
   };
+
+  // Debug: Log when token/serverUrl change
+  useEffect(() => {
+    console.log('[useVoiceRoom] Hook state changed - Token:', !!token, 'ServerUrl:', !!serverUrl, 'isJoining:', isJoining);
+  }, [token, serverUrl, isJoining]);
 
   return {
     activeRoom,

@@ -1550,24 +1550,29 @@ const ChatScreen = () => {
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [chatInputHeight, setChatInputHeight] = useState(60); // Default estimate
 
-  // Auto-open modal when active room is detected
+  // Debug: Log when voice credentials change
   useEffect(() => {
-    if (activeRoom && !voiceModalVisible) {
+    console.log('[ChatScreen] Voice credentials changed - Token:', !!voiceToken, 'ServerUrl:', !!voiceServerUrl, 'isJoining:', isJoiningVoice);
+  }, [voiceToken, voiceServerUrl, isJoiningVoice]);
+
+  // Auto-open modal when we have an active room AND credentials are ready
+  useEffect(() => {
+    if (activeRoom && voiceToken && voiceServerUrl && !voiceModalVisible) {
+      console.log('[ChatScreen] Auto-opening voice modal - credentials ready');
       setVoiceModalVisible(true);
     }
-  }, [activeRoom]);
+  }, [activeRoom, voiceToken, voiceServerUrl, voiceModalVisible]);
 
   // Handle joining voice room
   const handleJoinRoom = async () => {
-    // Show modal immediately with loading state
-    setVoiceModalVisible(true);
-    
     try {
-      // Always call joinRoom, it handles existing room
+      // Call joinRoom first to get credentials
+      console.log('[ChatScreen] handleJoinRoom - calling joinRoom()');
       await joinRoom();
+      // Don't open modal here - let the auto-open effect handle it once credentials are ready
+      console.log('[ChatScreen] handleJoinRoom - joinRoom completed');
     } catch (error) {
-      // If error, close modal and show alert
-      setVoiceModalVisible(false);
+      console.error('[ChatScreen] handleJoinRoom - error:', error);
       Alert.alert("Error", "Failed to join voice room");
     }
   };

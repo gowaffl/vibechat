@@ -101,6 +101,18 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     return true; // iOS handles permissions automatically
   };
 
+  // Log ALL prop changes
+  useEffect(() => {
+    console.log('[VoiceRoomModal] Props changed:', {
+      visible,
+      hasToken: !!token,
+      hasServerUrl: !!serverUrl,
+      isConnecting,
+      tokenPreview: token ? token.substring(0, 30) + '...' : 'none',
+      serverUrl: serverUrl || 'none'
+    });
+  }, [visible, token, serverUrl, isConnecting]);
+
   useEffect(() => {
     console.log('[VoiceRoomModal] Visibility changed:', visible, 'Token:', !!token, 'ServerUrl:', !!serverUrl);
     if (visible) {
