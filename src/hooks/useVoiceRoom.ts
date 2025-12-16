@@ -51,13 +51,11 @@ export const useVoiceRoom = (chatId: string) => {
     setLoading(true);
     setError(null);
     try {
-      // Joining a room that doesn't exist will create it if we send create=true logic or just rely on join logic
-      // But our API endpoint is /join. Let's see if it handles creation.
-      // Yes, my backend implementation of /join checks if there is an active room, if not creates one.
-      
+      // Use the correct API endpoint path: /api/voice-rooms/join
+      // The chatId is passed in the body, as defined in joinVoiceRoomRequestSchema
       const response = await api.post<JoinVoiceRoomResponse>(
-        `/api/voice-rooms/${chatId}/join`,
-        { userId: user.id, name }
+        `/api/voice-rooms/join`,
+        { chatId, userId: user.id, name }
       );
       
       setToken(response.token);
@@ -78,9 +76,10 @@ export const useVoiceRoom = (chatId: string) => {
     setIsJoining(true);
     setError(null);
     try {
+      // Use the correct API endpoint path: /api/voice-rooms/join
       const response = await api.post<JoinVoiceRoomResponse>(
-        `/api/voice-rooms/${chatId}/join`,
-        { userId: user.id }
+        `/api/voice-rooms/join`,
+        { chatId, userId: user.id }
       );
       setToken(response.token);
       if (response.serverUrl) setServerUrl(response.serverUrl);
@@ -98,7 +97,8 @@ export const useVoiceRoom = (chatId: string) => {
   const leaveRoom = async () => {
     if (!user || !activeRoom) return;
     try {
-      await api.post(`/api/voice-rooms/${chatId}/leave`, {
+      // Use the correct API endpoint path: /api/voice-rooms/leave
+      await api.post(`/api/voice-rooms/leave`, {
         userId: user.id,
         voiceRoomId: activeRoom.id,
       });

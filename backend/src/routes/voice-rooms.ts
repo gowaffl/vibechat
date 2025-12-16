@@ -169,9 +169,19 @@ app.post("/join", async (c) => {
     const roomName = activeRoom.id;
     const participantIdentity = userId;
 
+    // Fetch user details for metadata
+    const { data: user } = await db
+      .from("user")
+      .select("name, image")
+      .eq("id", userId)
+      .single();
+
     const at = new AccessToken(apiKey, apiSecret, {
       identity: participantIdentity,
-      name: userId,
+      name: user?.name || userId,
+      metadata: JSON.stringify({
+        image: user?.image || null,
+      })
     });
 
     at.addGrant({ roomJoin: true, room: roomName });

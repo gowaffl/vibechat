@@ -1,9 +1,13 @@
 //DO NOT REMOVE THIS CODE
 import "./global.css";
 import "react-native-get-random-values";
+import { registerGlobals } from "@livekit/react-native";
 import { LogBox } from "react-native";
 import { registerRootComponent } from "expo";
 import App from "./App";
+
+registerGlobals();
+
 LogBox.ignoreLogs(["Expo AV has been deprecated", "Disconnected from Metro"]);
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

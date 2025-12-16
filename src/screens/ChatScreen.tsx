@@ -159,17 +159,21 @@ const ChatHeader = ({
 
   // Handle joining voice room
   const handleJoinRoom = async () => {
+    // Show modal immediately with loading state
+    setVoiceModalVisible(true);
+    
     try {
       if (activeRoom) {
         // Room exists, join it
         await joinRoom();
       } else {
-        // Create new room (logic handled by useVoiceRoom/api)
-        // For now joinRoom handles creation too if endpoint does
+        // Create new room
         await joinRoom();
       }
-      setVoiceModalVisible(true);
+      // Modal stays open, token updates automatically via hook
     } catch (error) {
+      // If error, close modal and show alert
+      setVoiceModalVisible(false);
       Alert.alert("Error", "Failed to join voice room");
     }
   };
@@ -1548,17 +1552,21 @@ const ChatScreen = () => {
 
   // Handle joining voice room
   const handleJoinRoom = async () => {
+    // Show modal immediately with loading state
+    setVoiceModalVisible(true);
+    
     try {
       if (activeRoom) {
         // Room exists, join it
         await joinRoom();
       } else {
-        // Create new room (logic handled by useVoiceRoom/api)
-        // For now joinRoom handles creation too if endpoint does
+        // Create new room
         await joinRoom();
       }
-      setVoiceModalVisible(true);
+      // Modal stays open, token updates automatically via hook
     } catch (error) {
+      // If error, close modal and show alert
+      setVoiceModalVisible(false);
       Alert.alert("Error", "Failed to join voice room");
     }
   };
@@ -9606,7 +9614,12 @@ const ChatScreen = () => {
           token={voiceToken || ""}
           serverUrl={voiceServerUrl || ""}
           roomName={activeRoom?.name || "Voice Room"}
-          onLeave={handleLeaveRoom}
+          onLeave={() => {
+              // If user manually closes/leaves
+              handleLeaveRoom();
+              setVoiceModalVisible(false);
+          }}
+          isConnecting={isJoiningVoice}
         />
       </View>
     );
