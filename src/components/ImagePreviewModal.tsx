@@ -75,9 +75,11 @@ const useShimmerAnimation = () => {
   return { shimmerStyle, pulseStyle };
 };
 
+import { ShimmeringText } from "@/components/ShimmeringText";
+
 // Full-screen Shimmer Loading Component (for initial generation)
 const ShimmerLoader: React.FC = () => {
-  const { shimmerStyle, pulseStyle } = useShimmerAnimation();
+  const { shimmerStyle } = useShimmerAnimation();
 
   return (
     <View style={shimmerStyles.container}>
@@ -119,18 +121,23 @@ const ShimmerLoader: React.FC = () => {
         />
       </Animated.View>
       
-      {/* Centered text with pulse */}
-      <Animated.View style={[shimmerStyles.textContainer, pulseStyle]}>
-        <Text style={shimmerStyles.loadingText}>Creating your masterpiece...</Text>
+      {/* Centered text with shimmer */}
+      <View style={shimmerStyles.textContainer}>
+        <ShimmeringText 
+           text="Creating your masterpiece..."
+           style={shimmerStyles.loadingText}
+           shimmerColor="#FFFFFF"
+           duration={1200}
+        />
         <Text style={shimmerStyles.loadingSubtext}>This may take a moment</Text>
-      </Animated.View>
+      </View>
     </View>
   );
 };
 
 // Shimmer Overlay Component (for refining/editing existing image)
 const ShimmerOverlay: React.FC<{ text?: string }> = ({ text = "Refining..." }) => {
-  const { shimmerStyle, pulseStyle } = useShimmerAnimation();
+  const { shimmerStyle } = useShimmerAnimation();
 
   return (
     <View style={shimmerOverlayStyles.container}>
@@ -154,10 +161,15 @@ const ShimmerOverlay: React.FC<{ text?: string }> = ({ text = "Refining..." }) =
         />
       </Animated.View>
       
-      {/* Centered text with pulse */}
-      <Animated.View style={[shimmerOverlayStyles.textContainer, pulseStyle]}>
-        <Text style={shimmerOverlayStyles.loadingText}>{text}</Text>
-      </Animated.View>
+      {/* Centered text with shimmer */}
+      <View style={shimmerOverlayStyles.textContainer}>
+         <ShimmeringText 
+           text={text}
+           style={shimmerOverlayStyles.loadingText}
+           shimmerColor="#FFFFFF"
+           duration={1200}
+        />
+      </View>
     </View>
   );
 };

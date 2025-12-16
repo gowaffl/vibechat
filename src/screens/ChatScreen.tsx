@@ -3232,7 +3232,7 @@ const ChatScreen = () => {
         aspectRatio: data.aspectRatio || "1:1",
         referenceImageUrls: data.referenceImageUrls,
         preview: true, // Enable preview mode
-      });
+      }, 300000); // 5 minute timeout
 
       return result;
     },
@@ -3264,6 +3264,7 @@ const ChatScreen = () => {
       // Preview mode - show the preview modal
       if ('previewId' in data) {
         console.log("[ChatScreen] Image preview received:", data.previewId);
+        console.log("[ChatScreen] Image URL:", (data as any).imageUrl);
         const previewData = data as ImagePreviewResponse;
         
         // Update the preview with the generated image
@@ -3280,8 +3281,9 @@ const ChatScreen = () => {
     onError: (error: any) => {
       console.error("[ChatScreen] Image generation error:", error);
       
-      // Close the preview modal on error
+      // Close the preview modal on error immediately
       setPreviewImage(null);
+      setIsGeneratorSheetOpen(false);
       
       // Check if this is a timeout error where the image might still be generating
       const errorMessage = error?.message || String(error);

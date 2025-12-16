@@ -194,7 +194,8 @@ const api = {
       path.includes('/reactor/meme') ||
       path.includes('/reactor/caption');
     
-    const customTimeout = timeout || (isAIOperation ? 180000 : 30000); // 3 minutes for AI, 30s for others
+    // Increase timeout to 5 minutes (300000ms) for AI operations to match backend processing time
+    const customTimeout = timeout || (isAIOperation ? 300000 : 30000); 
     
     return fetchFn<T>(path, { method: "POST", body, timeout: customTimeout });
   },

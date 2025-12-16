@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { Image } from "expo-image";
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -61,31 +61,22 @@ const useShimmerAnimation = () => {
   return { shimmerStyle };
 };
 
+import { ShimmeringText } from "@/components/ShimmeringText";
+
 // Loading Text Component (ChatGPT style)
 const LoadingText = ({ text = "Generating image..." }: { text?: string }) => {
-  const { shimmerStyle } = useShimmerAnimation();
-  
   return (
     <View style={{ overflow: 'hidden', flexDirection: 'row', alignItems: 'center' }}>
-      <Text style={[styles.loadingText, { color: 'rgba(255,255,255,0.3)' }]}>{text}</Text>
-      <Animated.View 
-        style={[
-          StyleSheet.absoluteFill, 
-          shimmerStyle, 
-          { 
-            flexDirection: 'row', 
-            alignItems: 'center',
-            width: '100%' 
-          }
-        ]}
-      >
-        <LinearGradient
-          colors={['transparent', 'rgba(255,255,255,0.9)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ width: '50%', height: '100%' }}
+       <ShimmeringText 
+           text={text}
+           style={{
+             fontSize: 14,
+             fontWeight: '600',
+             color: 'rgba(255,255,255,0.3)',
+           }}
+           shimmerColor="rgba(255, 255, 255, 0.9)"
+           duration={1200}
         />
-      </Animated.View>
     </View>
   );
 };
@@ -109,7 +100,12 @@ const ShimmerImageLoader = () => {
         />
       </Animated.View>
       <View style={styles.centerContent}>
-        <LoadingText text="Creating your masterpiece..." />
+        <ShimmeringText 
+           text="Creating your masterpiece..."
+           style={styles.loadingText}
+           shimmerColor="#FFFFFF"
+           duration={1200}
+        />
       </View>
     </View>
   );
@@ -233,7 +229,8 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
             <Image
               source={{ uri: imageUrl }}
               style={styles.previewImage}
-              resizeMode="contain"
+              contentFit="contain"
+              transition={200}
             />
           ) : (
             <ShimmerImageLoader />
