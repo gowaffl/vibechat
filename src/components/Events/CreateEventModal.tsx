@@ -36,7 +36,7 @@ interface CreateEventModalProps {
     options: Array<{ optionType: "datetime" | "location" | "activity"; optionValue: string }>
   ) => void;
   isCreating?: boolean;
-  initialEvent?: Event | null;
+  initialEvent?: Partial<Event> | null;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");

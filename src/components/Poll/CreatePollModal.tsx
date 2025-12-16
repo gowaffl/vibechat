@@ -27,6 +27,7 @@ interface CreatePollModalProps {
   onClose: () => void;
   onCreate: (question: string, options: string[]) => void;
   isCreating?: boolean;
+  initialPoll?: { question: string; options: string[] } | null;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -36,6 +37,7 @@ const CreatePollModal: React.FC<CreatePollModalProps> = ({
   onClose,
   onCreate,
   isCreating = false,
+  initialPoll,
 }) => {
   const colorScheme = useColorScheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
@@ -68,9 +70,14 @@ const CreatePollModal: React.FC<CreatePollModalProps> = ({
       setShowModal(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Reset form
-      setQuestion("");
-      setOptions(["", ""]);
+      // Reset or pre-fill form
+      if (initialPoll) {
+        setQuestion(initialPoll.question);
+        setOptions(initialPoll.options.length >= 2 ? initialPoll.options : [...initialPoll.options, "", ""].slice(0, 2));
+      } else {
+        setQuestion("");
+        setOptions(["", ""]);
+      }
 
       Animated.parallel([
         Animated.spring(slideAnim, {

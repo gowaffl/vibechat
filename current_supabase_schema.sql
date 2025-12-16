@@ -1,6 +1,2 @@
 
--- ==========================================
--- CHAT PERMISSIONS (December 2025)
--- ==========================================
--- Add isRestricted column to chat table
-ALTER TABLE public.chat ADD COLUMN "isRestricted" boolean DEFAULT false;
+-- ==========================================\n-- SEMANTIC SEARCH (December 2025)\n-- ==========================================\n-- Add embedding column to message table\nALTER TABLE public.message ADD COLUMN IF NOT EXISTS "embedding" vector(1536);\n\n-- Create HNSW index for cosine similarity search\nCREATE INDEX IF NOT EXISTS message_embedding_idx ON public.message USING hnsw ("embedding" vector_cosine_ops);\n\n-- Function to match messages by embedding similarity\nCREATE OR REPLACE FUNCTION match_messages (\n  query_embedding vector(1536),\n  match_threshold float,\n  match_count int,\n  filter_user_id text DEFAULT NULL,\n  filter_chat_ids text[] DEFAULT NULL\n)\nRETURNS TABLE (\n  id text,\n  content text,\n  similarity float\n)\nLANGUAGE plpgsql\nAS $$\nBEGIN\n  RETURN QUERY\n  SELECT\n    message.id,\n    message.content,\n    1 - (message.embedding <=> query_embedding) as similarity\n  FROM message\n  WHERE 1 - (message.embedding <=> query_embedding) > match_threshold\n  AND (filter_user_id IS NULL OR message."userId" = filter_user_id)\n  AND (filter_chat_ids IS NULL OR message."chatId" = ANY(filter_chat_ids))\n  ORDER BY message.embedding <=> query_embedding\n  LIMIT match_count;\nEND;\n$$;\n

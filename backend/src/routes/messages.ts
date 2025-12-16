@@ -17,6 +17,9 @@ import {
 } from "../../../shared/contracts";
 import { db } from "../db";
 import { generateImageDescription } from "../services/image-description";
+import { generateVoiceTranscription } from "../services/voice-transcription";
+import { generateEmbedding } from "../services/embeddings";
+import { analyzeMessageForProactiveAction } from "../services/proactive-agent";
 import { extractFirstUrl } from "../utils/url-utils";
 import { fetchLinkPreview } from "../services/link-preview";
 import { tagMessage } from "../services/message-tagger";
@@ -27,9 +30,9 @@ const messages = new Hono<AppType>();
 // POST /api/messages/search - Search messages globally
 messages.post("/search", zValidator("json", searchMessagesRequestSchema), async (c) => {
   try {
-    const { userId, query: rawQuery } = c.req.valid("json");
+    const { userId, query: rawQuery, mode = "text" } = c.req.valid("json");
     
-    // Ensure query is trimmed and handle case-insensitivity expectations
+    // Ensure query is trimmed
     const query = rawQuery?.trim() || "";
 
     if (query.length === 0) {
@@ -47,18 +50,76 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
     }
 
     const chatIds = userChats.map((c) => c.chatId);
+    let matchedMessageIds: string[] = [];
 
-    // 2. Find users matching the query (to search by sender name)
-    const { data: matchedUsers } = await db
-      .from("user")
-      .select("id")
-      .ilike("name", `%${query}%`)
-      .limit(20); // Limit to avoid massive lists
+    if (mode === "semantic") {
+      console.log(`🧠 [Messages] Semantic search for: "${query}"`);
+      try {
+        const queryEmbedding = await generateEmbedding(query);
+        const { data: matches, error: matchError } = await db.rpc("match_messages", {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.3, // Lower threshold for better recall
+          match_count: 50,
+          filter_user_id: null,
+          filter_chat_ids: chatIds,
+        });
+
+        if (matchError) {
+          console.error("[Messages] Semantic match error:", matchError);
+          // Fallback to text search if semantic fails? Or just return error?
+          // Let's fallback for resilience
+        } else if (matches) {
+          matchedMessageIds = matches.map((m: any) => m.id);
+        }
+      } catch (embError) {
+        console.error("[Messages] Embedding generation error:", embError);
+      }
+    } 
     
-    const matchedUserIds = matchedUsers?.map(u => u.id) || [];
+    // If text mode OR semantic search yielded no results (fallback), run text search
+    if (mode === "text" || (mode === "semantic" && matchedMessageIds.length === 0)) {
+      // 2. Find users matching the query (to search by sender name)
+      const { data: matchedUsers } = await db
+        .from("user")
+        .select("id")
+        .ilike("name", `%${query}%`)
+        .limit(20);
+      
+      const matchedUserIds = matchedUsers?.map(u => u.id) || [];
 
-    // 3. Search messages in those chats (content match OR sender match)
-    let messageQuery = db
+      // 3. Search messages in those chats (content match OR sender match)
+      let messageQuery = db
+        .from("message")
+        .select("id")
+        .in("chatId", chatIds);
+
+      if (matchedUserIds.length > 0) {
+        const sanitizedQuery = query.replace(/,/g, " ");
+        messageQuery = messageQuery.or(`content.ilike.%${sanitizedQuery}%,userId.in.(${matchedUserIds.join(',')})`);
+      } else {
+        messageQuery = messageQuery.ilike("content", `%${query}%`);
+      }
+
+      const { data: textMatches, error: searchError } = await messageQuery
+        .order("createdAt", { ascending: false })
+        .limit(50);
+
+      if (searchError) {
+        console.error("[Messages] Text search error:", searchError);
+        return c.json({ error: "Search failed" }, 500);
+      }
+      
+      if (textMatches) {
+        matchedMessageIds = textMatches.map((m) => m.id);
+      }
+    }
+
+    if (matchedMessageIds.length === 0) {
+      return c.json([]);
+    }
+
+    // Fetch full message details for matched IDs
+    const { data: messages, error: fetchError } = await db
       .from("message")
       .select(`
         *,
@@ -78,28 +139,12 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
           mentionedUser:mentionedUserId (*)
         )
       `)
-      .in("chatId", chatIds);
-
-    // Apply filter: content matches query OR userId is in matchedUserIds
-    // We use ilike for case-insensitive search
-    if (matchedUserIds.length > 0) {
-      // Need to construct the OR filter carefully
-      // Note: .or() expects a comma-separated list of filters
-      // We sanitize the query to avoid breaking the OR syntax if it contains commas
-      // This is a limitation of the PostgREST syntax for OR filters
-      const sanitizedQuery = query.replace(/,/g, " ");
-      messageQuery = messageQuery.or(`content.ilike.%${sanitizedQuery}%,userId.in.(${matchedUserIds.join(',')})`);
-    } else {
-      messageQuery = messageQuery.ilike("content", `%${query}%`);
-    }
-
-    const { data: messages, error: searchError } = await messageQuery
-      .order("createdAt", { ascending: false })
+      .in("id", matchedMessageIds)
       .limit(50);
 
-    if (searchError) {
-      console.error("[Messages] Search error:", searchError);
-      return c.json({ error: "Search failed" }, 500);
+    if (fetchError) {
+      console.error("[Messages] Error fetching matched messages:", fetchError);
+      return c.json({ error: "Failed to fetch messages" }, 500);
     }
 
     // 3. Decrypt and Format
@@ -140,6 +185,7 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
         imageDescription: msg.imageDescription,
         voiceUrl: msg.voiceUrl,
         voiceDuration: msg.voiceDuration,
+        voiceTranscription: msg.voiceTranscription,
         eventId: msg.eventId,
         pollId: msg.pollId,
         userId: msg.userId,
@@ -505,6 +551,7 @@ messages.post("/batch", async (c) => {
         imageDescription: msg.imageDescription,
         voiceUrl: msg.voiceUrl,
         voiceDuration: msg.voiceDuration,
+        voiceTranscription: msg.voiceTranscription,
         eventId: msg.eventId,
         pollId: msg.pollId,
         userId: msg.userId,
@@ -677,6 +724,7 @@ messages.get("/:id", async (c) => {
       imageDescription: decryptedMsg.imageDescription,
       voiceUrl: decryptedMsg.voiceUrl,
       voiceDuration: decryptedMsg.voiceDuration,
+      voiceTranscription: decryptedMsg.voiceTranscription,
       eventId: decryptedMsg.eventId,
       pollId: decryptedMsg.pollId,
       userId: decryptedMsg.userId,
@@ -935,6 +983,30 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
     tagMessage(decryptedMessage.id, decryptedMessage.content).catch(error => {
       console.error(`[Messages] Failed to tag message ${message.id}:`, error);
     });
+
+    // Generate embedding for semantic search (fire-and-forget)
+    if (messageType === "text") {
+      Promise.resolve().then(async () => {
+        try {
+          console.log(`🧠 [Messages] Generating embedding for message ${message.id}`);
+          const embedding = await generateEmbedding(decryptedMessage.content);
+          
+          await db
+            .from("message")
+            .update({ embedding })
+            .eq("id", message.id);
+            
+          console.log(`✅ [Messages] Embedding saved for message ${message.id}`);
+        } catch (error) {
+          console.error(`❌ [Messages] Failed to generate embedding for message ${message.id}:`, error);
+        }
+      });
+
+      // Trigger Proactive AI analysis (fire-and-forget)
+      Promise.resolve().then(() => 
+        analyzeMessageForProactiveAction(message.id, decryptedMessage.content, message.chatId)
+      );
+    }
   }
 
   // If this is an image message, trigger async description generation
@@ -961,6 +1033,29 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
         console.log(`✅ [Messages] Description saved for message ${message.id}`);
       } catch (error) {
         console.error(`❌ [Messages] Failed to generate description for message ${message.id}:`, error);
+      }
+    });
+  }
+
+  // If this is a voice message, trigger async transcription
+  if ((messageType === "audio" || messageType === "voice" || voiceUrl) && voiceUrl) {
+    console.log(`🎙️ [Messages] Voice message created (${message.id}), triggering transcription`);
+
+    // Fire-and-forget: Generate transcription in background
+    Promise.resolve().then(async () => {
+      try {
+        console.log(`🔄 [Messages] Starting background transcription for message ${message.id}`);
+        const transcription = await generateVoiceTranscription(voiceUrl);
+
+        // Update the message with the transcription
+        await db
+          .from("message")
+          .update({ voiceTranscription: transcription })
+          .eq("id", message.id);
+
+        console.log(`✅ [Messages] Transcription saved for message ${message.id}`);
+      } catch (error) {
+        console.error(`❌ [Messages] Failed to generate transcription for message ${message.id}:`, error);
       }
     });
   }
@@ -1009,6 +1104,9 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
     messageType: message.messageType,
     imageUrl: message.imageUrl,
     imageDescription: message.imageDescription,
+    voiceUrl: message.voiceUrl,
+    voiceDuration: message.voiceDuration,
+    voiceTranscription: message.voiceTranscription,
     userId: message.userId,
     chatId: message.chatId,
     replyToId: message.replyToId,
@@ -1034,6 +1132,9 @@ messages.post("/", zValidator("json", sendMessageRequestSchema), async (c) => {
           messageType: replyTo.messageType,
           imageUrl: replyTo.imageUrl,
           imageDescription: replyTo.imageDescription,
+          voiceUrl: replyTo.voiceUrl,
+          voiceDuration: replyTo.voiceDuration,
+          voiceTranscription: replyTo.voiceTranscription,
           userId: replyTo.userId,
           chatId: replyTo.chatId,
           replyToId: replyTo.replyToId,
@@ -1342,6 +1443,9 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
         messageType: updatedMessage.messageType,
         imageUrl: updatedMessage.imageUrl,
         imageDescription: updatedMessage.imageDescription,
+        voiceUrl: updatedMessage.voiceUrl,
+        voiceDuration: updatedMessage.voiceDuration,
+        voiceTranscription: updatedMessage.voiceTranscription,
         userId: updatedMessage.userId,
         chatId: updatedMessage.chatId,
         replyToId: updatedMessage.replyToId,
@@ -1365,6 +1469,9 @@ messages.patch("/:id", zValidator("json", editMessageRequestSchema), async (c) =
           messageType: replyTo.messageType,
           imageUrl: replyTo.imageUrl,
           imageDescription: replyTo.imageDescription,
+          voiceUrl: replyTo.voiceUrl,
+          voiceDuration: replyTo.voiceDuration,
+          voiceTranscription: replyTo.voiceTranscription,
           userId: replyTo.userId,
           chatId: replyTo.chatId,
           replyToId: replyTo.replyToId,

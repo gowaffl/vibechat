@@ -67,6 +67,7 @@ import eventsRouter from "./routes/events";
 import reactorRouter from "./routes/reactor";
 import catchupRouter from "./routes/catchup";
 import pollsRouter from "./routes/polls";
+import voiceRoomsRouter from "./routes/voice-rooms";
 // import notificationsRouter from "./routes/notifications"; // Moved to chats router
 import authRouter from "./routes/auth";
 import { startAvatarCron } from "./services/avatar-cron";
@@ -144,6 +145,9 @@ app.route("/api/catchup", catchupRouter);
 
 console.log("📊 Mounting polls routes at /api/polls");
 app.route("/api/polls", pollsRouter);
+
+console.log("🎙️ Mounting voice rooms routes at /api/voice-rooms");
+app.route("/api/voice-rooms", voiceRoomsRouter);
 
 // console.log("🔔 Mounting notifications routes at /api");
 // app.route("/api", notificationsRouter); // Moved to chats router

@@ -149,6 +149,7 @@ export const messageSchema: z.ZodType<{
   editHistory?: string | null;
   voiceUrl?: string | null;
   voiceDuration?: number | null;
+  voiceTranscription?: string | null;
   eventId?: string | null;
   pollId?: string | null;
     vibeType?: "genuine" | "playful" | "serious" | "soft" | "hype" | "sarcastic" | "confused" | null;
@@ -177,6 +178,7 @@ export const messageSchema: z.ZodType<{
     editHistory: z.string().nullable().optional(),
     voiceUrl: z.string().nullable().optional(),
     voiceDuration: z.number().nullable().optional(),
+    voiceTranscription: z.string().nullable().optional(),
     eventId: z.string().nullable().optional(),
     pollId: z.string().nullable().optional(),
     vibeType: vibeTypeSchema.nullable().optional(),
@@ -281,6 +283,7 @@ export type DeleteMessageResponse = z.infer<typeof deleteMessageResponseSchema>;
 export const searchMessagesRequestSchema = z.object({
   userId: z.string(),
   query: z.string(),
+  mode: z.enum(["text", "semantic"]).default("text").optional(),
 });
 export type SearchMessagesRequest = z.infer<typeof searchMessagesRequestSchema>;
 
@@ -1392,3 +1395,74 @@ export const closePollRequestSchema = z.object({
 export type ClosePollRequest = z.infer<typeof closePollRequestSchema>;
 export const closePollResponseSchema = pollSchema;
 export type ClosePollResponse = z.infer<typeof closePollResponseSchema>;
+
+// ============================================================================
+// VOICE ROOM SCHEMAS
+// ============================================================================
+
+// Voice Room schema
+export const voiceRoomSchema = z.object({
+  id: z.string(),
+  chatId: z.string(),
+  name: z.string().nullable(),
+  createdBy: z.string(),
+  isActive: z.boolean(),
+  startedAt: z.string().nullable(),
+  endedAt: z.string().nullable(),
+  liveKitRoomId: z.string().nullable(),
+  recordingUrl: z.string().nullable(),
+  transcription: z.string().nullable(),
+  summary: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type VoiceRoom = z.infer<typeof voiceRoomSchema>;
+
+// Voice Participant schema
+export const voiceParticipantSchema = z.object({
+  id: z.string(),
+  voiceRoomId: z.string(),
+  userId: z.string(),
+  joinedAt: z.string(),
+  leftAt: z.string().nullable(),
+  role: z.enum(["speaker", "listener", "moderator"]).nullable().default("speaker"),
+  isMuted: z.boolean().nullable().default(false),
+  user: userSchema.optional(),
+});
+export type VoiceParticipant = z.infer<typeof voiceParticipantSchema>;
+
+// GET /api/voice-rooms/:chatId
+export const getActiveVoiceRoomRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetActiveVoiceRoomRequest = z.infer<typeof getActiveVoiceRoomRequestSchema>;
+export const getActiveVoiceRoomResponseSchema = voiceRoomSchema.extend({
+    participants: z.array(voiceParticipantSchema),
+}).nullable();
+export type GetActiveVoiceRoomResponse = z.infer<typeof getActiveVoiceRoomResponseSchema>;
+
+// POST /api/voice-rooms/join
+export const joinVoiceRoomRequestSchema = z.object({
+    chatId: z.string(),
+    userId: z.string(),
+    name: z.string().optional(), // Room name if creating
+});
+export type JoinVoiceRoomRequest = z.infer<typeof joinVoiceRoomRequestSchema>;
+export const joinVoiceRoomResponseSchema = z.object({
+  room: voiceRoomSchema,
+  token: z.string(), // LiveKit token
+  participantId: z.string(),
+  serverUrl: z.string().optional(),
+});
+export type JoinVoiceRoomResponse = z.infer<typeof joinVoiceRoomResponseSchema>;
+
+// POST /api/voice-rooms/leave
+export const leaveVoiceRoomRequestSchema = z.object({
+    voiceRoomId: z.string(),
+    userId: z.string(),
+});
+export type LeaveVoiceRoomRequest = z.infer<typeof leaveVoiceRoomRequestSchema>;
+export const leaveVoiceRoomResponseSchema = z.object({
+    success: z.boolean(),
+});
+export type LeaveVoiceRoomResponse = z.infer<typeof leaveVoiceRoomResponseSchema>;

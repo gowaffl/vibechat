@@ -1,24 +1,28 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, TouchableOpacity } from "react-native";
 import { Audio } from "expo-av";
-import { Play, Pause } from "lucide-react-native";
+import { Play, Pause, ChevronDown, ChevronUp } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import clsx from "clsx";
 
 interface VoicePlayerProps {
   voiceUrl: string;
   duration?: number;
   isCurrentUser?: boolean;
+  transcription?: string | null;
 }
 
 export const VoicePlayer: React.FC<VoicePlayerProps> = ({ 
   voiceUrl, 
   duration = 0,
-  isCurrentUser = false 
+  isCurrentUser = false,
+  transcription
 }) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [totalDuration, setTotalDuration] = useState(duration);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   useEffect(() => {
     return sound
@@ -77,40 +81,73 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
   const progress = totalDuration > 0 ? (position / totalDuration) * 100 : 0;
 
   return (
-    <View style={[
-      styles.container,
-      isCurrentUser && styles.currentUserContainer
-    ]}>
-      <Pressable onPress={playSound} style={styles.playButton}>
-        {isPlaying ? (
-          <Pause size={20} color={isCurrentUser ? "#007AFF" : "#FFFFFF"} fill={isCurrentUser ? "#007AFF" : "#FFFFFF"} />
-        ) : (
-          <Play size={20} color={isCurrentUser ? "#007AFF" : "#FFFFFF"} fill={isCurrentUser ? "#007AFF" : "#FFFFFF"} />
-        )}
-      </Pressable>
+    <View style={{ gap: 8 }}>
+      <View style={[
+        styles.container,
+        isCurrentUser && styles.currentUserContainer
+      ]}>
+        <Pressable onPress={playSound} style={styles.playButton}>
+          {isPlaying ? (
+            <Pause size={20} color={isCurrentUser ? "#007AFF" : "#FFFFFF"} fill={isCurrentUser ? "#007AFF" : "#FFFFFF"} />
+          ) : (
+            <Play size={20} color={isCurrentUser ? "#007AFF" : "#FFFFFF"} fill={isCurrentUser ? "#007AFF" : "#FFFFFF"} />
+          )}
+        </Pressable>
 
-      <View style={styles.waveformContainer}>
-        {/* Simple waveform visualization */}
-        <View style={styles.waveform}>
-          {[...Array(20)].map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.waveformBar,
-                {
-                  height: 8 + Math.random() * 16,
-                  backgroundColor: i < (progress / 5) 
-                    ? (isCurrentUser ? "#007AFF" : "#FFFFFF")
-                    : (isCurrentUser ? "rgba(0, 122, 255, 0.3)" : "rgba(255, 255, 255, 0.3)"),
-                },
-              ]}
-            />
-          ))}
+        <View style={styles.waveformContainer}>
+          {/* Simple waveform visualization */}
+          <View style={styles.waveform}>
+            {[...Array(20)].map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.waveformBar,
+                  {
+                    height: 8 + Math.random() * 16,
+                    backgroundColor: i < (progress / 5) 
+                      ? (isCurrentUser ? "#007AFF" : "#FFFFFF")
+                      : (isCurrentUser ? "rgba(0, 122, 255, 0.3)" : "rgba(255, 255, 255, 0.3)"),
+                  },
+                ]}
+              />
+            ))}
+          </View>
+          <Text style={[styles.durationText, isCurrentUser && styles.currentUserText]}>
+            {formatTime(isPlaying ? position : totalDuration)}
+          </Text>
         </View>
-        <Text style={[styles.durationText, isCurrentUser && styles.currentUserText]}>
-          {formatTime(isPlaying ? position : totalDuration)}
-        </Text>
       </View>
+
+      {/* Transcription Section */}
+      {transcription && (
+        <View className="px-1">
+          <TouchableOpacity 
+            onPress={() => setShowTranscript(!showTranscript)}
+            className="flex-row items-center gap-1 mb-1"
+          >
+            <Text className={clsx(
+              "text-xs font-medium",
+              isCurrentUser ? "text-blue-200" : "text-gray-400"
+            )}>
+              Transcript
+            </Text>
+            {showTranscript ? (
+              <ChevronUp size={12} color={isCurrentUser ? "#BFDBFE" : "#9CA3AF"} />
+            ) : (
+              <ChevronDown size={12} color={isCurrentUser ? "#BFDBFE" : "#9CA3AF"} />
+            )}
+          </TouchableOpacity>
+          
+          {showTranscript && (
+            <Text className={clsx(
+              "text-sm",
+              isCurrentUser ? "text-blue-100" : "text-gray-300"
+            )}>
+              {transcription}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 };
@@ -157,4 +194,3 @@ const styles = StyleSheet.create({
     color: "#007AFF",
   },
 });
-

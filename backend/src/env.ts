@@ -37,6 +37,11 @@ const envSchema = z.object({
 
   // NANO-BANANA Configuration
   NANO_BANANA_API_KEY: z.string().optional(),
+
+  // LiveKit Configuration
+  LIVEKIT_API_KEY: z.string().optional().default("devkey"),
+  LIVEKIT_API_SECRET: z.string().optional().default("secret"),
+  LIVEKIT_URL: z.string().optional().default("ws://localhost:7880"),
 });
 
 /**

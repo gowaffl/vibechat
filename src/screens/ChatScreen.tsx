@@ -71,6 +71,7 @@ import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, 
 import { CatchUpModal, CatchUpButton } from "@/components/CatchUp";
 import { EventsList, CreateEventModal, EventNotificationCard } from "@/components/Events";
 import { CreatePollModal, PollCard } from "@/components/Poll";
+import { SuggestionCard } from "@/components/SuggestionCard";
 import { ReactorMenu } from "@/components/Reactor";
 import { ThreadsPanel, CreateThreadModal, DraggableThreadList } from "@/components/Threads";
 import { CreateCustomCommandModal } from "@/components/CustomCommands";
@@ -95,6 +96,9 @@ import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ShimmeringText } from "@/components/ShimmeringText";
 import { format, isSameDay, isToday, isYesterday } from "date-fns";
+import { ActiveRoomIndicator } from "@/components/VoiceRoom/ActiveRoomIndicator";
+import { VoiceRoomModal } from "@/components/VoiceRoom/VoiceRoomModal";
+import { useVoiceRoom } from "@/hooks/useVoiceRoom";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
@@ -140,6 +144,45 @@ const ChatHeader = ({
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
+  const { 
+    activeRoom, 
+    participants, 
+    token: voiceToken, 
+    serverUrl: voiceServerUrl,
+    joinRoom, 
+    leaveRoom, 
+    isJoining: isJoiningVoice 
+  } = useVoiceRoom(route.params.chatId);
+  
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+
+  // Handle joining voice room
+  const handleJoinRoom = async () => {
+    try {
+      if (activeRoom) {
+        // Room exists, join it
+        await joinRoom();
+      } else {
+        // Create new room (logic handled by useVoiceRoom/api)
+        // For now joinRoom handles creation too if endpoint does
+        await joinRoom();
+      }
+      setVoiceModalVisible(true);
+    } catch (error) {
+      Alert.alert("Error", "Failed to join voice room");
+    }
+  };
+
+  // Handle leaving voice room
+  const handleLeaveRoom = async () => {
+    try {
+      await leaveRoom();
+      setVoiceModalVisible(false);
+    } catch (error) {
+      console.error("Failed to leave room", error);
+    }
+  };
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
 
   const groupImageUrl = chatImage
@@ -346,6 +389,39 @@ const ChatHeader = ({
                 end={{ x: 1, y: 1 }}
                 style={{ padding: 8 }}
               >
+                {/* Voice Room Option */}
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowOptionsMenu(false);
+                    handleJoinRoom();
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    padding: 12,
+                    borderRadius: 12,
+                    marginBottom: 4,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 12,
+                    }}
+                  >
+                    <Mic size={18} color="#FFFFFF" />
+                  </View>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
+                    Voice Room
+                  </Text>
+                </Pressable>
+
                 {/* Smart Threads Option */}
                 <Pressable
                   onPress={() => {
@@ -1457,6 +1533,46 @@ const ChatScreen = () => {
   const queryClient = useQueryClient();
   const colorScheme = useColorScheme();
 
+  // Voice Room Hook
+  const { 
+    activeRoom, 
+    participants, 
+    token: voiceToken, 
+    serverUrl: voiceServerUrl,
+    joinRoom, 
+    leaveRoom, 
+    isJoining: isJoiningVoice 
+  } = useVoiceRoom(route.params?.chatId || "default-chat");
+  
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+
+  // Handle joining voice room
+  const handleJoinRoom = async () => {
+    try {
+      if (activeRoom) {
+        // Room exists, join it
+        await joinRoom();
+      } else {
+        // Create new room (logic handled by useVoiceRoom/api)
+        // For now joinRoom handles creation too if endpoint does
+        await joinRoom();
+      }
+      setVoiceModalVisible(true);
+    } catch (error) {
+      Alert.alert("Error", "Failed to join voice room");
+    }
+  };
+
+  // Handle leaving voice room
+  const handleLeaveRoom = async () => {
+    try {
+      await leaveRoom();
+      setVoiceModalVisible(false);
+    } catch (error) {
+      console.error("Failed to leave room", error);
+    }
+  };
+
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
   const chatId = route.params?.chatId || "default-chat";
   const chatName = route.params?.chatName || "VibeChat";
@@ -1559,6 +1675,8 @@ const ChatScreen = () => {
   const [showEventsTab, setShowEventsTab] = useState(false);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showCreatePoll, setShowCreatePoll] = useState(false);
+  const [suggestionPollData, setSuggestionPollData] = useState<{question: string, options: string[]} | null>(null);
+  const [suggestionEventData, setSuggestionEventData] = useState<any | null>(null);
   const [showReactorMenu, setShowReactorMenu] = useState(false);
   const [reactorMessageId, setReactorMessageId] = useState<string | null>(null);
   const [showThreadsPanel, setShowThreadsPanel] = useState(false);
@@ -6284,6 +6402,7 @@ const ChatScreen = () => {
                 voiceUrl={getFullImageUrl(message.voiceUrl)}
                 duration={message.voiceDuration || 0}
                 isCurrentUser={isCurrentUser}
+                transcription={message.voiceTranscription}
               />
             </View>
           ) : /* Video Message */ isVideo && (metadata?.videoUrl || localUri) ? (
@@ -6687,6 +6806,28 @@ const ChatScreen = () => {
                   />
                 </View>
               )}
+              
+              {/* Proactive AI Suggestion Card */}
+              {(message.metadata as any)?.suggestion && (
+                <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+                  <SuggestionCard
+                    type={(message.metadata as any).suggestion.type}
+                    data={(message.metadata as any).suggestion.data}
+                    onAccept={() => {
+                      if ((message.metadata as any).suggestion.type === "poll") {
+                        setSuggestionPollData((message.metadata as any).suggestion.data);
+                        setShowCreatePoll(true);
+                      } else {
+                        setSuggestionEventData((message.metadata as any).suggestion.data);
+                        setShowCreateEvent(true);
+                      }
+                    }}
+                    onReject={() => {
+                      // Optional: Hide suggestion
+                    }}
+                  />
+                </View>
+              )}
             </>
           )}
             </LinearGradient>
@@ -7048,12 +7189,31 @@ const ChatScreen = () => {
         onInvitePress={handleShareInvite}
       />
 
+      {/* Voice Room Indicator */}
+      {activeRoom && (
+        <View 
+          style={{ 
+            position: "absolute", 
+            top: insets.top + 75, 
+            left: 0, 
+            right: 0, 
+            zIndex: 98 
+          }}
+          pointerEvents="box-none"
+        >
+          <ActiveRoomIndicator 
+            chatId={chatId} 
+            onJoinPress={handleJoinRoom} 
+          />
+        </View>
+      )}
+
       {/* Smart Threads Tabs - Always show to display Main Chat pill and + button */}
       {threads && (
         <View
           style={{
             position: "absolute",
-            top: insets.top + 85, // Reduced from 95
+            top: insets.top + 85 + (activeRoom ? 60 : 0), // Push threads down if room active
             left: 0,
             right: 0,
             zIndex: 99,
@@ -9095,8 +9255,9 @@ const ChatScreen = () => {
             onClose={() => {
               setShowCreateEvent(false);
               setEditingEvent(null);
+              setSuggestionEventData(null);
             }}
-            initialEvent={editingEvent}
+            initialEvent={editingEvent || suggestionEventData}
             onCreate={(title, description, type, eventDate, timezone, options) => {
               if (editingEvent) {
                 // Update existing event
@@ -9155,7 +9316,10 @@ const ChatScreen = () => {
         {showCreatePoll && (
           <CreatePollModal
             visible={showCreatePoll}
-            onClose={() => setShowCreatePoll(false)}
+            onClose={() => {
+              setShowCreatePoll(false);
+              setSuggestionPollData(null);
+            }}
             onCreate={(question, options) => {
               createPoll(
                 {
@@ -9176,6 +9340,7 @@ const ChatScreen = () => {
               );
             }}
             isCreating={isCreatingPoll}
+            initialPoll={suggestionPollData}
           />
         )}
 
@@ -9435,6 +9600,14 @@ const ChatScreen = () => {
                 }
               }}
             />
+            
+        <VoiceRoomModal
+          visible={voiceModalVisible}
+          token={voiceToken || ""}
+          serverUrl={voiceServerUrl || ""}
+          roomName={activeRoom?.name || "Voice Room"}
+          onLeave={handleLeaveRoom}
+        />
       </View>
     );
 };
