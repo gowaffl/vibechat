@@ -1857,10 +1857,12 @@ ${messageText}
 
 Please summarize this for me.`;
 
-    // Set typing indicator
+    // Set typing indicator - DISABLED for TLDR to allow custom loading UI on frontend
+    /*
     if (aiFriend) {
       setAITypingStatus(chatId, aiFriend.id, true, aiName, aiFriend.color || "#14B8A6");
     }
+    */
 
     // Call GPT-5.1 (using same service as chat)
     const response = await executeGPT51Response({
@@ -1895,10 +1897,12 @@ Please summarize this for me.`;
     }
     */
 
-    // Clear typing
+    // Clear typing - DISABLED for TLDR
+    /*
     if (aiFriend) {
       setAITypingStatus(chatId, aiFriend.id, false);
     }
+    */
 
     releaseAIResponseLock(chatId);
 

@@ -93,6 +93,7 @@ import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+import { ShimmeringText } from "@/components/ShimmeringText";
 import { format, isSameDay, isToday, isYesterday } from "date-fns";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
@@ -4081,10 +4082,43 @@ const ChatScreen = () => {
 
       setMessageText(""); // Clear input immediately
       clearDraftMessage(); // Clear draft immediately
-      setIsAITyping(true); // Show AI typing indicator
+      setIsAITyping(false); // Don't use generic typing, use custom bubble
+      
+      const tldrLoadingId = `tldr-loading-${Date.now()}`;
+      
+      // Create temporary loading message
+      const loadingMessage: Message = {
+          id: tldrLoadingId,
+          chatId: chatId,
+          userId: "system", 
+          content: "",
+          messageType: "system",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          user: {
+            id: "system",
+            name: "TL;DR",
+            phone: "",
+            hasCompletedOnboarding: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            bio: null,
+            image: null
+          },
+          metadata: { isTldr: true, isLoading: true } as any, 
+          reactions: [],
+          isUnsent: false,
+      };
 
       // Determine thread context
       const threadId = currentThreadId; // Already in scope
+
+      // Inject loading message
+      if (threadId) {
+        setAllThreadMessages(prev => [loadingMessage, ...prev]);
+      } else {
+        setAllMessages(prev => [loadingMessage, ...prev]);
+      }
 
       try {
         const response = await api.post("/api/ai/tldr", {
@@ -4094,7 +4128,7 @@ const ChatScreen = () => {
           limit,
         });
         
-        // Create local ephemeral message for the user
+        // Create final local ephemeral message
         const tldrMessage: Message = {
           id: `tldr-${Date.now()}`,
           chatId: chatId,
@@ -4116,20 +4150,24 @@ const ChatScreen = () => {
           metadata: { isTldr: true } as any, // Cast to match type if strict
           reactions: [],
           isUnsent: false,
-        };
+      };
 
-        // Inject into local state
-        setIsAITyping(false);
+        // Replace loading message with real message
         if (threadId) {
-          setAllThreadMessages(prev => [tldrMessage, ...prev]);
+          setAllThreadMessages(prev => [tldrMessage, ...prev.filter(m => m.id !== tldrLoadingId)]);
         } else {
-          setAllMessages(prev => [tldrMessage, ...prev]);
+          setAllMessages(prev => [tldrMessage, ...prev.filter(m => m.id !== tldrLoadingId)]);
         }
 
       } catch (error) {
         console.error("Failed to generate TLDR:", error);
         Alert.alert("Error", "Failed to generate summary. Please try again.");
-        setIsAITyping(false);
+        // Remove loading message
+        if (threadId) {
+          setAllThreadMessages(prev => prev.filter(m => m.id !== tldrLoadingId));
+        } else {
+          setAllMessages(prev => prev.filter(m => m.id !== tldrLoadingId));
+        }
       }
       return;
     }
@@ -5891,6 +5929,9 @@ const ChatScreen = () => {
     if (isSystem) {
       // Check for TLDR message
       if ((message.metadata as any)?.isTldr) {
+        // If it's a loading state (content is empty or specific loading marker)
+        const isLoading = (message.metadata as any)?.isLoading;
+        
         return (
           <View style={{ marginVertical: 8, paddingHorizontal: 16 }}>
             <View style={{
@@ -5915,11 +5956,27 @@ const ChatScreen = () => {
                   TL;DR Summary
                 </Text>
               </View>
-              <MessageText 
-                message={message} 
-                isCurrentUser={false} 
-                textColor={Platform.OS === 'ios' ? '#000000' : '#E0E0E0'} 
-              />
+              {isLoading ? (
+                 <View style={{ paddingVertical: 12 }}>
+                    <ShimmeringText 
+                      text="Reading conversation..." 
+                      style={{ 
+                        color: '#B0B0B0', // Slightly darker base for better contrast
+                        fontSize: 14, 
+                        fontStyle: "italic",
+                        fontWeight: "500"
+                      }}
+                      shimmerColor="#FFFFFF" // Pure white shimmer
+                      duration={1200} // Faster
+                    />
+                 </View>
+              ) : (
+                <MessageText 
+                  content={message.content} 
+                  style={{ color: '#E0E0E0' }}
+                  isOwnMessage={false}
+                />
+              )}
             </View>
           </View>
         );
