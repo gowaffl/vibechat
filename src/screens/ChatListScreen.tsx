@@ -290,7 +290,7 @@ const ChatListScreen = () => {
   const { user } = useUser();
   const queryClient = useQueryClient();
 
-  const { searchQuery } = useSearchStore();
+  const { searchQuery, searchMode } = useSearchStore();
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -308,8 +308,12 @@ const ChatListScreen = () => {
 
   // Search messages query
   const { data: searchResults = [], isLoading: isSearching } = useQuery<SearchMessagesResponse>({
-    queryKey: ["search-messages", debouncedSearchQuery],
-    queryFn: () => api.post("/api/messages/search", { userId: user!.id, query: debouncedSearchQuery }),
+    queryKey: ["search-messages", debouncedSearchQuery, searchMode],
+    queryFn: () => api.post("/api/messages/search", { 
+      userId: user!.id, 
+      query: debouncedSearchQuery,
+      mode: searchMode 
+    }),
     enabled: !!user?.id && debouncedSearchQuery.trim().length > 0,
   });
 
@@ -967,6 +971,14 @@ const ChatListScreen = () => {
             <Text style={{ fontSize: 16, fontWeight: "500", color: "rgba(255, 255, 255, 0.5)", textAlign: "center" }}>
               No messages found for "{searchQuery}"
             </Text>
+            {searchMode === "semantic" && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: "rgba(79, 195, 247, 0.1)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                  <Search size={14} color="#4FC3F7" style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 13, color: "#4FC3F7" }}>
+                    Try simpler keywords or switch to text mode
+                  </Text>
+                </View>
+             )}
           </View>
         ) : (
           <FlashList
