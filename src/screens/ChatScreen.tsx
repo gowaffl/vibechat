@@ -1536,7 +1536,6 @@ const ChatScreen = () => {
   const queryClient = useQueryClient();
   const colorScheme = useColorScheme();
 
-  // Voice Room Hook
   const { 
     activeRoom, 
     participants, 
@@ -1550,15 +1549,36 @@ const ChatScreen = () => {
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [chatInputHeight, setChatInputHeight] = useState(60); // Default estimate
 
+  // Debug: Log ALL voice room values on EVERY render
+  console.log('[ChatScreen] RENDER - Voice Room State:', {
+    chatId: route.params?.chatId,
+    hasActiveRoom: !!activeRoom,
+    hasVoiceToken: !!voiceToken,
+    hasVoiceServerUrl: !!voiceServerUrl,
+    voiceModalVisible,
+    isJoiningVoice,
+    tokenPreview: voiceToken ? voiceToken.substring(0, 20) : 'none',
+    serverUrl: voiceServerUrl || 'none'
+  });
+
   // Debug: Log when voice credentials change
   useEffect(() => {
-    console.log('[ChatScreen] Voice credentials changed - Token:', !!voiceToken, 'ServerUrl:', !!voiceServerUrl, 'isJoining:', isJoiningVoice);
+    console.log('[ChatScreen] Effect: Voice credentials changed - Token:', !!voiceToken, 'ServerUrl:', !!voiceServerUrl, 'isJoining:', isJoiningVoice);
   }, [voiceToken, voiceServerUrl, isJoiningVoice]);
+
+  // Debug: Log when activeRoom changes
+  useEffect(() => {
+    console.log('[ChatScreen] Effect: Active room changed:', {
+      hasActiveRoom: !!activeRoom,
+      roomId: activeRoom?.id
+    });
+  }, [activeRoom]);
 
   // Auto-open modal when we have an active room AND credentials are ready
   useEffect(() => {
+    console.log('[ChatScreen] Effect: Auto-open check - activeRoom:', !!activeRoom, 'token:', !!voiceToken, 'serverUrl:', !!voiceServerUrl, 'modalVisible:', voiceModalVisible);
     if (activeRoom && voiceToken && voiceServerUrl && !voiceModalVisible) {
-      console.log('[ChatScreen] Auto-opening voice modal - credentials ready');
+      console.log('[ChatScreen] ✅ Auto-opening voice modal - credentials ready!');
       setVoiceModalVisible(true);
     }
   }, [activeRoom, voiceToken, voiceServerUrl, voiceModalVisible]);
@@ -7203,14 +7223,12 @@ const ChatScreen = () => {
         onInvitePress={handleShareInvite}
       />
 
-      {/* Voice Room Indicator */}
-
       {/* Smart Threads Tabs - Always show to display Main Chat pill and + button */}
       {threads && (
         <View
           style={{
             position: "absolute",
-            top: insets.top + 85 + (activeRoom ? 60 : 0), // Push threads down if room active
+            top: insets.top + 85,
             left: 0,
             right: 0,
             zIndex: 99,

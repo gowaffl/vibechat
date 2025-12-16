@@ -10,13 +10,22 @@ import { useFocusEffect } from "@react-navigation/native";
 
 export const useVoiceRoom = (chatId: string) => {
   const { user } = useUser();
-  const [activeRoom, setActiveRoom] = useState<VoiceRoom | null>(null);
+  const [roomState, setRoomState] = useState<{
+    token: string | null;
+    serverUrl: string | null;
+    activeRoom: VoiceRoom | null;
+  }>({
+    token: null,
+    serverUrl: null,
+    activeRoom: null,
+  });
+  
   const [participants, setParticipants] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
+
+  const { token, serverUrl, activeRoom } = roomState;
 
   const fetchActiveRoom = useCallback(async () => {
     if (!user) return;
@@ -25,24 +34,25 @@ export const useVoiceRoom = (chatId: string) => {
         `/api/voice-rooms/${chatId}/active?userId=${user.id}`
       );
       if (response) {
-        setActiveRoom(response);
+        setRoomState(prev => ({ ...prev, activeRoom: response }));
         setParticipants(response.participants.length);
       } else {
-        setActiveRoom(null);
+        setRoomState(prev => ({ ...prev, activeRoom: null }));
         setParticipants(0);
       }
     } catch (err) {
       console.error("[useVoiceRoom] Failed to fetch active room:", err);
-      // Don't set global error for this as it might just be no room
     }
   }, [chatId, user]);
 
   // Poll for active room status every 30 seconds or on focus
   useFocusEffect(
     useCallback(() => {
+      console.log('[useVoiceRoom] Focus effect triggering fetchActiveRoom');
       fetchActiveRoom();
-      const interval = setInterval(fetchActiveRoom, 30000);
-      return () => clearInterval(interval);
+      // Disable polling for now to debug state issues
+      // const interval = setInterval(fetchActiveRoom, 30000);
+      // return () => clearInterval(interval);
     }, [fetchActiveRoom])
   );
 
@@ -58,9 +68,11 @@ export const useVoiceRoom = (chatId: string) => {
         10000 // 10 second timeout
       );
       
-      setToken(response.token);
-      if (response.serverUrl) setServerUrl(response.serverUrl);
-      setActiveRoom(response.room);
+      setRoomState({
+        token: response.token,
+        serverUrl: response.serverUrl || null,
+        activeRoom: response.room
+      });
       return response;
     } catch (err: any) {
       console.error("[useVoiceRoom] Failed to create/join room:", err);
@@ -96,9 +108,11 @@ export const useVoiceRoom = (chatId: string) => {
         serverUrl: response.serverUrl
       });
       
-      setToken(response.token);
-      setServerUrl(response.serverUrl || '');
-      setActiveRoom(response.room);
+      setRoomState({
+        token: response.token,
+        serverUrl: response.serverUrl || null,
+        activeRoom: response.room
+      });
       
       console.log('[useVoiceRoom] State updated - Token:', !!response.token, 'ServerUrl:', !!response.serverUrl);
       return response;
@@ -126,8 +140,7 @@ export const useVoiceRoom = (chatId: string) => {
         userId: user.id,
         voiceRoomId: activeRoom.id,
       });
-      setToken(null);
-      setServerUrl(null);
+      setRoomState(prev => ({ ...prev, token: null, serverUrl: null }));
       // We don't necessarily clear activeRoom here as it might still be active for others,
       // but we should probably refresh status.
       fetchActiveRoom();
