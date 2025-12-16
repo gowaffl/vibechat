@@ -96,7 +96,6 @@ import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ShimmeringText } from "@/components/ShimmeringText";
 import { format, isSameDay, isToday, isYesterday } from "date-fns";
-import { ActiveRoomIndicator } from "@/components/VoiceRoom/ActiveRoomIndicator";
 import { VoiceRoomModal } from "@/components/VoiceRoom/VoiceRoomModal";
 import { useVoiceRoom } from "@/hooks/useVoiceRoom";
 
@@ -1549,6 +1548,14 @@ const ChatScreen = () => {
   } = useVoiceRoom(route.params?.chatId || "default-chat");
   
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [chatInputHeight, setChatInputHeight] = useState(60); // Default estimate
+
+  // Auto-open modal when active room is detected
+  useEffect(() => {
+    if (activeRoom && !voiceModalVisible) {
+      setVoiceModalVisible(true);
+    }
+  }, [activeRoom]);
 
   // Handle joining voice room
   const handleJoinRoom = async () => {
@@ -1556,14 +1563,8 @@ const ChatScreen = () => {
     setVoiceModalVisible(true);
     
     try {
-      if (activeRoom) {
-        // Room exists, join it
-        await joinRoom();
-      } else {
-        // Create new room
-        await joinRoom();
-      }
-      // Modal stays open, token updates automatically via hook
+      // Always call joinRoom, it handles existing room
+      await joinRoom();
     } catch (error) {
       // If error, close modal and show alert
       setVoiceModalVisible(false);
@@ -7198,23 +7199,6 @@ const ChatScreen = () => {
       />
 
       {/* Voice Room Indicator */}
-      {activeRoom && (
-        <View 
-          style={{ 
-            position: "absolute", 
-            top: insets.top + 75, 
-            left: 0, 
-            right: 0, 
-            zIndex: 98 
-          }}
-          pointerEvents="box-none"
-        >
-          <ActiveRoomIndicator 
-            chatId={chatId} 
-            onJoinPress={handleJoinRoom} 
-          />
-        </View>
-      )}
 
       {/* Smart Threads Tabs - Always show to display Main Chat pill and + button */}
       {threads && (
@@ -7536,6 +7520,7 @@ const ChatScreen = () => {
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
           scrollEnabled={false}
+          onLayout={(e) => setChatInputHeight(e.nativeEvent.layout.height)}
         >
             
             {/* Smart Replies */}
@@ -9620,6 +9605,7 @@ const ChatScreen = () => {
               setVoiceModalVisible(false);
           }}
           isConnecting={isJoiningVoice}
+          chatInputHeight={chatInputHeight}
         />
       </View>
     );

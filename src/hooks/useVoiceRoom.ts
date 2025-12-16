@@ -51,11 +51,11 @@ export const useVoiceRoom = (chatId: string) => {
     setLoading(true);
     setError(null);
     try {
-      // Use the correct API endpoint path: /api/voice-rooms/join
-      // The chatId is passed in the body, as defined in joinVoiceRoomRequestSchema
+      // Use the correct API endpoint path with 10 second timeout for faster feedback
       const response = await api.post<JoinVoiceRoomResponse>(
         `/api/voice-rooms/join`,
-        { chatId, userId: user.id, name }
+        { chatId, userId: user.id, name },
+        10000 // 10 second timeout
       );
       
       setToken(response.token);
@@ -64,7 +64,13 @@ export const useVoiceRoom = (chatId: string) => {
       return response;
     } catch (err: any) {
       console.error("[useVoiceRoom] Failed to create/join room:", err);
-      setError(err.message || "Failed to join voice room");
+      
+      // Provide user-friendly error messages
+      if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
+        setError('Connection timeout - please try again');
+      } else {
+        setError(err.message || "Failed to join voice room");
+      }
       throw err;
     } finally {
       setLoading(false);
@@ -76,10 +82,11 @@ export const useVoiceRoom = (chatId: string) => {
     setIsJoining(true);
     setError(null);
     try {
-      // Use the correct API endpoint path: /api/voice-rooms/join
+      // Use the correct API endpoint path with 10 second timeout for faster feedback
       const response = await api.post<JoinVoiceRoomResponse>(
         `/api/voice-rooms/join`,
-        { chatId, userId: user.id }
+        { chatId, userId: user.id },
+        10000 // 10 second timeout
       );
       setToken(response.token);
       if (response.serverUrl) setServerUrl(response.serverUrl);
@@ -87,7 +94,13 @@ export const useVoiceRoom = (chatId: string) => {
       return response;
     } catch (err: any) {
       console.error("[useVoiceRoom] Failed to join room:", err);
-      setError(err.message || "Failed to join voice room");
+      
+      // Provide user-friendly error messages
+      if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
+        setError('Connection timeout - please try again');
+      } else {
+        setError(err.message || "Failed to join voice room");
+      }
       throw err;
     } finally {
       setIsJoining(false);

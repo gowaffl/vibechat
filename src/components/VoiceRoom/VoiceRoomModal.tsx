@@ -9,6 +9,10 @@ import {
   SafeAreaView,
   Platform,
   ActivityIndicator,
+  Modal,
+  TouchableWithoutFeedback,
+  Alert,
+  PermissionsAndroid,
 } from "react-native";
 import {
   LiveKitRoom,
@@ -40,7 +44,8 @@ import { useUser } from "@/contexts/UserContext";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // Constants matching ImagePreviewModal for consistent feel
-const DOCKED_HEIGHT = 90;
+const DOCKED_HEIGHT = 70; // Pill height
+const PADDING_BOTTOM = 8; // Space between pill and input
 const FULL_HEIGHT = SCREEN_HEIGHT;
 const SPRING_CONFIG = { damping: 20, stiffness: 90 };
 
@@ -51,6 +56,7 @@ interface VoiceRoomModalProps {
   roomName: string;
   onLeave: () => void;
   isConnecting?: boolean;
+  chatInputHeight?: number;
 }
 
 export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
@@ -60,8 +66,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   roomName,
   onLeave,
   isConnecting = false,
+  chatInputHeight = 60,
 }) => {
   const [isDocked, setIsDocked] = useState(false);
+  const [connectionTimeout, setConnectionTimeout] = useState(false);
   const insets = useSafeAreaInsets();
   
   // 0 = Expanded (Fullscreen), 1 = Docked (Bottom Pill)
@@ -70,8 +78,39 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   // Slide animation for initial mount/unmount
   const slideAnim = useSharedValue(SCREEN_HEIGHT);
 
+  // Request audio permissions
+  const requestAudioPermissions = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone Permission',
+            message: 'VibeChat needs access to your microphone for voice rooms',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn('[VoiceRoomModal] Permission error:', err);
+        return false;
+      }
+    }
+    return true; // iOS handles permissions automatically
+  };
+
   useEffect(() => {
+    console.log('[VoiceRoomModal] Visibility changed:', visible, 'Token:', !!token, 'ServerUrl:', !!serverUrl);
     if (visible) {
+      // Request permissions when opening
+      requestAudioPermissions().then(granted => {
+        if (!granted) {
+          Alert.alert('Permission Required', 'Microphone permission is required for voice rooms');
+          onLeave();
+        }
+      });
       slideAnim.value = withSpring(0, SPRING_CONFIG);
     } else {
       slideAnim.value = withTiming(SCREEN_HEIGHT, { duration: 300 });
@@ -80,6 +119,26 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       dockProgress.value = 0;
     }
   }, [visible]);
+
+  // Log when token/serverUrl change
+  useEffect(() => {
+    if (token && serverUrl) {
+      console.log('[VoiceRoomModal] Credentials ready - Token:', token.substring(0, 20) + '...', 'ServerUrl:', serverUrl);
+      setConnectionTimeout(false); // Reset timeout when credentials are ready
+    }
+  }, [token, serverUrl]);
+
+  // Connection timeout - if still connecting after 15 seconds, show error
+  useEffect(() => {
+    if (visible && token && serverUrl && isConnecting) {
+      const timeout = setTimeout(() => {
+        console.error('[VoiceRoomModal] Connection timeout after 15 seconds');
+        setConnectionTimeout(true);
+      }, 15000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [visible, token, serverUrl, isConnecting]);
 
   // Worklet friendly toggle handler
   const handleDockToggle = useCallback((shouldDock: boolean) => {
@@ -130,24 +189,38 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     dockProgress.value = withSpring(nextState ? 1 : 0, SPRING_CONFIG);
   };
 
+  // ALL useAnimatedStyle hooks BEFORE return statement
+  const backgroundOpacityStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(dockProgress.value, [0, 1], [0.5, 0]),
+  }));
+
   const containerStyle = useAnimatedStyle(() => {
-    // Height Interpolation
-    const currentHeight = interpolate(
+    // Slide animation for open/close
+    const openCloseTranslate = slideAnim.value;
+    
+    // Dock animation - when docked, translateY moves content up
+    // dockedTranslate should be: SCREEN_HEIGHT - DOCKED_HEIGHT - chatInputHeight - PADDING_BOTTOM - insets.bottom
+    const dockedTranslate = interpolate(
       dockProgress.value,
       [0, 1],
-      [FULL_HEIGHT, DOCKED_HEIGHT + insets.bottom],
+      [0, SCREEN_HEIGHT - DOCKED_HEIGHT - chatInputHeight - PADDING_BOTTOM - insets.bottom],
       Extrapolate.CLAMP
     );
-
-    // Border Radius Interpolation
+    
+    const height = interpolate(
+      dockProgress.value,
+      [0, 1],
+      [SCREEN_HEIGHT, DOCKED_HEIGHT],
+      Extrapolate.CLAMP
+    );
+    
     const borderRadius = interpolate(
       dockProgress.value,
       [0, 1],
       [0, 24],
       Extrapolate.CLAMP
     );
-
-    // Margin/Width Interpolation for floating effect when docked
+    
     const width = interpolate(
       dockProgress.value,
       [0, 1],
@@ -155,104 +228,81 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       Extrapolate.CLAMP
     );
 
-    const marginHorizontal = interpolate(
-      dockProgress.value,
-      [0, 1],
-      [0, 16],
-      Extrapolate.CLAMP
-    );
-
-    // Position Y - When docked, sit at bottom. When expanded, fill screen.
-    // We combine slideAnim (for open/close) with docking logic.
-    // If not visible, slideAnim takes over.
-    // If visible, docking logic positions it.
-    
-    // Calculate top offset for docked state
-    const dockedTop = SCREEN_HEIGHT - (DOCKED_HEIGHT + insets.bottom + 20); // 20px padding from bottom
-    
-    const translateY = interpolate(
-      dockProgress.value,
-      [0, 1],
-      [0, 0], // We handle Y via top/height, or we can just translate.
-      // Let's use standard translation relative to screen
-      Extrapolate.CLAMP
-    );
-    
-    // Actually, simpler approach:
-    // Fixed at bottom, animate height.
-    // BUT we want it to look like it slides DOWN into the dock.
-    
-    const top = interpolate(
-        dockProgress.value,
-        [0, 1],
-        [0, dockedTop],
-        Extrapolate.CLAMP
-    );
-
     return {
-      transform: [{ translateY: slideAnim.value + top }], // Combine initial slide + dock slide
-      height: currentHeight,
+      transform: [{ translateY: openCloseTranslate + dockedTranslate }],
+      height,
       width,
       borderRadius,
-      marginHorizontal,
+      alignSelf: dockProgress.value > 0.5 ? 'center' : 'stretch', // Center when docked
       overflow: 'hidden',
     };
   });
 
-  if (!visible) return null;
+  if (!visible && slideAnim.value === SCREEN_HEIGHT) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {/* Dimmed Background - only when expanded */}
-        <Animated.View 
-            pointerEvents="none"
-            style={[
-                StyleSheet.absoluteFill, 
-                { backgroundColor: 'black' },
-                useAnimatedStyle(() => ({
-                    opacity: interpolate(dockProgress.value, [0, 1], [0.5, 0])
-                }))
-            ]} 
-        />
+    <Modal
+      visible={visible}
+      transparent
+      statusBarTranslucent
+      animationType="none"
+      onRequestClose={onLeave}
+    >
+      <TouchableWithoutFeedback>
+        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+          {/* Dimmed Background - only when visible and expanded */}
+          {visible && (
+            <Animated.View 
+                pointerEvents="none"
+                style={[
+                    StyleSheet.absoluteFill, 
+                    { backgroundColor: 'black' },
+                    backgroundOpacityStyle
+                ]} 
+            />
+          )}
 
-        <PanGestureHandler onGestureEvent={onGestureEvent}>
-            <Animated.View style={[styles.container, containerStyle]}>
-                {/* Connecting State */}
-                {(!token || !serverUrl || isConnecting) ? (
-                    <View className="flex-1 bg-gray-900 items-center justify-center">
-                         <ActivityIndicator size="large" color="#10B981" />
-                         <Text className="text-white font-medium text-lg mt-4">Connecting to Voice Room...</Text>
-                         <TouchableOpacity onPress={onLeave} className="mt-8 p-2 bg-gray-800 rounded-full">
-                            <X size={24} color="white" />
-                         </TouchableOpacity>
-                    </View>
-                ) : (
-                    <LiveKitRoom
-                        serverUrl={serverUrl}
-                        token={token}
-                        connect={true}
-                        options={{
-                            publishDefaults: {
-                                audio: true,
-                                video: false,
-                            },
-                            adaptiveStream: true,
-                        }}
-                        onDisconnected={onLeave}
-                        style={{ flex: 1 }}
-                    >
-                        <RoomContent 
-                            roomName={roomName} 
-                            onLeave={onLeave} 
-                            isDocked={isDocked}
-                            toggleDock={toggleDock}
-                            dockProgress={dockProgress}
-                        />
-                    </LiveKitRoom>
-                )}
+          <PanGestureHandler onGestureEvent={onGestureEvent}>
+              <Animated.View style={[styles.container, containerStyle]}>
+                {/* Always render LiveKitRoom to maintain consistent hook order */}
+                <LiveKitRoom
+                    serverUrl={serverUrl || "ws://localhost:7880"}
+                    token={token || ""}
+                    connect={!!(token && serverUrl)}
+                    options={{
+                        publishDefaults: {
+                            audio: true,
+                            video: false,
+                        },
+                        adaptiveStream: true,
+                    }}
+                    onConnected={() => {
+                      console.log('[VoiceRoomModal] ✅ Connected to LiveKit room');
+                    }}
+                    onDisconnected={(reason) => {
+                      console.log('[VoiceRoomModal] ❌ Disconnected from LiveKit:', reason);
+                      onLeave();
+                    }}
+                    onError={(error) => {
+                      console.error('[VoiceRoomModal] ❌ LiveKit error:', error);
+                    }}
+                    style={{ flex: 1 }}
+                >
+                    <RoomContent 
+                        roomName={roomName} 
+                        onLeave={onLeave} 
+                        isDocked={isDocked}
+                        toggleDock={toggleDock}
+                        dockProgress={dockProgress}
+                        isConnecting={!token || !serverUrl || isConnecting}
+                        connectionTimeout={connectionTimeout}
+                    />
+                </LiveKitRoom>
             </Animated.View>
         </PanGestureHandler>
-    </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
   );
 };
 
@@ -261,13 +311,17 @@ const RoomContent = ({
   onLeave,
   isDocked,
   toggleDock,
-  dockProgress
+  dockProgress,
+  isConnecting,
+  connectionTimeout
 }: {
   roomName: string;
   onLeave: () => void;
   isDocked: boolean;
   toggleDock: () => void;
   dockProgress: Animated.SharedValue<number>;
+  isConnecting: boolean;
+  connectionTimeout: boolean;
 }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -275,6 +329,15 @@ const RoomContent = ({
   const { user } = useUser();
   
   const tracks = useTracks([Track.Source.Microphone]);
+
+  // Debug room connection state
+  useEffect(() => {
+    console.log('[RoomContent] isConnecting:', isConnecting, 'Room state:', room.state);
+  }, [isConnecting, room.state]);
+
+  // Check if room is actually connected
+  const isRoomConnected = room.state === 'connected';
+  const shouldShowConnecting = isConnecting || !isRoomConnected;
 
   const toggleMic = async () => {
     if (localParticipant.isMicrophoneEnabled) {
@@ -300,6 +363,37 @@ const RoomContent = ({
             colors={['rgba(17, 24, 39, 0.7)', 'rgba(17, 24, 39, 0.95)']}
             style={StyleSheet.absoluteFill}
         />
+        
+        {/* Connecting Overlay - shows on top while connecting */}
+        {shouldShowConnecting && (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17, 24, 39, 0.98)', zIndex: 999 }]} className="items-center justify-center">
+                {connectionTimeout ? (
+                  <>
+                    <X size={48} color="#EF4444" />
+                    <Text className="text-white font-bold text-xl mt-4">Connection Failed</Text>
+                    <Text className="text-gray-400 text-sm mt-2 px-8 text-center">
+                      Unable to connect to the voice room. Please check your connection and try again.
+                    </Text>
+                    <Text className="text-gray-500 text-xs mt-2">Room state: {room.state}</Text>
+                    <TouchableOpacity 
+                      onPress={onLeave} 
+                      className="mt-8 px-6 py-3 bg-red-500 rounded-full"
+                    >
+                      <Text className="text-white font-semibold">Close</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <ActivityIndicator size="large" color="#10B981" />
+                    <Text className="text-white font-medium text-lg mt-4">Connecting to Voice Room...</Text>
+                    <Text className="text-gray-400 text-sm mt-2">Room state: {room.state}</Text>
+                    <TouchableOpacity onPress={onLeave} className="mt-8 p-2 bg-gray-800 rounded-full">
+                        <X size={24} color="white" />
+                    </TouchableOpacity>
+                  </>
+                )}
+            </View>
+        )}
         
         {/* === EXPANDED CONTENT === */}
         <Animated.View style={[StyleSheet.absoluteFill, expandedStyle]} pointerEvents={isDocked ? 'none' : 'auto'}>
@@ -346,15 +440,26 @@ const RoomContent = ({
                         />
 
                         {/* Remote Participants */}
-                        {remoteParticipants.map((p) => (
-                            <ParticipantAvatar 
-                                key={p.identity} 
-                                participant={p} 
-                                isLocal={false} 
-                                // LiveKit metadata usually stores a JSON string
-                                imageUrl={p.metadata ? JSON.parse(p.metadata).image : undefined} 
-                            />
-                        ))}
+                        {remoteParticipants.map((p) => {
+                            let imageUrl: string | null = null;
+                            try {
+                              if (p.metadata) {
+                                const metadata = JSON.parse(p.metadata);
+                                imageUrl = metadata.image;
+                              }
+                            } catch (e) {
+                              console.warn('[VoiceRoom] Failed to parse participant metadata:', e);
+                            }
+                            
+                            return (
+                              <ParticipantAvatar 
+                                  key={p.identity} 
+                                  participant={p} 
+                                  isLocal={false} 
+                                  imageUrl={imageUrl}
+                              />
+                            );
+                        })}
                     </View>
                 </View>
 
@@ -410,17 +515,29 @@ const RoomContent = ({
                              <Text className="text-white font-bold text-xs">You</Text>
                          )}
                     </View>
-                    {remoteParticipants.slice(0, 2).map((p, i) => (
-                        <View key={p.identity} className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 z-10">
-                             {p.metadata && JSON.parse(p.metadata).image ? (
-                                <Image source={{ uri: JSON.parse(p.metadata).image }} className="w-full h-full rounded-full" />
-                             ) : (
-                                <Text className="text-white font-bold text-xs">
-                                    {p.name?.substring(0, 1).toUpperCase()}
-                                </Text>
-                             )}
-                        </View>
-                    ))}
+                    {remoteParticipants.slice(0, 2).map((p, i) => {
+                        let imageUrl: string | null = null;
+                        try {
+                          if (p.metadata) {
+                            const metadata = JSON.parse(p.metadata);
+                            imageUrl = metadata.image;
+                          }
+                        } catch (e) {
+                          console.warn('[VoiceRoom] Failed to parse participant metadata:', e);
+                        }
+                        
+                        return (
+                          <View key={p.identity} className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 z-10">
+                               {imageUrl ? (
+                                  <Image source={{ uri: imageUrl }} className="w-full h-full rounded-full" />
+                               ) : (
+                                  <Text className="text-white font-bold text-xs">
+                                      {p.name?.substring(0, 1).toUpperCase()}
+                                  </Text>
+                               )}
+                          </View>
+                        );
+                    })}
                  </View>
                  
                  <View>
@@ -512,7 +629,14 @@ const ParticipantAvatar = ({
           {/* Avatar Circle */}
           <View className="w-20 h-20 rounded-full bg-gray-700 items-center justify-center overflow-hidden z-10 border-2 border-white/20 shadow-xl">
               {imageUrl ? (
-                  <Image source={{ uri: imageUrl }} className="w-full h-full" resizeMode="cover" />
+                  <Image 
+                    source={{ uri: imageUrl }} 
+                    className="w-full h-full" 
+                    resizeMode="cover"
+                    onError={(e) => {
+                      console.warn('[VoiceRoom] Failed to load avatar:', imageUrl);
+                    }}
+                  />
               ) : (
                   <LinearGradient
                     colors={['#6366f1', '#4f46e5']}
