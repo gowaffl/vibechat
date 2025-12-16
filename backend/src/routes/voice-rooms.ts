@@ -113,7 +113,7 @@ app.post("/join", async (c) => {
         .insert({
           chatId,
           createdBy: userId,
-          name: validatedData.name || "Voice Room",
+          name: validatedData.name || "Vibe Call",
           isActive: true,
           startedAt: new Date().toISOString(),
         })

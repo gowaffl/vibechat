@@ -382,7 +382,7 @@ const ChatHeader = ({
                     <Mic size={18} color="#FFFFFF" />
                   </View>
                   <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
-                    Voice Room
+                    Vibe Call
                   </Text>
                 </Pressable>
 
@@ -9583,7 +9583,7 @@ const ChatScreen = () => {
           visible={voiceModalVisible}
           token={voiceToken || ""}
           serverUrl={voiceServerUrl || ""}
-          roomName={activeRoom?.name || "Voice Room"}
+          roomName={activeRoom?.name || "Vibe Call"}
           onLeave={() => {
               // If user manually closes/leaves
               handleLeaveRoom();

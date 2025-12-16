@@ -41,6 +41,7 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUser } from "@/contexts/UserContext";
+import { getFullImageUrl } from "@/utils/imageHelpers";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -87,7 +88,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
             title: 'Microphone Permission',
-            message: 'VibeChat needs access to your microphone for voice rooms',
+            message: 'VibeChat needs access to your microphone for Vibe Calls',
             buttonNeutral: 'Ask Me Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
@@ -120,7 +121,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       // Request permissions when opening
       requestAudioPermissions().then(granted => {
         if (!granted) {
-          Alert.alert('Permission Required', 'Microphone permission is required for voice rooms');
+          Alert.alert('Permission Required', 'Microphone permission is required for Vibe Calls');
           onLeave();
         }
       });
@@ -387,7 +388,7 @@ const RoomContent = ({
                     <X size={48} color="#EF4444" />
                     <Text className="text-white font-bold text-xl mt-4">Connection Failed</Text>
                     <Text className="text-gray-400 text-sm mt-2 px-8 text-center">
-                      Unable to connect to the voice room. Please check your connection and try again.
+                      Unable to connect to the Vibe Call. Please check your connection and try again.
                     </Text>
                     <Text className="text-gray-500 text-xs mt-2">Room state: {room.state}</Text>
                     <TouchableOpacity 
@@ -400,7 +401,7 @@ const RoomContent = ({
                 ) : (
                   <>
                     <ActivityIndicator size="large" color="#10B981" />
-                    <Text className="text-white font-medium text-lg mt-4">Connecting to Voice Room...</Text>
+                    <Text className="text-white font-medium text-lg mt-4">Connecting to Vibe Call...</Text>
                     <Text className="text-gray-400 text-sm mt-2">Room state: {room.state}</Text>
                     <TouchableOpacity onPress={onLeave} className="mt-8 p-2 bg-gray-800 rounded-full">
                         <X size={24} color="white" />
@@ -447,7 +448,7 @@ const RoomContent = ({
                         <ParticipantAvatar 
                             participant={localParticipant} 
                             isLocal={true} 
-                            imageUrl={user?.image}
+                            imageUrl={getFullImageUrl(user?.image)}
                         />
 
                         {/* Remote Participants */}
@@ -456,7 +457,7 @@ const RoomContent = ({
                             try {
                               if (p.metadata) {
                                 const metadata = JSON.parse(p.metadata);
-                                imageUrl = metadata.image;
+                                imageUrl = getFullImageUrl(metadata.image);
                               }
                             } catch (e) {
                               console.warn('[VoiceRoom] Failed to parse participant metadata:', e);
@@ -518,41 +519,71 @@ const RoomContent = ({
         >
              {/* Left: Active Speakers Preview */}
              <TouchableOpacity onPress={toggleDock} className="flex-1 flex-row items-center">
-                 <View className="flex-row mr-3">
-                     <View className="w-10 h-10 rounded-full bg-indigo-500 border-2 border-white items-center justify-center z-20 overflow-hidden">
+                 <View className="flex-row mr-3 items-center">
+                     <View className="w-10 h-10 rounded-full bg-indigo-500 border-2 border-white items-center justify-center z-50 overflow-hidden">
                          {user?.image ? (
-                             <ExpoImage source={{ uri: user.image }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                             <ExpoImage source={{ uri: getFullImageUrl(user.image) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                          ) : (
                              <Text className="text-white font-bold text-xs">You</Text>
                          )}
                     </View>
-                    {remoteParticipants.slice(0, 2).map((p, i) => {
-                        let imageUrl: string | null = null;
-                        try {
-                          if (p.metadata) {
-                            const metadata = JSON.parse(p.metadata);
-                            imageUrl = metadata.image;
-                          }
-                        } catch (e) {
-                          console.warn('[VoiceRoom] Failed to parse participant metadata:', e);
-                        }
+                    
+                    {/* Remote Participants - Show up to 3 more (total 4 bubbles max) */}
+                    {(() => {
+                        const MAX_BUBBLES = 4;
+                        // We already have 1 bubble for Local User
+                        const maxRemoteBubbles = MAX_BUBBLES - 1;
+                        // If we have more remote users than fit, reserve 1 spot for "+N" bubble
+                        const showOverflow = remoteParticipants.length > maxRemoteBubbles;
+                        const visibleRemoteCount = showOverflow ? maxRemoteBubbles - 1 : remoteParticipants.length;
                         
                         return (
-                          <View key={p.identity} className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 z-10 overflow-hidden">
-                               {imageUrl ? (
-                                  <ExpoImage source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                               ) : (
-                                  <Text className="text-white font-bold text-xs">
-                                      {p.name?.substring(0, 1).toUpperCase()}
-                                  </Text>
-                               )}
-                          </View>
+                            <>
+                                {remoteParticipants.slice(0, visibleRemoteCount).map((p, i) => {
+                                    let imageUrl: string | null = null;
+                                    try {
+                                      if (p.metadata) {
+                                        const metadata = JSON.parse(p.metadata);
+                                        imageUrl = getFullImageUrl(metadata.image);
+                                      }
+                                    } catch (e) {
+                                      console.warn('[VoiceRoom] Failed to parse participant metadata:', e);
+                                    }
+                                    
+                                    return (
+                                      <View 
+                                        key={p.identity} 
+                                        className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 overflow-hidden"
+                                        style={{ zIndex: 40 - i }}
+                                      >
+                                           {imageUrl ? (
+                                              <ExpoImage source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                                           ) : (
+                                              <Text className="text-white font-bold text-xs">
+                                                  {p.name?.substring(0, 1).toUpperCase()}
+                                              </Text>
+                                           )}
+                                      </View>
+                                    );
+                                })}
+                                
+                                {showOverflow && (
+                                    <View 
+                                        className="w-10 h-10 rounded-full bg-gray-800 border-2 border-white items-center justify-center -ml-4"
+                                        style={{ zIndex: 0 }}
+                                    >
+                                        <Text className="text-white font-bold text-xs">
+                                            +{remoteParticipants.length - visibleRemoteCount}
+                                        </Text>
+                                    </View>
+                                )}
+                            </>
                         );
-                    })}
+                    })()}
                  </View>
                  
                  <View>
-                     <Text className="text-white font-bold text-sm">Voice Active</Text>
+                     <Text className="text-white font-bold text-sm">Vibe Call Active</Text>
                      <Text className="text-green-400 text-xs">{remoteParticipants.length + 1} connected</Text>
                  </View>
              </TouchableOpacity>
