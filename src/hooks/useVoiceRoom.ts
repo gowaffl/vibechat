@@ -78,15 +78,15 @@ export const useVoiceRoom = (chatId: string) => {
       console.error("[useVoiceRoom] Failed to create/join room:", err);
       
       // Provide user-friendly error messages
-      if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
-        setError('Connection timeout - please try again');
-      } else {
-        setError(err.message || "Failed to join voice room");
-      }
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+              if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
+                setError('Connection timeout - please try again');
+              } else {
+                setError(err.message || "Failed to join Vibe Call");
+              }
+              throw err;
+            } finally {
+              setLoading(false);
+            }
   };
 
   const joinRoom = async () => {
@@ -120,14 +120,14 @@ export const useVoiceRoom = (chatId: string) => {
       console.error("[useVoiceRoom] Failed to join room:", err);
       
       // Provide user-friendly error messages
-      if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
-        setError('Connection timeout - please try again');
-      } else {
-        setError(err.message || "Failed to join voice room");
-      }
-      throw err;
-    } finally {
-      setIsJoining(false);
+              if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
+                setError('Connection timeout - please try again');
+              } else {
+                setError(err.message || "Failed to join Vibe Call");
+              }
+              throw err;
+            } finally {
+              setIsJoining(false);
       console.log('[useVoiceRoom] joinRoom completed, isJoining set to false');
     }
   };

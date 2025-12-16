@@ -1554,17 +1554,18 @@ const ChatScreen = () => {
       console.log('[ChatScreen] handleJoinRoom - joinRoom completed');
     } catch (error) {
       console.error('[ChatScreen] handleJoinRoom - error:', error);
-      Alert.alert("Error", "Failed to join voice room");
+      Alert.alert("Error", "Failed to join Vibe Call");
     }
   };
 
-  // Handle leaving voice room
+  // Handle leaving Vibe Call
   const handleLeaveRoom = async () => {
     try {
       await leaveRoom();
       setVoiceModalVisible(false);
     } catch (error) {
-      console.error("Failed to leave room", error);
+      console.error("Failed to leave Vibe Call", error);
+      Alert.alert("Error", "Failed to leave Vibe Call");
     }
   };
 

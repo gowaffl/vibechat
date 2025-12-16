@@ -14,7 +14,7 @@ import type { AppType } from "../index";
 
 const app = new Hono<AppType>();
 
-// GET /api/voice-rooms/:chatId/active - Get active voice room for a chat
+// GET /api/voice-rooms/:chatId/active - Get active Vibe Call for a chat
 app.get("/:chatId/active", async (c) => {
   try {
     const chatId = c.req.param("chatId");
@@ -79,7 +79,7 @@ app.get("/:chatId/active", async (c) => {
   }
 });
 
-// POST /api/voice-rooms/join - Join or create a voice room
+// POST /api/voice-rooms/join - Join or create a Vibe Call
 app.post("/join", async (c) => {
   try {
     const body = await c.req.json();
@@ -122,7 +122,7 @@ app.post("/join", async (c) => {
 
       if (createError || !newRoom) {
         console.error("[VoiceRooms] Error creating room:", createError);
-        return c.json({ error: "Failed to create voice room" }, 500);
+        return c.json({ error: "Failed to create Vibe Call" }, 500);
       }
       activeRoom = newRoom;
     }
@@ -150,12 +150,12 @@ app.post("/join", async (c) => {
         .select()
         .single();
 
-      if (joinError || !newParticipant) {
-        console.error("[VoiceRooms] Error joining room:", joinError);
-        return c.json({ error: "Failed to join voice room" }, 500);
-      }
-      participantId = newParticipant.id;
-    }
+              if (joinError || !newParticipant) {
+                console.error("[VoiceRooms] Error joining room:", joinError);
+                return c.json({ error: "Failed to join Vibe Call" }, 500);
+              }
+              participantId = newParticipant.id;
+            }
 
     // Generate LiveKit token
     const apiKey = env.LIVEKIT_API_KEY;
@@ -202,7 +202,7 @@ app.post("/join", async (c) => {
   }
 });
 
-// POST /api/voice-rooms/leave - Leave a voice room
+// POST /api/voice-rooms/leave - Leave a Vibe Call
 app.post("/leave", async (c) => {
   try {
     const body = await c.req.json();
@@ -219,7 +219,7 @@ app.post("/leave", async (c) => {
 
     if (leaveError) {
       console.error("[VoiceRooms] Error leaving room:", leaveError);
-      return c.json({ error: "Failed to leave room" }, 500);
+      return c.json({ error: "Failed to leave Vibe Call" }, 500);
     }
 
     // Check if room is empty
