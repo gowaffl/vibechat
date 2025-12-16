@@ -14,6 +14,7 @@ import {
   Alert,
   PermissionsAndroid,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import {
   LiveKitRoom,
   useLocalParticipant,
@@ -253,68 +254,58 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   if (!visible && slideAnim.value === SCREEN_HEIGHT) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={onLeave}
-    >
-      <TouchableWithoutFeedback>
-        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-          {/* Dimmed Background - only when visible and expanded */}
-          {visible && (
-            <Animated.View 
-                pointerEvents="none"
-                style={[
-                    StyleSheet.absoluteFill, 
-                    { backgroundColor: 'black' },
-                    backgroundOpacityStyle
-                ]} 
-            />
-          )}
+    <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]} pointerEvents="box-none">
+      {/* Dimmed Background - only when visible and expanded */}
+      {visible && (
+        <Animated.View 
+            pointerEvents={!isDocked ? "auto" : "none"} // Block touches when expanded, let pass when docked
+            style={[
+                StyleSheet.absoluteFill, 
+                { backgroundColor: 'black' },
+                backgroundOpacityStyle
+            ]} 
+        />
+      )}
 
-          <PanGestureHandler onGestureEvent={onGestureEvent}>
-              <Animated.View style={[styles.container, containerStyle]}>
-                {/* Always render LiveKitRoom to maintain consistent hook order */}
-                <LiveKitRoom
-                    serverUrl={serverUrl || "ws://localhost:7880"}
-                    token={token || ""}
-                    connect={!!(token && serverUrl)}
-                    options={{
-                        publishDefaults: {
-                            audio: true,
-                            video: false,
-                        },
-                        adaptiveStream: true,
-                    }}
-                    onConnected={() => {
-                      console.log('[VoiceRoomModal] ✅ Connected to LiveKit room');
-                    }}
-                    onDisconnected={(reason) => {
-                      console.log('[VoiceRoomModal] ❌ Disconnected from LiveKit:', reason);
-                      onLeave();
-                    }}
-                    onError={(error) => {
-                      console.error('[VoiceRoomModal] ❌ LiveKit error:', error);
-                    }}
-                    style={{ flex: 1 }}
-                >
-                    <RoomContent 
-                        roomName={roomName} 
-                        onLeave={onLeave} 
-                        isDocked={isDocked}
-                        toggleDock={toggleDock}
-                        dockProgress={dockProgress}
-                        isConnecting={!token || !serverUrl || isConnecting}
-                        connectionTimeout={connectionTimeout}
-                    />
-                </LiveKitRoom>
-            </Animated.View>
-        </PanGestureHandler>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+      <PanGestureHandler onGestureEvent={onGestureEvent}>
+          <Animated.View style={[styles.container, containerStyle]}>
+            {/* Always render LiveKitRoom to maintain consistent hook order */}
+            <LiveKitRoom
+                serverUrl={serverUrl || "ws://localhost:7880"}
+                token={token || ""}
+                connect={!!(token && serverUrl)}
+                options={{
+                    publishDefaults: {
+                        audio: true,
+                        video: false,
+                    },
+                    adaptiveStream: true,
+                }}
+                onConnected={() => {
+                  console.log('[VoiceRoomModal] ✅ Connected to LiveKit room');
+                }}
+                onDisconnected={(reason) => {
+                  console.log('[VoiceRoomModal] ❌ Disconnected from LiveKit:', reason);
+                  onLeave();
+                }}
+                onError={(error) => {
+                  console.error('[VoiceRoomModal] ❌ LiveKit error:', error);
+                }}
+                style={{ flex: 1 }}
+            >
+                <RoomContent 
+                    roomName={roomName} 
+                    onLeave={onLeave} 
+                    isDocked={isDocked}
+                    toggleDock={toggleDock}
+                    dockProgress={dockProgress}
+                    isConnecting={!token || !serverUrl || isConnecting}
+                    connectionTimeout={connectionTimeout}
+                />
+            </LiveKitRoom>
+        </Animated.View>
+    </PanGestureHandler>
+    </View>
   );
 };
 
@@ -340,6 +331,18 @@ const RoomContent = ({
   const room = useRoomContext();
   const { user } = useUser();
   
+  // Debug user image availability
+  useEffect(() => {
+    if (localParticipant) {
+      console.log('[RoomContent] Local participant image check:', {
+        hasUser: !!user,
+        userId: user?.id,
+        imageUrl: user?.image,
+        isLocal: true
+      });
+    }
+  }, [user, localParticipant]);
+
   const tracks = useTracks([Track.Source.Microphone]);
 
   // Debug room connection state
@@ -432,12 +435,8 @@ const RoomContent = ({
                             </View>
                         </View>
                         
-                        <TouchableOpacity 
-                            onPress={() => room.disconnect()} 
-                            className="w-10 h-10 items-center justify-center bg-red-500/10 rounded-full"
-                        >
-                            <X size={20} color="#EF4444" />
-                        </TouchableOpacity>
+                        {/* Empty view to balance layout since we removed the X button */}
+                        <View className="w-10 h-10" />
                     </View>
                 </View>
 
@@ -520,9 +519,9 @@ const RoomContent = ({
              {/* Left: Active Speakers Preview */}
              <TouchableOpacity onPress={toggleDock} className="flex-1 flex-row items-center">
                  <View className="flex-row mr-3">
-                    <View className="w-10 h-10 rounded-full bg-indigo-500 border-2 border-white items-center justify-center z-20">
+                     <View className="w-10 h-10 rounded-full bg-indigo-500 border-2 border-white items-center justify-center z-20 overflow-hidden">
                          {user?.image ? (
-                             <Image source={{ uri: user.image }} className="w-full h-full rounded-full" />
+                             <ExpoImage source={{ uri: user.image }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                          ) : (
                              <Text className="text-white font-bold text-xs">You</Text>
                          )}
@@ -539,9 +538,9 @@ const RoomContent = ({
                         }
                         
                         return (
-                          <View key={p.identity} className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 z-10">
+                          <View key={p.identity} className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 z-10 overflow-hidden">
                                {imageUrl ? (
-                                  <Image source={{ uri: imageUrl }} className="w-full h-full rounded-full" />
+                                  <ExpoImage source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                                ) : (
                                   <Text className="text-white font-bold text-xs">
                                       {p.name?.substring(0, 1).toUpperCase()}
@@ -641,12 +640,12 @@ const ParticipantAvatar = ({
           {/* Avatar Circle */}
           <View className="w-20 h-20 rounded-full bg-gray-700 items-center justify-center overflow-hidden z-10 border-2 border-white/20 shadow-xl">
               {imageUrl ? (
-                  <Image 
+                  <ExpoImage 
                     source={{ uri: imageUrl }} 
-                    className="w-full h-full" 
-                    resizeMode="cover"
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
                     onError={(e) => {
-                      console.warn('[VoiceRoom] Failed to load avatar:', imageUrl);
+                      console.warn('[VoiceRoom] Failed to load avatar:', imageUrl, e);
                     }}
                   />
               ) : (

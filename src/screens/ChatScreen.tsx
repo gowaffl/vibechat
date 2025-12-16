@@ -130,6 +130,7 @@ const ChatHeader = ({
   onThreadsPress,
   onEventsPress,
   onInvitePress,
+  onJoinVoiceRoom, // Added
 }: { 
   chatName: string; 
   chatImage: string | null; 
@@ -140,52 +141,12 @@ const ChatHeader = ({
   onThreadsPress: () => void;
   onEventsPress: () => void;
   onInvitePress: () => void;
+  onJoinVoiceRoom: () => void; // Added
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
-  const { 
-    activeRoom, 
-    participants, 
-    token: voiceToken, 
-    serverUrl: voiceServerUrl,
-    joinRoom, 
-    leaveRoom, 
-    isJoining: isJoiningVoice 
-  } = useVoiceRoom(route.params.chatId);
   
-  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
-
-  // Handle joining voice room
-  const handleJoinRoom = async () => {
-    // Show modal immediately with loading state
-    setVoiceModalVisible(true);
-    
-    try {
-      if (activeRoom) {
-        // Room exists, join it
-        await joinRoom();
-      } else {
-        // Create new room
-        await joinRoom();
-      }
-      // Modal stays open, token updates automatically via hook
-    } catch (error) {
-      // If error, close modal and show alert
-      setVoiceModalVisible(false);
-      Alert.alert("Error", "Failed to join voice room");
-    }
-  };
-
-  // Handle leaving voice room
-  const handleLeaveRoom = async () => {
-    try {
-      await leaveRoom();
-      setVoiceModalVisible(false);
-    } catch (error) {
-      console.error("Failed to leave room", error);
-    }
-  };
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
 
   const groupImageUrl = chatImage
@@ -397,7 +358,7 @@ const ChatHeader = ({
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setShowOptionsMenu(false);
-                    handleJoinRoom();
+                    onJoinVoiceRoom();
                   }}
                   style={{
                     flexDirection: "row",
@@ -7221,6 +7182,7 @@ const ChatScreen = () => {
         onThreadsPress={() => setShowThreadsPanel(true)}
         onEventsPress={() => setShowEventsTab(true)}
         onInvitePress={handleShareInvite}
+        onJoinVoiceRoom={handleJoinRoom} // Added
       />
 
       {/* Smart Threads Tabs - Always show to display Main Chat pill and + button */}
