@@ -241,18 +241,27 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       [SCREEN_WIDTH, SCREEN_WIDTH - 32],
       Extrapolate.CLAMP
     );
+    
+    // Horizontal margin for centering when docked (animated via margin)
+    const marginHorizontal = interpolate(
+      dockProgress.value,
+      [0, 1],
+      [0, 16],
+      Extrapolate.CLAMP
+    );
 
     return {
       transform: [{ translateY: openCloseTranslate + dockedTranslate }],
       height,
       width,
       borderRadius,
-      alignSelf: dockProgress.value > 0.5 ? 'center' : 'stretch', // Center when docked
-      overflow: 'hidden',
+      marginHorizontal, // Animated centering instead of alignSelf
+      overflow: 'hidden' as const,
     };
   });
 
-  if (!visible && slideAnim.value === SCREEN_HEIGHT) return null;
+  // Don't render if not visible - use state-based check, not animated value
+  if (!visible) return null;
 
   return (
     <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]} pointerEvents="box-none">

@@ -1532,37 +1532,38 @@ const ChatScreen = () => {
   
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [chatInputHeight, setChatInputHeight] = useState(60); // Default estimate
+  // Track if user intentionally closed the modal to prevent auto-reopen
+  const hasUserClosedVoiceModalRef = useRef(false);
 
-  // Debug: Log ALL voice room values on EVERY render
-  console.log('[ChatScreen] RENDER - Voice Room State:', {
-    chatId: route.params?.chatId,
-    hasActiveRoom: !!activeRoom,
-    hasVoiceToken: !!voiceToken,
-    hasVoiceServerUrl: !!voiceServerUrl,
-    voiceModalVisible,
-    isJoiningVoice,
-    tokenPreview: voiceToken ? voiceToken.substring(0, 20) : 'none',
-    serverUrl: voiceServerUrl || 'none'
-  });
+  // Debug: Log ALL voice room values on EVERY render (reduced frequency)
+  // console.log('[ChatScreen] RENDER - Voice Room State:', {
+  //   chatId: route.params?.chatId,
+  //   hasActiveRoom: !!activeRoom,
+  //   hasVoiceToken: !!voiceToken,
+  //   hasVoiceServerUrl: !!voiceServerUrl,
+  //   voiceModalVisible,
+  //   isJoiningVoice,
+  //   tokenPreview: voiceToken ? voiceToken.substring(0, 20) : 'none',
+  //   serverUrl: voiceServerUrl || 'none'
+  // });
 
-  // Debug: Log when voice credentials change
+  // Reset the "user closed" flag when credentials are cleared (call truly ended)
   useEffect(() => {
-    console.log('[ChatScreen] Effect: Voice credentials changed - Token:', !!voiceToken, 'ServerUrl:', !!voiceServerUrl, 'isJoining:', isJoiningVoice);
-  }, [voiceToken, voiceServerUrl, isJoiningVoice]);
-
-  // Debug: Log when activeRoom changes
-  useEffect(() => {
-    console.log('[ChatScreen] Effect: Active room changed:', {
-      hasActiveRoom: !!activeRoom,
-      roomId: activeRoom?.id
-    });
-  }, [activeRoom]);
+    if (!voiceToken && !voiceServerUrl) {
+      hasUserClosedVoiceModalRef.current = false;
+    }
+  }, [voiceToken, voiceServerUrl]);
 
   // Auto-open modal when we have an active room AND credentials are ready
+  // BUT only if user hasn't intentionally closed the modal
   useEffect(() => {
-    console.log('[ChatScreen] Effect: Auto-open check - activeRoom:', !!activeRoom, 'token:', !!voiceToken, 'serverUrl:', !!voiceServerUrl, 'modalVisible:', voiceModalVisible);
+    // Skip if user has intentionally closed the modal
+    if (hasUserClosedVoiceModalRef.current) {
+      return;
+    }
+    
     if (activeRoom && voiceToken && voiceServerUrl && !voiceModalVisible) {
-      console.log('[ChatScreen] ✅ Auto-opening voice modal - credentials ready!');
+      console.log('[ChatScreen] Auto-opening voice modal - credentials ready');
       setVoiceModalVisible(true);
     }
   }, [activeRoom, voiceToken, voiceServerUrl, voiceModalVisible]);
@@ -1570,10 +1571,10 @@ const ChatScreen = () => {
   // Handle joining voice room
   const handleJoinRoom = async () => {
     try {
-      // Call joinRoom first to get credentials
+      // Reset the closed flag when joining
+      hasUserClosedVoiceModalRef.current = false;
       console.log('[ChatScreen] handleJoinRoom - calling joinRoom()');
       await joinRoom();
-      // Don't open modal here - let the auto-open effect handle it once credentials are ready
       console.log('[ChatScreen] handleJoinRoom - joinRoom completed');
     } catch (error) {
       console.error('[ChatScreen] handleJoinRoom - error:', error);
@@ -1584,8 +1585,10 @@ const ChatScreen = () => {
   // Handle leaving Vibe Call
   const handleLeaveRoom = async () => {
     try {
-      await leaveRoom();
+      // Mark that user intentionally closed before doing anything else
+      hasUserClosedVoiceModalRef.current = true;
       setVoiceModalVisible(false);
+      await leaveRoom();
     } catch (error) {
       console.error("Failed to leave Vibe Call", error);
       Alert.alert("Error", "Failed to leave Vibe Call");
