@@ -84,6 +84,7 @@ export const MediaCarousel: React.FC<MediaCarouselProps> = ({
           </View>
         )}
         <Image
+          key={`carousel-single-${imageUrls[0]}`}
           source={{ uri: imageUrls[0] }}
           style={[styles.singleImage, { borderRadius }]}
           resizeMode="cover"
@@ -109,7 +110,7 @@ export const MediaCarousel: React.FC<MediaCarouselProps> = ({
         >
           {imageUrls.map((url, index) => (
             <Pressable
-              key={index}
+              key={`carousel-page-${index}-${url}`}
               onPress={() => handleImagePress(index)}
               style={styles.pageContainer}
             >
@@ -119,6 +120,7 @@ export const MediaCarousel: React.FC<MediaCarouselProps> = ({
                 </View>
               )}
               <Image
+                key={`carousel-img-${index}-${url}`}
                 source={{ uri: url }}
                 style={[styles.image, { borderRadius }]}
                 resizeMode="cover"

@@ -178,6 +178,7 @@ const ZoomableImagePage: React.FC<ZoomableImagePageProps> = ({ imageUrl, onZoomC
       >
         <Animated.View style={animatedStyle}>
           <Image
+            key={`zoomable-${imageUrl}`}
             source={{ uri: imageUrl }}
             style={{
               width: SCREEN_WIDTH,

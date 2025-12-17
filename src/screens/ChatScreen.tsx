@@ -1463,6 +1463,7 @@ const ReactionDetailsModal = ({
                 >
                   {user?.image ? (
                     <Image
+                      key={`user-avatar-${user.id}-${user.image}`}
                       source={{ uri: getFullImageUrl(user.image) }}
                       style={{
                         width: 40,
@@ -6694,6 +6695,7 @@ const ChatScreen = () => {
                   )}
                   {/* Actual Image */}
                   <Image
+                    key={`${message.id}-${localUri || message.imageUrl}`}
                     source={{ uri: localUri || (() => {
                       const fullUrl = getFullImageUrl(message.imageUrl);
                       console.log(`[ChatScreen] Loading image for message ${message.id}:`, {
@@ -7089,6 +7091,7 @@ const ChatScreen = () => {
                       <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                         {replyToMessage?.imageUrl && (
                           <Image
+                            key={`reply-${replyToMessage.id}-${replyToMessage.imageUrl}`}
                             source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
                             style={{ width: 36, height: 36, borderRadius: 6, marginRight: 6 }}
                             contentFit="cover"
@@ -7836,7 +7839,7 @@ const ChatScreen = () => {
               >
                 {selectedImages.map((imageUri, index) => (
                   <View
-                    key={index}
+                    key={`selected-${index}-${imageUri}`}
                     style={{
                       borderRadius: 12,
                       overflow: "hidden",
@@ -7848,6 +7851,7 @@ const ChatScreen = () => {
                   >
                     <View style={{ position: "relative" }}>
                       <Image
+                        key={`preview-${index}-${imageUri}`}
                         source={{ uri: imageUri }}
                         style={{ width: 90, height: 120 }}
                         resizeMode="cover"
@@ -8768,6 +8772,7 @@ const ChatScreen = () => {
 
               {/* Full-screen avatar image */}
               <Image
+                key={`fullscreen-avatar-${chat.id}-${chat.image}`}
                 source={{ uri: getFullImageUrl(chat.image) }}
                 style={{
                   width: "90%",

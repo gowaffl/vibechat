@@ -273,7 +273,11 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
         What should activate this workflow?
       </Text>
 
-      <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.optionsList} 
+        contentContainerStyle={styles.optionsListContent}
+        showsVerticalScrollIndicator={false}
+      >
         {TRIGGER_TYPES.map((trigger) => {
           const Icon = trigger.icon;
           const isSelected = selectedTrigger === trigger.id;
@@ -326,7 +330,11 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
         What should happen when triggered?
       </Text>
 
-      <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.optionsList} 
+        contentContainerStyle={styles.optionsListContent}
+        showsVerticalScrollIndicator={false}
+      >
         {ACTION_TYPES.map((action) => {
           const Icon = action.icon;
           const isSelected = selectedAction === action.id;
@@ -783,7 +791,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   optionsList: {
-    maxHeight: 280,
+    maxHeight: 220,
+  },
+  optionsListContent: {
+    paddingBottom: 10,
   },
   optionCard: {
     flexDirection: "row",

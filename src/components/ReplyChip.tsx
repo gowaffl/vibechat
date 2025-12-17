@@ -72,6 +72,7 @@ export const ReplyChip: React.FC<ReplyChipProps> = ({
           <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
             {replyToMessage.imageUrl && (
               <Image
+                key={`replychip-${replyToMessage.id}-${replyToMessage.imageUrl}`}
                 source={{ uri: getFullImageUrl(replyToMessage.imageUrl) }}
                 style={{
                   width: 36,

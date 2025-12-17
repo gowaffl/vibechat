@@ -42,6 +42,7 @@ import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
 import { FullscreenVideoModal } from "@/components/FullscreenVideoModal";
 import { ShareToCommunityModal } from "@/components/Community";
+import { WorkflowBuilderModal, WorkflowList } from "@/components/Workflows";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type {
   Chat,
@@ -217,6 +218,10 @@ const GroupSettingsScreen = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [itemToShare, setItemToShare] = useState<{ type: "ai_friend" | "command"; data: any } | null>(null);
 
+  // Workflow state
+  const [showWorkflowBuilder, setShowWorkflowBuilder] = useState(false);
+  const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
+
   // Available tone chips
   const toneOptions = [
     "Professional", "Casual", "Friendly", "Humorous", "Sarcastic", "Formal", "Enthusiastic", "Calm"
@@ -234,6 +239,13 @@ const GroupSettingsScreen = () => {
     queryKey: ["aiFriends", chatId],
     queryFn: () => aiFriendsApi.getAIFriends(chatId, user?.id || ""),
     enabled: !!user?.id && !!chatId,
+  });
+
+  // Fetch workflows for this chat
+  const { data: workflows = [], isLoading: isLoadingWorkflows } = useQuery<any[]>({
+    queryKey: ["workflows", chatId],
+    queryFn: () => api.get(`/api/workflows?chatId=${chatId}`),
+    enabled: !!chatId,
   });
 
   // Subscribe to AI friend changes
@@ -672,6 +684,35 @@ const GroupSettingsScreen = () => {
       console.error("[CustomCommands] Failed to delete command:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", "Failed to delete custom command");
+    },
+  });
+
+  // Toggle workflow mutation
+  const toggleWorkflowMutation = useMutation({
+    mutationFn: ({ id, isEnabled }: { id: string; isEnabled: boolean }) =>
+      api.patch(`/api/workflows/${id}`, { isEnabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: any) => {
+      console.error("[Workflows] Failed to toggle workflow:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", "Failed to update workflow");
+    },
+  });
+
+  // Delete workflow mutation
+  const deleteWorkflowMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/workflows/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: any) => {
+      console.error("[Workflows] Failed to delete workflow:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", "Failed to delete workflow");
     },
   });
 
@@ -1372,6 +1413,7 @@ const GroupSettingsScreen = () => {
                         >
                           {thumbnailUrl ? (
                             <Image
+                              key={`media-preview-${item.id}-${thumbnailUrl}`}
                               source={{ uri: thumbnailUrl }}
                               style={{
                                 width: "100%",
@@ -1938,6 +1980,86 @@ const GroupSettingsScreen = () => {
               )}
                 </>
               )}
+            </View>
+
+            {/* AI Workflows */}
+            <View
+              className="rounded-2xl p-5 mb-4"
+              style={{
+                backgroundColor: colors.info + "1A",
+                borderWidth: 1,
+                borderColor: colors.info + "4D",
+                shadowColor: colors.info,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 2,
+              }}
+            >
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <Wand2 size={18} color={colors.info} />
+                  <Text className="text-sm font-semibold ml-2" style={{ color: colors.info }}>
+                    AI WORKFLOWS
+                  </Text>
+                </View>
+                {canEdit && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setEditingWorkflowId(null);
+                      setShowWorkflowBuilder(true);
+                    }}
+                  >
+                    <View
+                      style={{
+                        backgroundColor: `${colors.info}26`,
+                        padding: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: colors.info + "4D",
+                      }}
+                    >
+                      <Plus size={16} color={colors.info} />
+                    </View>
+                  </Pressable>
+                )}
+              </View>
+
+              <Text className="text-xs mb-3" style={{ color: colors.textSecondary }}>
+                Automate AI actions with triggers and rules. Create workflows like "When someone says 'meeting', create an event" or schedule daily summaries.
+              </Text>
+
+              <WorkflowList
+                workflows={workflows}
+                loading={isLoadingWorkflows}
+                onToggle={(workflowId, enabled) => {
+                  toggleWorkflowMutation.mutate({ id: workflowId, isEnabled: enabled });
+                }}
+                onEdit={(workflow) => {
+                  setEditingWorkflowId(workflow.id);
+                  setShowWorkflowBuilder(true);
+                }}
+                onDelete={(workflowId) => {
+                  Alert.alert(
+                    "Delete Workflow",
+                    "Are you sure you want to delete this workflow?",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => deleteWorkflowMutation.mutate(workflowId),
+                      },
+                    ]
+                  );
+                }}
+                onCreateNew={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setEditingWorkflowId(null);
+                  setShowWorkflowBuilder(true);
+                }}
+              />
             </View>
 
             {/* Custom Slash Commands */}
@@ -3374,6 +3496,22 @@ const GroupSettingsScreen = () => {
             }}
           />
         )}
+
+        {/* Workflow Builder Modal */}
+        <WorkflowBuilderModal
+          visible={showWorkflowBuilder}
+          onClose={() => {
+            setShowWorkflowBuilder(false);
+            setEditingWorkflowId(null);
+          }}
+          chatId={chatId}
+          workflowId={editingWorkflowId}
+          onSuccess={() => {
+            setShowWorkflowBuilder(false);
+            setEditingWorkflowId(null);
+            queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
+          }}
+        />
     </View>
   );
 };
