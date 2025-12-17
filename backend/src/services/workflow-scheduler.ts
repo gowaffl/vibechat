@@ -11,7 +11,7 @@
 import { db } from "../db";
 import { openai } from "../env";
 import { executeGPT51Response } from "./gpt-responses";
-import { zonedTimeToUtc, utcToZonedTime, format } from "date-fns-tz";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 // ==========================================
 // Types
@@ -67,7 +67,7 @@ function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null 
   }
 
   // Get current time in user's timezone
-  const nowInUserTz = utcToZonedTime(now, timezone);
+  const nowInUserTz = toZonedTime(now, timezone);
 
   // Daily format: "daily:HH:MM" (in user's local time)
   const dailyMatch = schedule.match(/^daily:(\d{2}):(\d{2})$/);
@@ -84,7 +84,7 @@ function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null 
     }
     
     // Convert user's local time to UTC
-    return zonedTimeToUtc(nextInUserTz, timezone);
+    return fromZonedTime(nextInUserTz, timezone);
   }
 
   // Weekly format: "weekly:day:HH:MM" (in user's local time)
@@ -110,7 +110,7 @@ function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null 
     nextInUserTz.setDate(nextInUserTz.getDate() + daysUntil);
     
     // Convert user's local time to UTC
-    return zonedTimeToUtc(nextInUserTz, timezone);
+    return fromZonedTime(nextInUserTz, timezone);
   }
 
   // Simple cron: "minute hour * * weekday" (in user's local time)
@@ -142,7 +142,7 @@ function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null 
     }
 
     // Convert user's local time to UTC
-    return zonedTimeToUtc(nextInUserTz, timezone);
+    return fromZonedTime(nextInUserTz, timezone);
   }
 
   return null;
