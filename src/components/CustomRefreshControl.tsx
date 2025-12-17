@@ -3,6 +3,7 @@ import { View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LuxeLogoLoader } from './LuxeLogoLoader';
 import { GradientText } from './GradientText';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface CustomRefreshControlProps {
   refreshing: boolean;
@@ -16,6 +17,7 @@ export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({
   topOffset
 }) => {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
   
   if (!refreshing) return null;
 
@@ -38,19 +40,19 @@ export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({
     >
       <View
         style={{
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backgroundColor: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.9)',
           borderRadius: 20,
           paddingVertical: 12,
           paddingHorizontal: 20,
           flexDirection: 'row',
           alignItems: 'center',
-          shadowColor: '#4FC3F7',
+          shadowColor: isDark ? '#4FC3F7' : '#007AFF',
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.4,
           shadowRadius: 12,
           elevation: 10,
           borderWidth: 1,
-          borderColor: 'rgba(79, 195, 247, 0.3)',
+          borderColor: isDark ? 'rgba(79, 195, 247, 0.3)' : 'rgba(0, 122, 255, 0.2)',
         }}
       >
         <LuxeLogoLoader size={24} />

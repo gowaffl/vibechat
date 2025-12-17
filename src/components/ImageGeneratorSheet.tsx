@@ -28,6 +28,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -65,6 +66,7 @@ import { ShimmeringText } from "@/components/ShimmeringText";
 
 // Loading Text Component (ChatGPT style)
 const LoadingText = ({ text = "Generating image..." }: { text?: string }) => {
+  const { colors, isDark } = useTheme();
   return (
     <View style={{ overflow: 'hidden', flexDirection: 'row', alignItems: 'center' }}>
        <ShimmeringText 
@@ -72,9 +74,9 @@ const LoadingText = ({ text = "Generating image..." }: { text?: string }) => {
            style={{
              fontSize: 14,
              fontWeight: '600',
-             color: 'rgba(255,255,255,0.3)',
+             color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
            }}
-           shimmerColor="rgba(255, 255, 255, 0.9)"
+           shimmerColor={isDark ? "rgba(255, 255, 255, 0.9)" : "rgba(0, 0, 0, 0.9)"}
            duration={1200}
         />
     </View>
@@ -84,16 +86,20 @@ const LoadingText = ({ text = "Generating image..." }: { text?: string }) => {
 // Shimmer Loader for Image Container
 const ShimmerImageLoader = () => {
   const { shimmerStyle } = useShimmerAnimation();
+  const { colors, isDark } = useTheme();
 
   return (
     <View style={styles.shimmerContainer}>
       <LinearGradient
-        colors={['#1a1a1a', '#222', '#1a1a1a']}
+        colors={isDark ? ['#1a1a1a', '#222', '#1a1a1a'] : ['#f0f0f0', '#ffffff', '#f0f0f0']}
         style={StyleSheet.absoluteFill}
       />
       <Animated.View style={[StyleSheet.absoluteFill, shimmerStyle]}>
         <LinearGradient
-          colors={['transparent', 'rgba(255, 255, 255, 0.05)', 'transparent']}
+          colors={isDark 
+            ? ['transparent', 'rgba(255, 255, 255, 0.05)', 'transparent']
+            : ['transparent', 'rgba(0, 0, 0, 0.05)', 'transparent']
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={{ width: SCREEN_WIDTH, height: '100%' }}
@@ -102,8 +108,8 @@ const ShimmerImageLoader = () => {
       <View style={styles.centerContent}>
         <ShimmeringText 
            text="Creating your masterpiece..."
-           style={styles.loadingText}
-           shimmerColor="#FFFFFF"
+           style={[styles.loadingText, { color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)' }]}
+           shimmerColor={isDark ? "#FFFFFF" : "#000000"}
            duration={1200}
         />
       </View>
@@ -134,6 +140,8 @@ export const ImageGenerationPill = ({
   isVisible: boolean;
   style?: any;
 }) => {
+  const { colors, isDark } = useTheme();
+
   if (!isVisible) return null;
 
   return (
@@ -143,18 +151,22 @@ export const ImageGenerationPill = ({
       style={[styles.dockedWrapper, style]}
     >
       <TouchableOpacity 
-        style={styles.pillContainer}
+        style={[styles.pillContainer, { 
+          backgroundColor: isDark ? 'rgba(20,20,20,0.9)' : 'rgba(255,255,255,0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          shadowColor: isDark ? "#000" : "#000",
+        }]}
         onPress={onPress}
         activeOpacity={0.8}
       >
-        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={30} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
         <View style={styles.pillContent}>
           {isProcessing ? (
             <LoadingText text="Generating..." />
           ) : (
             <View style={styles.readyContainer}>
-              <Wand2 size={16} color="#007AFF" style={{ marginRight: 8 }} />
-              <Text style={styles.readyText}>Image Ready • Tap to view</Text>
+              <Wand2 size={16} color={colors.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.readyText, { color: colors.text }]}>Image Ready • Tap to view</Text>
             </View>
           )}
         </View>
@@ -174,6 +186,7 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
   initialPrompt = "",
 }) => {
   const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const { colors, isDark } = useTheme();
   
   // Snap points: Only expanded (95% to show more content)
   const snapPoints = useMemo(() => ['95%'], []);
@@ -223,8 +236,11 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
     return (
       <View style={styles.expandedContainer}>
         {/* Floating Image Container (Separate Look) */}
-        <View style={styles.imageCardContainer}>
-          <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={[styles.imageCardContainer, { 
+          backgroundColor: isDark ? '#000' : '#f5f5f5',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+        }]}>
+          <BlurView intensity={20} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
           {imageUrl ? (
             <Image
               source={{ uri: imageUrl }}
@@ -238,8 +254,8 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
           
           {/* Overlay for "Refining..." state if image exists but processing again */}
           {imageUrl && isProcessing && (
-            <View style={styles.overlayContainer}>
-               <BlurView intensity={10} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[styles.overlayContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)' }]}>
+               <BlurView intensity={10} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
                <LoadingText text="Refining..." />
             </View>
           )}
@@ -249,22 +265,32 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
         <View style={styles.controlsSection}>
           {isEditing ? (
             <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.inputModeContainer}>
-              <Text style={styles.helperText}>How should we change this?</Text>
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>How should we change this?</Text>
               <BottomSheetTextInput
-                style={styles.input}
+                style={[styles.input, { 
+                  backgroundColor: colors.inputBackground, 
+                  color: colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                }]}
                 placeholder="Make it cyberpunk, add a cat..."
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor={colors.inputPlaceholder}
                 value={editPrompt}
                 onChangeText={setEditPrompt}
                 returnKeyType="send"
                 onSubmitEditing={handleEditSubmit}
               />
               <View style={styles.rowButtons}>
-                 <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsEditing(false)}>
-                   <Text style={styles.buttonText}>Cancel</Text>
+                 <TouchableOpacity 
+                   style={[styles.secondaryButton, { 
+                     backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                     borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                   }]} 
+                   onPress={() => setIsEditing(false)}
+                 >
+                   <Text style={[styles.buttonText, { color: colors.text }]}>Cancel</Text>
                  </TouchableOpacity>
                  <TouchableOpacity 
-                    style={[styles.primaryButton, !editPrompt.trim() && styles.disabledButton]} 
+                    style={[styles.primaryButton, { backgroundColor: colors.primary }, !editPrompt.trim() && styles.disabledButton]} 
                     onPress={handleEditSubmit}
                     disabled={!editPrompt.trim()}
                  >
@@ -274,33 +300,46 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
             </Animated.View>
           ) : isFinalizing ? (
             <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.inputModeContainer}>
-              <Text style={styles.helperText}>Add a caption (optional)</Text>
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>Add a caption (optional)</Text>
               <BottomSheetTextInput
-                style={styles.input}
+                style={[styles.input, { 
+                  backgroundColor: colors.inputBackground, 
+                  color: colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                }]}
                 placeholder="Type a caption..."
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor={colors.inputPlaceholder}
                 value={finalCaption}
                 onChangeText={setFinalCaption}
                 returnKeyType="send"
                 onSubmitEditing={handleFinalize}
               />
               <View style={styles.rowButtons}>
-                 <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsFinalizing(false)}>
-                   <Text style={styles.buttonText}>Back</Text>
+                 <TouchableOpacity 
+                   style={[styles.secondaryButton, { 
+                     backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                     borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                   }]} 
+                   onPress={() => setIsFinalizing(false)}
+                 >
+                   <Text style={[styles.buttonText, { color: colors.text }]}>Back</Text>
                  </TouchableOpacity>
-                 <TouchableOpacity style={styles.primaryButton} onPress={handleFinalize}>
+                 <TouchableOpacity style={[styles.primaryButton, { backgroundColor: colors.primary }]} onPress={handleFinalize}>
                    <Text style={styles.buttonText}>Send</Text>
                  </TouchableOpacity>
               </View>
             </Animated.View>
           ) : (
             <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.actionButtonsContainer}>
-              {/* Cancel (Minimize) - wait, X should probably be CANCEL generation? User said: "if they X out... it should go away" */}
+              {/* Cancel (Minimize) */}
               <TouchableOpacity onPress={onClose} style={styles.iconButton}>
-                <View style={[styles.iconCircle, { backgroundColor: 'rgba(255, 69, 58, 0.15)' }]}>
+                <View style={[styles.iconCircle, { 
+                  backgroundColor: isDark ? 'rgba(255, 69, 58, 0.15)' : 'rgba(255, 69, 58, 0.1)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                }]}>
                   <X size={24} color="#FF453A" />
                 </View>
-                <Text style={styles.iconLabel}>Cancel</Text>
+                <Text style={[styles.iconLabel, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
 
               {/* Edit */}
@@ -309,10 +348,13 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
                 disabled={!imageUrl || isProcessing}
                 style={[styles.iconButton, (!imageUrl || isProcessing) && styles.disabledOpacity]}
               >
-                <View style={styles.iconCircle}>
-                  <Edit2 size={24} color="#FFF" />
+                <View style={[styles.iconCircle, {
+                   backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                   borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                }]}>
+                  <Edit2 size={24} color={colors.text} />
                 </View>
-                <Text style={styles.iconLabel}>Edit</Text>
+                <Text style={[styles.iconLabel, { color: colors.textSecondary }]}>Edit</Text>
               </TouchableOpacity>
 
               {/* Send */}
@@ -321,10 +363,10 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
                 disabled={!imageUrl || isProcessing}
                 style={[styles.iconButton, (!imageUrl || isProcessing) && styles.disabledOpacity]}
               >
-                <View style={[styles.iconCircle, styles.sendCircle]}>
+                <View style={[styles.iconCircle, styles.sendCircle, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                   <Send size={24} color="#FFF" fill="white" />
                 </View>
-                <Text style={styles.iconLabel}>Send</Text>
+                <Text style={[styles.iconLabel, { color: colors.textSecondary }]}>Send</Text>
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -340,8 +382,13 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
       index={0}
       onDismiss={handleDismiss}
       enablePanDownToClose={true} 
-      backgroundStyle={styles.sheetBackground}
-      handleIndicatorStyle={styles.handleIndicator}
+      backgroundStyle={[styles.sheetBackground, { 
+        backgroundColor: isDark ? '#050505' : colors.background,
+        shadowColor: colors.glassShadow,
+      }]}
+      handleIndicatorStyle={[styles.handleIndicator, { 
+        backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' 
+      }]}
       keyboardBehavior="interactive"
       android_keyboardInputMode="adjustResize"
       enableDismissOnClose={true}

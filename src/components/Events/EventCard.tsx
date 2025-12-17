@@ -3,7 +3,7 @@ import { View, Text, Pressable, ScrollView, Animated } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import LiquidGlassView from "../LiquidGlass/LiquidGlassView";
-import { variantColorMap, LiquidGlassVariant } from "../LiquidGlass/variants";
+import { getVariantColors, LiquidGlassVariant } from "../LiquidGlass/variants";
 import {
   Trash2,
   ChevronDown,
@@ -27,6 +27,7 @@ import {
   Download,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/contexts/ThemeContext";
 import AddToCalendar from "./AddToCalendar";
 import type { Event } from "@shared/contracts";
 
@@ -53,6 +54,7 @@ const EventCard: React.FC<EventCardProps> = ({
   onFinalize,
   isCompact = false,
 }) => {
+  const { colors, isDark } = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
@@ -157,7 +159,7 @@ const EventCard: React.FC<EventCardProps> = ({
   };
 
   const variant = getVariant();
-  const variantColors = variantColorMap[variant];
+  const variantColors = getVariantColors(variant, isDark);
 
   const handleExpand = () => {
     const toValue = isExpanded ? 0 : 1;
@@ -181,7 +183,7 @@ const EventCard: React.FC<EventCardProps> = ({
   return (
     <LiquidGlassView
       intensity={30}
-      tint="dark"
+      tint={colors.blurTint}
       borderRadius={24}
       gradientColors={variantColors.gradientColors}
       borderColor={variantColors.borderColor}
@@ -217,7 +219,7 @@ const EventCard: React.FC<EventCardProps> = ({
                     }}
                   >
                     <statusStyle.Icon size={12} color="#FFFFFF" strokeWidth={2.5} />
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: "#FFFFFF", letterSpacing: 0.5 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text, letterSpacing: 0.5 }}>
                       {statusStyle.label}
                     </Text>
                   </LinearGradient>
@@ -228,16 +230,16 @@ const EventCard: React.FC<EventCardProps> = ({
                         marginLeft: 10,
                         flexDirection: "row",
                         alignItems: "center",
-                        backgroundColor: "rgba(255, 255, 255, 0.08)",
+                        backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                         paddingHorizontal: 10,
                         paddingVertical: 5,
                         borderRadius: 16,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.12)",
+                        borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)",
                       }}
                     >
-                      <Users size={12} color="rgba(255, 255, 255, 0.7)" strokeWidth={2.5} />
-                      <Text style={{ fontSize: 12, fontWeight: "600", color: "rgba(255, 255, 255, 0.7)", marginLeft: 4 }}>
+                      <Users size={12} color={colors.textSecondary} strokeWidth={2.5} />
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textSecondary, marginLeft: 4 }}>
                         {totalRSVPs}
                       </Text>
                     </View>
@@ -251,19 +253,19 @@ const EventCard: React.FC<EventCardProps> = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: "rgba(255, 255, 255, 0.08)",
+                      backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
                     }}
                   >
-                    <TypeIcon size={18} color="rgba(255, 255, 255, 0.9)" strokeWidth={2} />
+                    <TypeIcon size={18} color={colors.text} strokeWidth={2} />
                   </View>
                   <Text
                     style={{
                       fontSize: 22,
                       fontWeight: "700",
-                      color: "#FFFFFF",
+                      color: colors.text,
                       flex: 1,
                       letterSpacing: -0.5,
                     }}
@@ -278,7 +280,7 @@ const EventCard: React.FC<EventCardProps> = ({
                   <Text
                     style={{
                       fontSize: 15,
-                      color: "rgba(255, 255, 255, 0.6)",
+                      color: colors.textSecondary,
                       marginTop: 6,
                       lineHeight: 21,
                     }}
@@ -397,11 +399,11 @@ const EventCard: React.FC<EventCardProps> = ({
                     width: 44,
                     height: 44,
                     borderRadius: 22,
-                    backgroundColor: "rgba(255, 255, 255, 0.08)",
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                     alignItems: "center",
                     justifyContent: "center",
                     borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.15)",
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.08)",
                   }}
                 >
                   <Animated.View
@@ -414,7 +416,7 @@ const EventCard: React.FC<EventCardProps> = ({
                       }],
                     }}
                   >
-                    <ChevronDown size={22} color="#FFFFFF" strokeWidth={2.5} />
+                    <ChevronDown size={22} color={colors.text} strokeWidth={2.5} />
                   </Animated.View>
                 </View>
               </View>
@@ -428,18 +430,18 @@ const EventCard: React.FC<EventCardProps> = ({
               {event.description && (
                 <View
                   style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.04)",
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)",
                     borderRadius: 16,
                     padding: 16,
                     marginBottom: 16,
                     borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.08)",
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)",
                   }}
                 >
                   <Text
                     style={{
                       fontSize: 15,
-                      color: "rgba(255, 255, 255, 0.85)",
+                      color: colors.text,
                       lineHeight: 22,
                     }}
                   >
@@ -479,7 +481,7 @@ const EventCard: React.FC<EventCardProps> = ({
                         style={{
                           fontSize: 12,
                           fontWeight: "600",
-                          color: "rgba(255, 255, 255, 0.6)",
+                          color: colors.textSecondary,
                           marginBottom: 3,
                           textTransform: "uppercase",
                           letterSpacing: 0.5,
@@ -491,7 +493,7 @@ const EventCard: React.FC<EventCardProps> = ({
                         style={{
                           fontSize: 16,
                           fontWeight: "700",
-                          color: "#FFFFFF",
+                          color: colors.text,
                         }}
                       >
                         {new Date(event.eventDate).toLocaleString("en-US", {
@@ -514,12 +516,12 @@ const EventCard: React.FC<EventCardProps> = ({
               {datetimeOptions.length > 0 && (
                 <View style={{ marginBottom: 24 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-                    <Vote size={16} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                    <Vote size={16} color={colors.textSecondary} strokeWidth={2} />
                     <Text
                       style={{
                         fontSize: 13,
                         fontWeight: "700",
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         textTransform: "uppercase",
                         marginLeft: 8,
                         letterSpacing: 1,
@@ -555,7 +557,7 @@ const EventCard: React.FC<EventCardProps> = ({
                             transform: [{ scale: pressed ? 0.97 : 1 }],
                           })}
                         >
-                          <BlurView intensity={30} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                          <BlurView intensity={30} tint={colors.blurTint} style={{ borderRadius: 18, overflow: "hidden" }}>
                             {isSelected && (
                               <LinearGradient
                                 colors={["rgba(10, 132, 255, 0.4)", "rgba(10, 132, 255, 0.2)"]}
@@ -586,7 +588,7 @@ const EventCard: React.FC<EventCardProps> = ({
                                 style={{
                                   fontSize: 15,
                                   fontWeight: "700",
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                   marginBottom: 8,
                                   lineHeight: 20,
                                 }}
@@ -626,12 +628,12 @@ const EventCard: React.FC<EventCardProps> = ({
               {locationOptions.length > 0 && (
                 <View style={{ marginBottom: 24 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-                    <Vote size={16} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                    <Vote size={16} color={colors.textSecondary} strokeWidth={2} />
                     <Text
                       style={{
                         fontSize: 13,
                         fontWeight: "700",
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         textTransform: "uppercase",
                         marginLeft: 8,
                         letterSpacing: 1,
@@ -661,7 +663,7 @@ const EventCard: React.FC<EventCardProps> = ({
                             transform: [{ scale: pressed ? 0.97 : 1 }],
                           })}
                         >
-                          <BlurView intensity={30} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                          <BlurView intensity={30} tint={colors.blurTint} style={{ borderRadius: 18, overflow: "hidden" }}>
                             {isSelected && (
                               <LinearGradient
                                 colors={["rgba(10, 132, 255, 0.4)", "rgba(10, 132, 255, 0.2)"]}
@@ -696,7 +698,7 @@ const EventCard: React.FC<EventCardProps> = ({
                                 style={{
                                   fontSize: 15,
                                   fontWeight: "700",
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                 }}
                               >
                                 {option.optionValue}
@@ -732,12 +734,12 @@ const EventCard: React.FC<EventCardProps> = ({
               {activityOptions.length > 0 && (
                 <View style={{ marginBottom: 24 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-                    <Vote size={16} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                    <Vote size={16} color={colors.textSecondary} strokeWidth={2} />
                     <Text
                       style={{
                         fontSize: 13,
                         fontWeight: "700",
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         textTransform: "uppercase",
                         marginLeft: 8,
                         letterSpacing: 1,
@@ -767,7 +769,7 @@ const EventCard: React.FC<EventCardProps> = ({
                             transform: [{ scale: pressed ? 0.97 : 1 }],
                           })}
                         >
-                          <BlurView intensity={30} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                          <BlurView intensity={30} tint={colors.blurTint} style={{ borderRadius: 18, overflow: "hidden" }}>
                             {isSelected && (
                               <LinearGradient
                                 colors={["rgba(10, 132, 255, 0.4)", "rgba(10, 132, 255, 0.2)"]}
@@ -802,7 +804,7 @@ const EventCard: React.FC<EventCardProps> = ({
                                 style={{
                                   fontSize: 15,
                                   fontWeight: "700",
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                 }}
                               >
                                 {option.optionValue}
@@ -846,12 +848,12 @@ const EventCard: React.FC<EventCardProps> = ({
               >
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Users size={16} color="rgba(255, 255, 255, 0.7)" strokeWidth={2} />
+                    <Users size={16} color={colors.textSecondary} strokeWidth={2} />
                     <Text
                       style={{
                         fontSize: 13,
                         fontWeight: "700",
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         textTransform: "uppercase",
                         marginLeft: 8,
                         letterSpacing: 1,
@@ -861,7 +863,7 @@ const EventCard: React.FC<EventCardProps> = ({
                     </Text>
                   </View>
                   {totalRSVPs > 0 && (
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: "rgba(255, 255, 255, 0.5)" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textTertiary }}>
                       {totalRSVPs} {totalRSVPs === 1 ? "response" : "responses"}
                     </Text>
                   )}
@@ -916,7 +918,7 @@ const EventCard: React.FC<EventCardProps> = ({
                               style={{
                                 fontSize: 14,
                                 fontWeight: "700",
-                                color: "#FFFFFF",
+                                color: colors.text,
                                 marginBottom: 4,
                               }}
                             >
@@ -933,7 +935,7 @@ const EventCard: React.FC<EventCardProps> = ({
                             </Text>
                           </LinearGradient>
                         ) : (
-                          <BlurView intensity={20} tint="dark">
+                          <BlurView intensity={20} tint={colors.blurTint}>
                             <View
                               style={{
                                 paddingVertical: 16,
@@ -945,7 +947,7 @@ const EventCard: React.FC<EventCardProps> = ({
                                 alignItems: "center",
                               }}
                             >
-                              <Icon size={20} color="rgba(255, 255, 255, 0.5)" strokeWidth={2} style={{ marginBottom: 6 }} />
+                              <Icon size={20} color={colors.textTertiary} strokeWidth={2} style={{ marginBottom: 6 }} />
                               <Text
                                 style={{
                                   fontSize: 14,
@@ -960,7 +962,7 @@ const EventCard: React.FC<EventCardProps> = ({
                                 style={{
                                   fontSize: 12,
                                   fontWeight: "600",
-                                  color: "rgba(255, 255, 255, 0.5)",
+                                  color: colors.textTertiary,
                                 }}
                               >
                                 {count} ({percentage}%)
@@ -1013,11 +1015,11 @@ const EventCard: React.FC<EventCardProps> = ({
                     </Text>
                     {/* Show Event Date */}
                     <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-                      <Calendar size={14} color="rgba(255, 255, 255, 0.6)" strokeWidth={2} />
+                      <Calendar size={14} color={colors.textSecondary} strokeWidth={2} />
                       <Text
                         style={{
                           fontSize: 13,
-                          color: "rgba(255, 255, 255, 0.6)",
+                          color: colors.textSecondary,
                           marginLeft: 6,
                           fontWeight: "500",
                         }}
@@ -1102,7 +1104,7 @@ const EventCard: React.FC<EventCardProps> = ({
                       style={{
                         fontSize: 21,
                         fontWeight: "700",
-                        color: "#FFFFFF",
+                        color: colors.text,
                         marginBottom: 10,
                         textAlign: "center",
                         letterSpacing: -0.5,
@@ -1115,7 +1117,7 @@ const EventCard: React.FC<EventCardProps> = ({
                     <Text
                       style={{
                         fontSize: 14,
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         marginBottom: 24,
                         textAlign: "center",
                         lineHeight: 20,
@@ -1162,7 +1164,7 @@ const EventCard: React.FC<EventCardProps> = ({
                           <Text style={{ 
                             fontSize: 17, 
                             fontWeight: "700", 
-                            color: "#FFFFFF", 
+                            color: colors.text, 
                             letterSpacing: -0.3,
                           }}>
                             Delete Event
@@ -1250,7 +1252,7 @@ const EventCard: React.FC<EventCardProps> = ({
                       style={{
                         fontSize: 21,
                         fontWeight: "700",
-                        color: "#FFFFFF",
+                        color: colors.text,
                         marginBottom: 10,
                         textAlign: "center",
                         letterSpacing: -0.5,
@@ -1263,7 +1265,7 @@ const EventCard: React.FC<EventCardProps> = ({
                     <Text
                       style={{
                         fontSize: 14,
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         marginBottom: 24,
                         textAlign: "center",
                         lineHeight: 20,
@@ -1310,7 +1312,7 @@ const EventCard: React.FC<EventCardProps> = ({
                           <Text style={{ 
                             fontSize: 17, 
                             fontWeight: "700", 
-                            color: "#FFFFFF", 
+                            color: colors.text, 
                             letterSpacing: -0.3,
                           }}>
                             Finalize Event

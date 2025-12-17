@@ -24,6 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import type { CustomSlashCommand } from "@/shared/contracts";
+import { useTheme } from "@/contexts/ThemeContext";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -58,6 +59,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   const keyboard = useAnimatedKeyboard();
   const isVisible = useSharedValue(0);
   const dragY = useSharedValue(0);
+  const { colors, isDark } = useTheme();
   
   // Track if we should actually render the content (to handle exit animation)
   // We keep rendering until animation is done
@@ -123,19 +125,6 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   }));
 
   const sheetStyle = useAnimatedStyle(() => {
-    // Calculate dynamic max height based on keyboard
-    // If keyboard is open (height > 0), we want to sit on top of it.
-    // TranslateY:
-    // Hidden: SCREEN_HEIGHT
-    // Visible: 0 (but 0 means "at the bottom", so we need to shift up by keyboard height if we are absolute bottom:0)
-    
-    // Actually, useAnimatedKeyboard gives precise height.
-    // We want `bottom: 0` and `transform: translateY(-keyboard.height)`.
-    // Plus slideIn offset.
-    
-    // If isVisible is 0, offset is SCREEN_HEIGHT.
-    // If isVisible is 1, offset is 0.
-    
     const slideOffset = interpolate(isVisible.value, [0, 1], [SCREEN_HEIGHT, 0]);
     
     // HIGH-17: Limit menu height to 60% of screen for one-hand friendly access
@@ -194,7 +183,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
           {
             position: "absolute",
             top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            backgroundColor: isDark ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.2)",
           },
           backdropStyle
         ]}
@@ -216,8 +205,8 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
         ]}
       >
         <BlurView
-          intensity={100}
-          tint="dark"
+          intensity={Platform.OS === "ios" ? (isDark ? 100 : 80) : 100}
+          tint={isDark ? "dark" : "light"}
           style={{
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
@@ -227,10 +216,10 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
           }}
         >
           <LinearGradient
-            colors={[
-              "rgba(28, 28, 30, 0.98)",
-              "rgba(18, 18, 20, 0.98)",
-            ]}
+            colors={isDark 
+                ? ["rgba(28, 28, 30, 0.98)", "rgba(18, 18, 20, 0.98)"]
+                : ["rgba(255, 255, 255, 0.98)", "rgba(242, 242, 247, 0.98)"]
+            }
             style={{
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
@@ -249,7 +238,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                 style={{
                   width: 40,
                   height: 5,
-                  backgroundColor: "rgba(255, 255, 255, 0.25)",
+                  backgroundColor: isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 0, 0, 0.15)",
                   borderRadius: 2.5,
                 }}
               />
@@ -277,15 +266,18 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
+                    <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={{ borderRadius: 16, overflow: "hidden" }}>
                       <LinearGradient
-                        colors={["rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.08)"]}
+                        colors={isDark
+                            ? ["rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.08)"]
+                            : ["rgba(0, 122, 255, 0.1)", "rgba(0, 122, 255, 0.05)"]
+                        }
                         style={styles.compactButtonGradient}
                       >
-                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(0, 122, 255, 0.2)", shadowColor: "#007AFF" }]}>
+                        <View style={[styles.compactIconContainer, { backgroundColor: isDark ? "rgba(0, 122, 255, 0.2)" : "rgba(0, 122, 255, 0.1)", shadowColor: "#007AFF" }]}>
                           <Camera size={20} color="#007AFF" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.compactButtonText}>Camera</Text>
+                        <Text style={[styles.compactButtonText, { color: colors.text }]}>Camera</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -298,15 +290,18 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
+                    <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={{ borderRadius: 16, overflow: "hidden" }}>
                       <LinearGradient
-                        colors={["rgba(138, 43, 226, 0.15)", "rgba(138, 43, 226, 0.08)"]}
+                        colors={isDark
+                            ? ["rgba(138, 43, 226, 0.15)", "rgba(138, 43, 226, 0.08)"]
+                            : ["rgba(138, 43, 226, 0.1)", "rgba(138, 43, 226, 0.05)"]
+                        }
                         style={styles.compactButtonGradient}
                       >
-                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(138, 43, 226, 0.2)", shadowColor: "#8A2BE2" }]}>
+                        <View style={[styles.compactIconContainer, { backgroundColor: isDark ? "rgba(138, 43, 226, 0.2)" : "rgba(138, 43, 226, 0.1)", shadowColor: "#8A2BE2" }]}>
                           <ImageIcon size={20} color="#8A2BE2" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.compactButtonText}>Photos</Text>
+                        <Text style={[styles.compactButtonText, { color: colors.text }]}>Photos</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -319,15 +314,18 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
+                    <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={{ borderRadius: 16, overflow: "hidden" }}>
                       <LinearGradient
-                        colors={["rgba(255, 69, 58, 0.15)", "rgba(255, 69, 58, 0.08)"]}
+                        colors={isDark
+                            ? ["rgba(255, 69, 58, 0.15)", "rgba(255, 69, 58, 0.08)"]
+                            : ["rgba(255, 69, 58, 0.1)", "rgba(255, 69, 58, 0.05)"]
+                        }
                         style={styles.compactButtonGradient}
                       >
-                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(255, 69, 58, 0.2)", shadowColor: "#FF453A" }]}>
+                        <View style={[styles.compactIconContainer, { backgroundColor: isDark ? "rgba(255, 69, 58, 0.2)" : "rgba(255, 69, 58, 0.1)", shadowColor: "#FF453A" }]}>
                           <Video size={20} color="#FF453A" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.compactButtonText}>Videos</Text>
+                        <Text style={[styles.compactButtonText, { color: colors.text }]}>Videos</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -340,15 +338,18 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                       transform: [{ scale: pressed ? 0.98 : 1 }],
                     })}
                   >
-                    <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: "hidden" }}>
+                    <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={{ borderRadius: 16, overflow: "hidden" }}>
                       <LinearGradient
-                        colors={["rgba(48, 209, 88, 0.15)", "rgba(48, 209, 88, 0.08)"]}
+                        colors={isDark
+                            ? ["rgba(48, 209, 88, 0.15)", "rgba(48, 209, 88, 0.08)"]
+                            : ["rgba(48, 209, 88, 0.1)", "rgba(48, 209, 88, 0.05)"]
+                        }
                         style={styles.compactButtonGradient}
                       >
-                        <View style={[styles.compactIconContainer, { backgroundColor: "rgba(48, 209, 88, 0.2)", shadowColor: "#30D158" }]}>
+                        <View style={[styles.compactIconContainer, { backgroundColor: isDark ? "rgba(48, 209, 88, 0.2)" : "rgba(48, 209, 88, 0.1)", shadowColor: "#30D158" }]}>
                           <BarChart3 size={20} color="#30D158" strokeWidth={2.5} />
                         </View>
-                        <Text style={styles.compactButtonText}>Poll</Text>
+                        <Text style={[styles.compactButtonText, { color: colors.text }]}>Poll</Text>
                       </LinearGradient>
                     </BlurView>
                   </Pressable>
@@ -357,7 +358,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
 
               {/* AI Tools */}
               <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 }}>
-                <Text style={styles.sectionHeader}>AI Tools</Text>
+                <Text style={[styles.sectionHeader, { color: colors.textTertiary }]}>AI Tools</Text>
                 <View style={{ gap: 8 }}>
                   {builtInCommands.map((cmd) => {
                     const Icon = cmd.icon;
@@ -371,7 +372,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                           transform: [{ scale: pressed ? 0.98 : 1 }],
                         })}
                       >
-                        <BlurView intensity={25} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                        <BlurView intensity={25} tint={isDark ? "dark" : "light"} style={{ borderRadius: 18, overflow: "hidden" }}>
                           <LinearGradient
                             colors={[`${cmd.color}15`, `${cmd.color}08`]}
                             style={[styles.commandGradient, { borderColor: `${cmd.color}30` }]}
@@ -380,8 +381,8 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                               <Icon size={20} color={cmd.color} strokeWidth={2.5} />
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.commandTitle}>{cmd.command}</Text>
-                              <Text style={styles.commandDesc}>{cmd.description}</Text>
+                              <Text style={[styles.commandTitle, { color: colors.text }]}>{cmd.command}</Text>
+                              <Text style={[styles.commandDesc, { color: colors.textSecondary }]}>{cmd.description}</Text>
                             </View>
                           </LinearGradient>
                         </BlurView>
@@ -394,9 +395,9 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
               {/* Custom Commands */}
               <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, marginLeft: 4 }}>
-                  <Text style={styles.sectionHeader}>Custom Commands</Text>
+                  <Text style={[styles.sectionHeader, { color: colors.textTertiary }]}>Custom Commands</Text>
                   {customCommands.length > 0 && (
-                    <Text style={styles.counter}>{customCommands.length}</Text>
+                    <Text style={[styles.counter, { color: colors.textTertiary }]}>{customCommands.length}</Text>
                   )}
                 </View>
 
@@ -412,17 +413,20 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                           transform: [{ scale: pressed ? 0.98 : 1 }],
                         })}
                       >
-                        <BlurView intensity={25} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                        <BlurView intensity={25} tint={isDark ? "dark" : "light"} style={{ borderRadius: 18, overflow: "hidden" }}>
                           <LinearGradient
-                            colors={["rgba(255, 159, 10, 0.15)", "rgba(255, 159, 10, 0.08)"]}
+                            colors={isDark 
+                                ? ["rgba(255, 159, 10, 0.15)", "rgba(255, 159, 10, 0.08)"]
+                                : ["rgba(255, 159, 10, 0.1)", "rgba(255, 159, 10, 0.05)"]
+                            }
                             style={[styles.commandGradient, { borderColor: "rgba(255, 159, 10, 0.3)" }]}
                           >
                             <View style={[styles.commandIcon, { backgroundColor: "rgba(255, 159, 10, 0.25)", shadowColor: "#FF9F0A" }]}>
                               <Zap size={20} color="#FF9F0A" strokeWidth={2.5} />
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.commandTitle}>{cmd.command}</Text>
-                              <Text style={styles.commandDesc} numberOfLines={1}>{cmd.prompt}</Text>
+                              <Text style={[styles.commandTitle, { color: colors.text }]}>{cmd.command}</Text>
+                              <Text style={[styles.commandDesc, { color: colors.textSecondary }]} numberOfLines={1}>{cmd.prompt}</Text>
                             </View>
                           </LinearGradient>
                         </BlurView>
@@ -439,15 +443,18 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                     transform: [{ scale: pressed ? 0.98 : 1 }],
                   })}
                 >
-                  <BlurView intensity={30} tint="dark" style={{ borderRadius: 18, overflow: "hidden" }}>
+                  <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={{ borderRadius: 18, overflow: "hidden" }}>
                     <LinearGradient
-                      colors={["rgba(255, 159, 10, 0.12)", "rgba(255, 159, 10, 0.06)"]}
+                      colors={isDark
+                          ? ["rgba(255, 159, 10, 0.12)", "rgba(255, 159, 10, 0.06)"]
+                          : ["rgba(255, 159, 10, 0.1)", "rgba(255, 159, 10, 0.05)"]
+                      }
                       style={[styles.commandGradient, { borderColor: "rgba(255, 159, 10, 0.3)", borderStyle: "dashed" }]}
                     >
-                      <View style={[styles.commandIcon, { backgroundColor: "rgba(255, 159, 10, 0.2)", width: 32, height: 32, borderRadius: 16, marginRight: 10 }]}>
+                      <View style={[styles.commandIcon, { backgroundColor: isDark ? "rgba(255, 159, 10, 0.2)" : "rgba(255, 159, 10, 0.1)", width: 32, height: 32, borderRadius: 16, marginRight: 10 }]}>
                         <Plus size={18} color="#FF9F0A" strokeWidth={3} />
                       </View>
-                      <Text style={styles.buttonText}>Create Custom Command</Text>
+                      <Text style={[styles.buttonText, { color: colors.text }]}>Create Custom Command</Text>
                     </LinearGradient>
                   </BlurView>
                 </Pressable>
@@ -482,7 +489,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#FFFFFF",
     letterSpacing: -0.2,
   },
   sectionHeader: {
@@ -520,7 +526,6 @@ const styles = StyleSheet.create({
   commandTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
     marginBottom: 2,
     letterSpacing: -0.2,
   },
@@ -550,7 +555,6 @@ const styles = StyleSheet.create({
   compactButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#FFFFFF",
     letterSpacing: -0.1,
   },
 });

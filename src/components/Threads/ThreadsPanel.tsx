@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { Thread } from "@shared/contracts";
 
 interface ThreadsPanelProps {
@@ -44,6 +45,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
   onDeleteThread,
   isLoading = false,
 }) => {
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [slideAnim] = useState(new Animated.Value(-SCREEN_WIDTH));
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -150,7 +152,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
           opacity: fadeAnim,
         }}
       >
-        <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={40} tint={colors.blurTint} style={{ flex: 1 }}>
           {/* Backdrop - dismisses on tap */}
           <Pressable
             style={{ flex: 1 }}
@@ -179,7 +181,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                   overflow: "hidden",
                 }}
               >
-                <BlurView intensity={80} tint="dark" style={{ flex: 1 }}>
+                <BlurView intensity={80} tint={colors.blurTint} style={{ flex: 1 }}>
                   <LinearGradient
                     colors={[
                       "rgba(20, 184, 166, 0.15)",
@@ -267,7 +269,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                 : "rgba(255, 255, 255, 0.15)",
                           }}
                         >
-                          <BlurView intensity={50} tint="dark">
+                          <BlurView intensity={50} tint={colors.blurTint}>
                             <LinearGradient
                               colors={
                                 currentThreadId === null
@@ -543,7 +545,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                       borderColor: "rgba(255, 255, 255, 0.9)",
                     })}
                   >
-                    <BlurView intensity={80} tint="dark" style={{ width: 80, height: 80, borderRadius: 40, overflow: "hidden" }}>
+                    <BlurView intensity={80} tint={colors.blurTint} style={{ width: 80, height: 80, borderRadius: 40, overflow: "hidden" }}>
                       <LinearGradient
                         colors={[
                           "#0061FF",

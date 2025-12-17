@@ -29,6 +29,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useUser } from "@/contexts/UserContext";
 import { api } from "@/lib/api";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { CreateChatResponse } from "@/shared/contracts";
 
 const { width, height } = Dimensions.get("window");
@@ -45,6 +46,7 @@ export const CreateChatFAB = () => {
   const [isCreating, setIsCreating] = useState(false);
 
   const { user } = useUser();
+  const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
   const navigation = useNavigation<any>();
 
@@ -176,8 +178,8 @@ export const CreateChatFAB = () => {
               flex: 1,
             }, { opacity: expansion }]} 
           >
-              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.4)" }]} />
+              <BlurView intensity={20} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.2)" }]} />
           </Animated.View>
         </Pressable>
       )}
@@ -188,7 +190,7 @@ export const CreateChatFAB = () => {
             position: "absolute",
             overflow: "hidden",
             zIndex: 1000,
-            shadowColor: "#4FC3F7",
+            shadowColor: isDark ? "#4FC3F7" : "#007AFF",
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,
@@ -199,11 +201,11 @@ export const CreateChatFAB = () => {
       >
         <BlurView
           intensity={90}
-          tint="dark"
+          tint={colors.blurTint}
           style={{ flex: 1 }}
         >
            <LinearGradient
-              colors={["rgba(40, 40, 50, 0.95)", "rgba(20, 20, 30, 0.98)"]}
+              colors={isDark ? ["rgba(40, 40, 50, 0.95)", "rgba(20, 20, 30, 0.98)"] : [colors.backgroundSecondary, colors.background]}
               style={{ flex: 1 }}
            >
               {/* Closed State: Icon */}
@@ -246,44 +248,44 @@ export const CreateChatFAB = () => {
               {/* Open State: Form */}
               <Animated.View style={[StyleSheet.absoluteFill, { padding: 24 }, contentOpacityStyle]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                      <Text style={{ fontSize: 24, fontWeight: "700", color: "#FFFFFF" }}>Create Chat</Text>
+                      <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>Create Chat</Text>
                       <Pressable onPress={closeFAB} style={{ padding: 4 }}>
-                          <X size={24} color="rgba(255, 255, 255, 0.5)" />
+                          <X size={24} color={colors.textSecondary} />
                       </Pressable>
                   </View>
 
                   <View style={{ gap: 16 }}>
                       <View>
-                          <Text style={{ color: "#FFF", marginBottom: 8, fontWeight: "600" }}>Name</Text>
+                          <Text style={{ color: colors.text, marginBottom: 8, fontWeight: "600" }}>Name</Text>
                           <TextInput
                               value={chatName}
                               onChangeText={setChatName}
                               placeholder="Chat Name"
-                              placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                              placeholderTextColor={colors.inputPlaceholder}
                               style={{
-                                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                                  backgroundColor: colors.inputBackground,
                                   borderRadius: 12,
                                   padding: 16,
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                   fontSize: 16
                               }}
                           />
                       </View>
 
                       <View>
-                          <Text style={{ color: "#FFF", marginBottom: 8, fontWeight: "600" }}>Description</Text>
+                          <Text style={{ color: colors.text, marginBottom: 8, fontWeight: "600" }}>Description</Text>
                           <TextInput
                               value={chatBio}
                               onChangeText={setChatBio}
                               placeholder="What is this chat about?"
-                              placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                              placeholderTextColor={colors.inputPlaceholder}
                               multiline
                               numberOfLines={3}
                               style={{
-                                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                                  backgroundColor: colors.inputBackground,
                                   borderRadius: 12,
                                   padding: 16,
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                   fontSize: 16,
                                   height: 100,
                                   textAlignVertical: 'top'

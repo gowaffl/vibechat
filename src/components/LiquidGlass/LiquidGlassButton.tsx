@@ -4,6 +4,7 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface LiquidGlassButtonProps {
   onPress: () => void;
@@ -34,6 +35,7 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
+  const { colors, isDark } = useTheme();
 
   const handlePressIn = () => {
     if (disabled || loading) return;
@@ -72,20 +74,22 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
 
   const variantStyles = {
     primary: {
-      borderColor: color ? `${color}80` : "#0061FF",
+      borderColor: color ? `${color}80` : (isDark ? "#0061FF" : "rgba(0, 97, 255, 0.5)"),
       borderWidth: 1,
-      shadowColor: color ? `${color}80` : "#0061FF",
+      shadowColor: color ? `${color}80` : (isDark ? "#0061FF" : "rgba(0, 97, 255, 0.4)"),
       gradientColors: color
         ? [`${color}4D`, `${color}33`, `${color}1A`]
-        : (["#0061FF", "#00C6FF", "#00E676"] as const),
+        : (isDark 
+            ? ["#0061FF", "#00C6FF", "#00E676"] as const
+            : ["rgba(0, 97, 255, 0.8)", "rgba(0, 198, 255, 0.8)", "rgba(0, 230, 118, 0.8)"] as const),
     },
     secondary: {
-      borderColor: "rgba(255, 255, 255, 0.3)",
+      borderColor: colors.glassBorder,
       borderWidth: 1,
-      shadowColor: "rgba(255, 255, 255, 0.2)",
+      shadowColor: colors.glassShadow,
       gradientColors: [
-        "rgba(255, 255, 255, 0.15)",
-        "rgba(255, 255, 255, 0.1)",
+        colors.glassBackground,
+        colors.glassBackgroundSecondary,
         "rgba(255, 255, 255, 0.05)",
       ] as const,
     },
@@ -148,7 +152,7 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
           elevation: 4,
         }}
       >
-        <BlurView intensity={variant === "ghost" ? 0 : 60} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={variant === "ghost" ? 0 : (isDark ? 60 : 40)} tint={isDark ? "dark" : "light"} style={{ flex: 1 }}>
           <LinearGradient
             colors={currentVariant.gradientColors}
             start={{ x: 0, y: 0 }}
@@ -171,7 +175,7 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
                   <Text
                     style={[
                       {
-                        color: "#FFFFFF",
+                        color: variant === "secondary" || variant === "ghost" ? colors.text : "#FFFFFF",
                         fontSize: currentSize.fontSize,
                         fontWeight: "600",
                       },
@@ -194,4 +198,3 @@ const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
 };
 
 export default LiquidGlassButton;
-

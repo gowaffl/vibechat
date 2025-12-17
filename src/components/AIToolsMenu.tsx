@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import { BlurView } from "expo-blur";
 import { X, Sparkles, Image as ImageIcon, Smile, Plus, Settings, Zap, Search, AlignLeft } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { CustomSlashCommand } from "@/shared/contracts";
 
 interface AIToolsMenuProps {
@@ -33,6 +34,7 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
   onOpenSettings,
   customCommands,
 }) => {
+  const { colors, isDark } = useTheme();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const [showModal, setShowModal] = useState(visible);
@@ -126,7 +128,7 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
       >
         <BlurView
           intensity={100}
-          tint="dark"
+          tint={colors.blurTint}
           style={{
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,

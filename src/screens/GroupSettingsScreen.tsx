@@ -36,6 +36,7 @@ import { api, BACKEND_URL } from "@/lib/api";
 import { supabaseClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
 import { useUser } from "@/contexts/UserContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
@@ -127,7 +128,7 @@ const DraggableSlider: React.FC<{
         ref={sliderRef}
         style={{
           height: 6,
-          backgroundColor: "rgba(52, 199, 89, 0.2)",
+          backgroundColor: colors.success + "33",
           borderRadius: 3,
           position: "relative",
         }}
@@ -141,7 +142,7 @@ const DraggableSlider: React.FC<{
             top: 0,
             bottom: 0,
             width: `${value}%`,
-            backgroundColor: "#34C759",
+            backgroundColor: colors.success,
             borderRadius: 3,
           }}
         />
@@ -154,9 +155,9 @@ const DraggableSlider: React.FC<{
             width: isDragging ? 24 : 20,
             height: isDragging ? 24 : 20,
             borderRadius: isDragging ? 12 : 10,
-            backgroundColor: "#34C759",
+            backgroundColor: colors.success,
             marginLeft: isDragging ? -12 : -10,
-            shadowColor: "#34C759",
+            shadowColor: colors.success,
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.5,
             shadowRadius: isDragging ? 6 : 4,
@@ -174,6 +175,7 @@ const GroupSettingsScreen = () => {
   const route = useRoute<RootStackScreenProps<"GroupSettings">["route"]>();
   const navigation = useNavigation<RootStackScreenProps<"GroupSettings">["navigation"]>();
   const { user } = useUser();
+  const { colors, isDark } = useTheme();
   const colorScheme = useColorScheme();
 
   const { chatId } = route.params;
@@ -364,7 +366,7 @@ const GroupSettingsScreen = () => {
                   onPress={() => setShowEditProfileModal(true)}
                   style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
                 >
-                  <Edit2 size={16} color="#FFFFFF" />
+                  <Edit2 size={16} color={colors.text} />
                 </Pressable>
               )}
             </View>
@@ -1089,14 +1091,14 @@ const GroupSettingsScreen = () => {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#000000", justifyContent: "center", alignItems: "center" }}>
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: "center", alignItems: "center" }}>
         <LuxeLogoLoader size="large" />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Animated Gradient Background */}
       <View
         style={{
@@ -1108,22 +1110,32 @@ const GroupSettingsScreen = () => {
         }}
       >
         <LinearGradient
-          colors={[
+          colors={isDark ? [
             "#000000",
             "#0A0A0F",
             "#050508",
             "#000000",
+          ] : [
+            colors.background,
+            colors.backgroundSecondary,
+            colors.surfaceSecondary,
+            colors.background
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ flex: 1 }}
         />
         <LinearGradient
-          colors={[
+          colors={isDark ? [
             "rgba(79, 195, 247, 0.03)",
             "rgba(0, 122, 255, 0.02)",
             "transparent",
             "rgba(52, 199, 89, 0.02)",
+          ] : [
+            "rgba(0, 122, 255, 0.05)",
+            "rgba(79, 195, 247, 0.05)",
+            "transparent",
+            "rgba(52, 199, 89, 0.05)",
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -1189,9 +1201,9 @@ const GroupSettingsScreen = () => {
                         borderRadius: 64,
                         alignItems: "center",
                         justifyContent: "center",
-                        backgroundColor: "rgba(0, 122, 255, 0.15)",
+                        backgroundColor: colors.primary + "26",
                         borderWidth: 1,
-                        borderColor: "rgba(0, 122, 255, 0.3)",
+                        borderColor: colors.primary + "4D",
                         shadowColor: "#007AFF",
                         shadowOffset: { width: 0, height: 4 },
                         shadowOpacity: 0.5,
@@ -1199,11 +1211,11 @@ const GroupSettingsScreen = () => {
                         elevation: 8,
                       }}
                     >
-                      <Users size={48} color="#007AFF" />
+                      <Users size={48} color={colors.primary} />
                     </View>
                   )}
                   {uploadImageMutation.isPending && (
-                    <View className="absolute inset-0 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+                    <View className="absolute inset-0 rounded-full items-center justify-center" style={{ backgroundColor: colors.overlay }}>
                       <LuxeLogoLoader size={20} />
                     </View>
                   )}
@@ -1260,7 +1272,7 @@ const GroupSettingsScreen = () => {
                           {generateAvatarMutation.isPending ? (
                             <LuxeLogoLoader size="small" />
                           ) : (
-                            <Sparkles size={16} color="#FFFFFF" strokeWidth={2.5} />
+                            <Sparkles size={16} color={colors.text} strokeWidth={2.5} />
                           )}
                         </Pressable>
                       </LinearGradient>
@@ -1283,14 +1295,14 @@ const GroupSettingsScreen = () => {
                           width: 36,
                           height: 36,
                           borderRadius: 18,
-                          backgroundColor: "rgba(255, 255, 255, 0.15)",
+                          backgroundColor: colors.inputBackground,
                           borderWidth: 1,
-                          borderColor: "rgba(255, 255, 255, 0.2)",
+                          borderColor: colors.border,
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <Camera size={16} color="#FFFFFF" />
+                        <Camera size={16} color={colors.text} />
                       </View>
                     </Pressable>
                   </View>
@@ -1309,10 +1321,10 @@ const GroupSettingsScreen = () => {
               <View
                 className="rounded-2xl p-5 mb-4"
                 style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  backgroundColor: colors.glassBackground,
                   borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.2)",
-                  shadowColor: "#000",
+                  borderColor: colors.glassBorder,
+                  shadowColor: colors.glassShadow,
                   shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.3,
                   shadowRadius: 8,
@@ -1321,17 +1333,17 @@ const GroupSettingsScreen = () => {
               >
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center flex-1">
-                    <Images size={20} color="#007AFF" />
+                    <Images size={20} color={colors.primary} />
                     <View className="ml-3 flex-1">
-                      <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                      <Text className="text-base font-semibold" style={{ color: colors.text }}>
                         Media
                       </Text>
-                      <Text className="text-sm mt-1" style={{ color: "#8E8E93" }}>
+                      <Text className="text-sm mt-1" style={{ color: colors.textSecondary }}>
                         {mediaMessages.length} {mediaMessages.length === 1 ? "item" : "items"}
                       </Text>
                     </View>
                   </View>
-                  <Text className="text-2xl" style={{ color: "#8E8E93" }}>›</Text>
+                  <Text className="text-2xl" style={{ color: colors.textSecondary }}>›</Text>
                 </View>
                 
                 {/* Preview Grid */}
@@ -1349,7 +1361,7 @@ const GroupSettingsScreen = () => {
                             width: 50,
                             height: 50,
                             borderRadius: 8,
-                            backgroundColor: "rgba(255, 255, 255, 0.05)",
+                            backgroundColor: colors.inputBackground,
                             overflow: "hidden"
                           }}
                         >
@@ -1393,12 +1405,12 @@ const GroupSettingsScreen = () => {
                           width: 50,
                           height: 50,
                           borderRadius: 8,
-                          backgroundColor: "rgba(255, 255, 255, 0.1)",
+                          backgroundColor: colors.inputBackground,
                           alignItems: "center",
                           justifyContent: "center",
                         }}
                       >
-                        <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "600" }}>
+                        <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600" }}>
                           +{mediaMessages.length - 4}
                         </Text>
                       </View>
@@ -1418,10 +1430,10 @@ const GroupSettingsScreen = () => {
               <View
                 className="rounded-2xl p-5 mb-4"
                 style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  backgroundColor: colors.glassBackground,
                   borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.2)",
-                  shadowColor: "#000",
+                  borderColor: colors.glassBorder,
+                  shadowColor: colors.glassShadow,
                   shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.3,
                   shadowRadius: 8,
@@ -1430,17 +1442,17 @@ const GroupSettingsScreen = () => {
               >
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center flex-1">
-                    <Link2 size={20} color="#007AFF" />
+                    <Link2 size={20} color={colors.primary} />
                     <View className="ml-3 flex-1">
-                      <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                      <Text className="text-base font-semibold" style={{ color: colors.text }}>
                         Links
                       </Text>
-                      <Text className="text-sm mt-1" style={{ color: "#8E8E93" }}>
+                      <Text className="text-sm mt-1" style={{ color: colors.textSecondary }}>
                         {linkMessages.length} {linkMessages.length === 1 ? "link" : "links"} shared
                       </Text>
                     </View>
                   </View>
-                  <Text className="text-2xl" style={{ color: "#8E8E93" }}>›</Text>
+                  <Text className="text-2xl" style={{ color: colors.textSecondary }}>›</Text>
                 </View>
                 
                 {/* Preview Links */}
@@ -1451,7 +1463,7 @@ const GroupSettingsScreen = () => {
                         key={msg.id}
                         className="flex-row items-center gap-3 p-2 rounded-lg"
                         style={{
-                          backgroundColor: "rgba(255, 255, 255, 0.05)",
+                          backgroundColor: colors.inputBackground,
                         }}
                       >
                         {msg.linkPreview?.linkPreviewImage && (
@@ -1468,13 +1480,13 @@ const GroupSettingsScreen = () => {
                         <View className="flex-1">
                           <Text
                             numberOfLines={1}
-                            style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "600" }}
+                            style={{ color: colors.text, fontSize: 13, fontWeight: "600" }}
                           >
                             {msg.linkPreview?.linkPreviewTitle || msg.linkPreview?.url}
                           </Text>
                           <Text
                             numberOfLines={1}
-                            style={{ color: "#8E8E93", fontSize: 11, marginTop: 2 }}
+                            style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}
                           >
                             {msg.linkPreview?.linkPreviewSiteName || new URL(msg.linkPreview?.url).hostname}
                           </Text>
@@ -1490,10 +1502,10 @@ const GroupSettingsScreen = () => {
             <View
               className="rounded-2xl p-5 mb-4"
               style={{
-                backgroundColor: "rgba(52, 199, 89, 0.1)",
+                backgroundColor: colors.success + "1A",
                 borderWidth: 1,
-                borderColor: "rgba(52, 199, 89, 0.3)",
-                shadowColor: "#34C759",
+                borderColor: colors.success + "4D",
+                shadowColor: colors.success,
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.3,
                 shadowRadius: 8,
@@ -1503,8 +1515,8 @@ const GroupSettingsScreen = () => {
               {/* Header with + button */}
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center">
-                  <Sparkles size={18} color="#34C759" />
-                  <Text className="text-sm font-semibold ml-2" style={{ color: "#34C759" }}>
+                  <Sparkles size={18} color={colors.success} />
+                  <Text className="text-sm font-semibold ml-2" style={{ color: colors.success }}>
                     AI FRIENDS
                   </Text>
                 </View>
@@ -1521,10 +1533,10 @@ const GroupSettingsScreen = () => {
                         padding: 8,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: "rgba(52, 199, 89, 0.3)",
+                        borderColor: colors.success + "4D",
                       }}
                     >
-                      <Plus size={16} color="#34C759" />
+                      <Plus size={16} color={colors.success} />
                     </View>
                   </Pressable>
                 )}
@@ -1533,16 +1545,16 @@ const GroupSettingsScreen = () => {
               {/* AI Friend Selector Dropdown - Only show if 2+ friends */}
               {aiFriends.length > 1 && (
                 <View className="mb-4">
-                  <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs font-semibold mb-2" style={{ color: colors.textSecondary }}>
                     Select AI Friend
                   </Text>
                   <View
                     style={{
                       borderRadius: 12,
                       overflow: "hidden",
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      backgroundColor: colors.inputBackground,
                       borderWidth: 1,
-                      borderColor: "rgba(52, 199, 89, 0.3)",
+                      borderColor: colors.success + "4D",
                     }}
                   >
                     {aiFriends.map((friend, index) => (
@@ -1561,7 +1573,7 @@ const GroupSettingsScreen = () => {
                             ? "rgba(52, 199, 89, 0.15)"
                             : "transparent",
                           borderTopWidth: index > 0 ? 1 : 0,
-                          borderTopColor: "rgba(255, 255, 255, 0.1)",
+                          borderTopColor: colors.glassBorder,
                         }}
                       >
                         <View className="flex-row items-center flex-1">
@@ -1577,7 +1589,7 @@ const GroupSettingsScreen = () => {
                           />
                           <Text
                             style={{
-                              color: selectedAiFriendId === friend.id ? "#34C759" : "#FFFFFF",
+                              color: selectedAiFriendId === friend.id ? colors.success : colors.text,
                               fontSize: 15,
                               fontWeight: selectedAiFriendId === friend.id ? "600" : "500",
                             }}
@@ -1586,7 +1598,7 @@ const GroupSettingsScreen = () => {
                           </Text>
                         </View>
                         {selectedAiFriendId === friend.id && (
-                          <Check size={18} color="#34C759" />
+                          <Check size={18} color={colors.success} />
                         )}
                       </Pressable>
                     ))}
@@ -1597,42 +1609,42 @@ const GroupSettingsScreen = () => {
               {selectedAiFriendId && (
                 <>
                   {/* AI Friend Name */}
-                  <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs font-semibold mb-2" style={{ color: colors.textSecondary }}>
                     AI Friend Name
                   </Text>
                   <TextInput
                     value={aiName}
                     onChangeText={setAiName}
                     className="rounded-lg px-4 py-3 text-base mb-4"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={isDark ? "dark" : "light"}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
+                      backgroundColor: colors.inputBackground,
+                      color: colors.text,
                       borderWidth: 1,
-                      borderColor: "rgba(52, 199, 89, 0.3)",
+                      borderColor: colors.success + "4D",
                     }}
                     placeholder="e.g., 'Jarvis', 'Buddy', 'Alex'..."
-                    placeholderTextColor="#666666"
+                    placeholderTextColor={colors.inputPlaceholder}
                     maxLength={50}
                   />
 
                   {/* Custom Instructions */}
-                  <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs font-semibold mb-2" style={{ color: colors.textSecondary }}>
                     Custom Instructions
                   </Text>
                   <TextInput
                     value={aiPersonality}
                     onChangeText={setAiPersonality}
                     className="rounded-lg px-4 py-3 text-base mb-4"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={isDark ? "dark" : "light"}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
+                      backgroundColor: colors.inputBackground,
+                      color: colors.text,
                       borderWidth: 1,
-                      borderColor: "rgba(52, 199, 89, 0.3)",
+                      borderColor: colors.success + "4D",
                     }}
                     placeholder="e.g., 'You are a helpful friend who loves tech...'"
-                    placeholderTextColor="#666666"
+                    placeholderTextColor={colors.inputPlaceholder}
                     multiline
                     numberOfLines={4}
                     maxLength={500}
@@ -1649,21 +1661,21 @@ const GroupSettingsScreen = () => {
                         borderRadius: 10,
                         padding: 12,
                         alignItems: "center",
-                        backgroundColor: "rgba(52, 199, 89, 0.15)",
+                        backgroundColor: colors.success + "26",
                         borderWidth: 1,
-                        borderColor: "#34C759",
+                        borderColor: colors.success,
                       }}
                     >
                       {updateAIFriendMutation.isPending ? (
                         <LuxeLogoLoader size="small" />
                       ) : (
-                        <Text className="font-semibold" style={{ color: "#34C759" }}>Save Settings</Text>
+                        <Text className="font-semibold" style={{ color: colors.success }}>Save Settings</Text>
                       )}
                     </View>
                   </Pressable>
 
                   {/* Tone Chips */}
-                  <Text className="text-xs font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs font-semibold mb-2" style={{ color: colors.textSecondary }}>
                     Quick Tone Selection
                   </Text>
               <View className="flex-row flex-wrap gap-2">
@@ -1678,14 +1690,14 @@ const GroupSettingsScreen = () => {
                         paddingHorizontal: 16,
                         paddingVertical: 8,
                         borderRadius: 20,
-                        backgroundColor: isSelected ? "rgba(52, 199, 89, 0.25)" : "rgba(255, 255, 255, 0.1)",
+                        backgroundColor: isSelected ? colors.success + "40" : colors.inputBackground,
                         borderWidth: 1,
-                        borderColor: isSelected ? "#34C759" : "rgba(255, 255, 255, 0.2)",
+                        borderColor: isSelected ? colors.success : colors.border,
                       }}
                     >
                       <Text
                         className="text-sm font-medium"
-                        style={{ color: isSelected ? "#34C759" : "#FFFFFF" }}
+                        style={{ color: isSelected ? colors.success : colors.text }}
                       >
                         {tone}
                       </Text>
@@ -1695,10 +1707,10 @@ const GroupSettingsScreen = () => {
               </View>
 
               {/* AI Engagement Settings */}
-              <Text className="text-xs font-semibold mb-2 mt-6" style={{ color: "#8E8E93" }}>
+              <Text className="text-xs font-semibold mb-2 mt-6" style={{ color: colors.textSecondary }}>
                 AI Friend Engagement
               </Text>
-              <Text className="text-xs mb-3" style={{ color: "#666666" }}>
+              <Text className="text-xs mb-3" style={{ color: colors.textTertiary }}>
                 Control how often the AI automatically joins the conversation
               </Text>
 
@@ -1712,18 +1724,18 @@ const GroupSettingsScreen = () => {
                     paddingHorizontal: 16,
                     paddingVertical: 12,
                     borderRadius: 12,
-                    backgroundColor: aiEngagementMode === "on-call" ? "rgba(52, 199, 89, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                    backgroundColor: aiEngagementMode === "on-call" ? colors.success + "40" : colors.inputBackground,
                     borderWidth: 2,
-                    borderColor: aiEngagementMode === "on-call" ? "#34C759" : "rgba(255, 255, 255, 0.1)",
+                    borderColor: aiEngagementMode === "on-call" ? colors.success : colors.border,
                   }}
                 >
                   <Text
                     className="text-base font-semibold"
-                    style={{ color: aiEngagementMode === "on-call" ? "#34C759" : "#FFFFFF" }}
+                    style={{ color: aiEngagementMode === "on-call" ? colors.success : colors.text }}
                   >
                     On-Call Only (@ai)
                   </Text>
-                  <Text className="text-xs mt-1" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs mt-1" style={{ color: colors.textSecondary }}>
                     AI only responds when explicitly mentioned with @ai
                   </Text>
                 </Pressable>
@@ -1736,18 +1748,18 @@ const GroupSettingsScreen = () => {
                     paddingHorizontal: 16,
                     paddingVertical: 12,
                     borderRadius: 12,
-                    backgroundColor: aiEngagementMode === "percentage" ? "rgba(52, 199, 89, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                    backgroundColor: aiEngagementMode === "percentage" ? colors.success + "40" : colors.inputBackground,
                     borderWidth: 2,
-                    borderColor: aiEngagementMode === "percentage" ? "#34C759" : "rgba(255, 255, 255, 0.1)",
+                    borderColor: aiEngagementMode === "percentage" ? colors.success : colors.border,
                   }}
                 >
                   <Text
                     className="text-base font-semibold"
-                    style={{ color: aiEngagementMode === "percentage" ? "#34C759" : "#FFFFFF" }}
+                    style={{ color: aiEngagementMode === "percentage" ? colors.success : colors.text }}
                   >
                     Automatic Engagement
                   </Text>
-                  <Text className="text-xs mt-1" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs mt-1" style={{ color: colors.textSecondary }}>
                     AI joins conversations naturally based on percentage
                   </Text>
                 </Pressable>
@@ -1760,18 +1772,18 @@ const GroupSettingsScreen = () => {
                     paddingHorizontal: 16,
                     paddingVertical: 12,
                     borderRadius: 12,
-                    backgroundColor: aiEngagementMode === "off" ? "rgba(255, 69, 58, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                    backgroundColor: aiEngagementMode === "off" ? colors.error + "40" : colors.inputBackground,
                     borderWidth: 2,
-                    borderColor: aiEngagementMode === "off" ? "#FF453A" : "rgba(255, 255, 255, 0.1)",
+                    borderColor: aiEngagementMode === "off" ? colors.error : colors.border,
                   }}
                 >
                   <Text
                     className="text-base font-semibold"
-                    style={{ color: aiEngagementMode === "off" ? "#FF453A" : "#FFFFFF" }}
+                    style={{ color: aiEngagementMode === "off" ? colors.error : colors.text }}
                   >
                     Off
                   </Text>
-                  <Text className="text-xs mt-1" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs mt-1" style={{ color: colors.textSecondary }}>
                     AI friend is completely disabled
                   </Text>
                 </Pressable>
@@ -1782,16 +1794,16 @@ const GroupSettingsScreen = () => {
                 <View
                   className="rounded-xl p-4 mt-2"
                   style={{
-                    backgroundColor: "rgba(52, 199, 89, 0.1)",
+                    backgroundColor: colors.success + "1A",
                     borderWidth: 1,
-                    borderColor: "rgba(52, 199, 89, 0.3)",
+                    borderColor: colors.success + "4D",
                   }}
                 >
                   <View className="flex-row justify-between items-center mb-3">
-                    <Text className="text-sm font-semibold" style={{ color: "#34C759" }}>
+                    <Text className="text-sm font-semibold" style={{ color: colors.success }}>
                       Engagement Frequency
                     </Text>
-                    <Text className="text-2xl font-bold" style={{ color: "#34C759" }}>
+                    <Text className="text-2xl font-bold" style={{ color: colors.success }}>
                       {aiEngagementPercent}%
                     </Text>
                   </View>
@@ -1838,7 +1850,7 @@ const GroupSettingsScreen = () => {
                     </View>
                   </View>
 
-                  <Text className="text-xs mt-3" style={{ color: "#8E8E93" }}>
+                  <Text className="text-xs mt-3" style={{ color: colors.textSecondary }}>
                     {aiEngagementPercent === 0 && "AI will never join automatically (same as On-Call mode)"}
                     {aiEngagementPercent > 0 && aiEngagementPercent < 25 && "AI rarely joins the conversation"}
                     {aiEngagementPercent >= 25 && aiEngagementPercent < 50 && "AI occasionally joins the conversation"}
@@ -1846,7 +1858,7 @@ const GroupSettingsScreen = () => {
                     {aiEngagementPercent >= 75 && aiEngagementPercent < 100 && "AI very often joins the conversation"}
                     {aiEngagementPercent === 100 && "AI will attempt to join every message"}
                   </Text>
-                  <Text className="text-xs mt-1" style={{ color: "#666666" }}>
+                  <Text className="text-xs mt-1" style={{ color: colors.textTertiary }}>
                     Note: @ai mentions will always work regardless of this setting
                   </Text>
                 </View>
@@ -1892,9 +1904,9 @@ const GroupSettingsScreen = () => {
             <View
               className="rounded-2xl p-5 mb-4"
               style={{
-                backgroundColor: "rgba(255, 159, 10, 0.1)",
+                backgroundColor: colors.warning + "1A",
                 borderWidth: 1,
-                borderColor: "rgba(255, 159, 10, 0.3)",
+                borderColor: colors.warning + "4D",
                 shadowColor: "#FF9F0A",
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.3,
@@ -1904,8 +1916,8 @@ const GroupSettingsScreen = () => {
             >
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center">
-                  <Zap size={18} color="#FF9F0A" />
-                  <Text className="text-sm font-semibold ml-2" style={{ color: "#FF9F0A" }}>
+                  <Zap size={18} color={colors.warning} />
+                  <Text className="text-sm font-semibold ml-2" style={{ color: colors.warning }}>
                     CUSTOM SLASH COMMANDS
                   </Text>
                 </View>
@@ -1924,57 +1936,57 @@ const GroupSettingsScreen = () => {
                         padding: 8,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 159, 10, 0.3)",
+                        borderColor: colors.warning + "4D",
                       }}
                     >
-                      <Plus size={16} color="#FF9F0A" />
+                      <Plus size={16} color={colors.warning} />
                     </View>
                   </Pressable>
                 )}
               </View>
 
-              <Text className="text-xs mb-3" style={{ color: "#8E8E93" }}>
+              <Text className="text-xs mb-3" style={{ color: colors.textSecondary }}>
                 Create custom commands powered by Gemini AI. Use them like /image or /meme
               </Text>
 
               {/* Add New Command Form */}
               {isAddingCommand && (
                 <View className="mb-4 p-4 rounded-xl" style={{ backgroundColor: "rgba(0, 0, 0, 0.3)" }}>
-                  <Text className="text-xs font-semibold mb-2" style={{ color: "#FF9F0A" }}>
+                  <Text className="text-xs font-semibold mb-2" style={{ color: colors.warning }}>
                     New Command
                   </Text>
                   <TextInput
                     value={newCommand}
                     onChangeText={setNewCommand}
                     className="rounded-lg px-4 py-3 text-base mb-2"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={isDark ? "dark" : "light"}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
+                      backgroundColor: colors.inputBackground,
+                      color: colors.text,
                       borderWidth: 1,
-                      borderColor: "rgba(255, 159, 10, 0.3)",
+                      borderColor: colors.warning + "4D",
                     }}
                     placeholder="/roast, /factcheck, etc."
-                    placeholderTextColor="#666666"
+                    placeholderTextColor={colors.inputPlaceholder}
                     autoCapitalize="none"
                     maxLength={50}
                   />
-                  <Text className="text-xs font-semibold mb-2 mt-2" style={{ color: "#FF9F0A" }}>
+                  <Text className="text-xs font-semibold mb-2 mt-2" style={{ color: colors.warning }}>
                     Prompt for AI
                   </Text>
                   <TextInput
                     value={newPrompt}
                     onChangeText={setNewPrompt}
                     className="rounded-lg px-4 py-3 text-base mb-3"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={isDark ? "dark" : "light"}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
+                      backgroundColor: colors.inputBackground,
+                      color: colors.text,
                       borderWidth: 1,
-                      borderColor: "rgba(255, 159, 10, 0.3)",
+                      borderColor: colors.warning + "4D",
                     }}
                     placeholder="e.g., 'Roast the user's message in a funny way'"
-                    placeholderTextColor="#666666"
+                    placeholderTextColor={colors.inputPlaceholder}
                     multiline
                     numberOfLines={3}
                     maxLength={1000}
@@ -1998,7 +2010,7 @@ const GroupSettingsScreen = () => {
                         {createCommandMutation.isPending ? (
                           <LuxeLogoLoader size="small" />
                         ) : (
-                          <Text className="font-semibold" style={{ color: "#FF9F0A" }}>Create</Text>
+                          <Text className="font-semibold" style={{ color: colors.warning }}>Create</Text>
                         )}
                       </View>
                     </Pressable>
@@ -2006,12 +2018,12 @@ const GroupSettingsScreen = () => {
                       onPress={handleCancelEditing}
                       className="px-6 py-3 rounded-lg"
                       style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.1)",
+                        backgroundColor: colors.inputBackground,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.2)",
+                        borderColor: colors.border,
                       }}
                     >
-                      <Text className="font-semibold" style={{ color: "#FFFFFF" }}>Cancel</Text>
+                      <Text className="font-semibold" style={{ color: colors.text }}>Cancel</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -2020,41 +2032,41 @@ const GroupSettingsScreen = () => {
               {/* Edit Command Form */}
               {editingCommandId && (
                 <View className="mb-4 p-4 rounded-xl" style={{ backgroundColor: "rgba(0, 0, 0, 0.3)" }}>
-                  <Text className="text-xs font-semibold mb-2" style={{ color: "#FF9F0A" }}>
+                  <Text className="text-xs font-semibold mb-2" style={{ color: colors.warning }}>
                     Edit Command
                   </Text>
                   <TextInput
                     value={newCommand}
                     onChangeText={setNewCommand}
                     className="rounded-lg px-4 py-3 text-base mb-2"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={isDark ? "dark" : "light"}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
+                      backgroundColor: colors.inputBackground,
+                      color: colors.text,
                       borderWidth: 1,
-                      borderColor: "rgba(255, 159, 10, 0.3)",
+                      borderColor: colors.warning + "4D",
                     }}
                     placeholder="/roast, /factcheck, etc."
-                    placeholderTextColor="#666666"
+                    placeholderTextColor={colors.inputPlaceholder}
                     autoCapitalize="none"
                     maxLength={50}
                   />
-                  <Text className="text-xs font-semibold mb-2 mt-2" style={{ color: "#FF9F0A" }}>
+                  <Text className="text-xs font-semibold mb-2 mt-2" style={{ color: colors.warning }}>
                     Prompt for AI
                   </Text>
                   <TextInput
                     value={newPrompt}
                     onChangeText={setNewPrompt}
                     className="rounded-lg px-4 py-3 text-base mb-3"
-                    keyboardAppearance="dark"
+                    keyboardAppearance={isDark ? "dark" : "light"}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      color: "#FFFFFF",
+                      backgroundColor: colors.inputBackground,
+                      color: colors.text,
                       borderWidth: 1,
-                      borderColor: "rgba(255, 159, 10, 0.3)",
+                      borderColor: colors.warning + "4D",
                     }}
                     placeholder="e.g., 'Roast the user's message in a funny way'"
-                    placeholderTextColor="#666666"
+                    placeholderTextColor={colors.inputPlaceholder}
                     multiline
                     numberOfLines={3}
                     maxLength={1000}
@@ -2078,7 +2090,7 @@ const GroupSettingsScreen = () => {
                         {updateCommandMutation.isPending ? (
                           <LuxeLogoLoader size="small" />
                         ) : (
-                          <Text className="font-semibold" style={{ color: "#FF9F0A" }}>Update</Text>
+                          <Text className="font-semibold" style={{ color: colors.warning }}>Update</Text>
                         )}
                       </View>
                     </Pressable>
@@ -2086,12 +2098,12 @@ const GroupSettingsScreen = () => {
                       onPress={handleCancelEditing}
                       className="px-6 py-3 rounded-lg"
                       style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.1)",
+                        backgroundColor: colors.inputBackground,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.2)",
+                        borderColor: colors.border,
                       }}
                     >
-                      <Text className="font-semibold" style={{ color: "#FFFFFF" }}>Cancel</Text>
+                      <Text className="font-semibold" style={{ color: colors.text }}>Cancel</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -2104,13 +2116,13 @@ const GroupSettingsScreen = () => {
                       key={cmd.id}
                       className="p-3 rounded-lg mb-2"
                       style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.05)",
+                        backgroundColor: colors.inputBackground,
                         borderWidth: 1,
                         borderColor: "rgba(255, 159, 10, 0.2)",
                       }}
                     >
                       <View className="flex-row items-center justify-between mb-1">
-                        <Text className="text-base font-semibold" style={{ color: "#FF9F0A" }}>
+                        <Text className="text-base font-semibold" style={{ color: colors.warning }}>
                           {cmd.command}
                         </Text>
                         <View className="flex-row gap-2">
@@ -2120,26 +2132,26 @@ const GroupSettingsScreen = () => {
                                 onPress={() => handleEditCommand(cmd)}
                                 disabled={isAddingCommand || editingCommandId !== null}
                               >
-                                <Edit2 size={16} color="#FFFFFF" />
+                                <Edit2 size={16} color={colors.text} />
                               </Pressable>
                               <Pressable
                                 onPress={() => handleDeleteCommand(cmd.id)}
                                 disabled={deleteCommandMutation.isPending}
                               >
-                                <Trash2 size={16} color="#FF3B30" />
+                                <Trash2 size={16} color={colors.error} />
                               </Pressable>
                             </>
                           )}
                         </View>
                       </View>
-                      <Text className="text-sm" style={{ color: "#8E8E93" }} numberOfLines={2}>
+                      <Text className="text-sm" style={{ color: colors.textSecondary }} numberOfLines={2}>
                         {cmd.prompt}
                       </Text>
                     </View>
                   ))}
                 </View>
               ) : !isAddingCommand && (
-                <Text className="text-sm text-center py-4" style={{ color: "#8E8E93" }}>
+                <Text className="text-sm text-center py-4" style={{ color: colors.textSecondary }}>
                   No custom commands yet. Tap + to create one!
                 </Text>
               )}
@@ -2149,9 +2161,9 @@ const GroupSettingsScreen = () => {
             <View
               className="rounded-2xl p-5 mb-4"
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                backgroundColor: colors.inputBackground,
                 borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.2)",
+                borderColor: colors.border,
                 shadowColor: "#000",
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.3,
@@ -2166,22 +2178,22 @@ const GroupSettingsScreen = () => {
                       width: 36,
                       height: 36,
                       borderRadius: 18,
-                      backgroundColor: "rgba(79, 195, 247, 0.15)",
+                      backgroundColor: colors.primary + "26",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
                     {isMuted ? (
-                      <BellOff size={20} color="#4FC3F7" />
+                      <BellOff size={20} color={colors.primary} />
                     ) : (
-                      <Bell size={20} color="#4FC3F7" />
+                      <Bell size={20} color={colors.primary} />
                     )}
                   </View>
                   <View>
-                    <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                    <Text className="text-base font-semibold" style={{ color: colors.text }}>
                       Mute Notifications
                     </Text>
-                    <Text className="text-xs text-gray-400">
+                    <Text className="text-xs" style={{ color: colors.textSecondary }}>
                       Disable push notifications for this chat
                     </Text>
                   </View>
@@ -2192,9 +2204,8 @@ const GroupSettingsScreen = () => {
                     Haptics.selectionAsync();
                     muteChatMutation.mutate({ chatId, isMuted: value });
                   }}
-                  trackColor={{ false: "#3A3A3C", true: "#34C759" }}
-                  thumbColor={"#FFFFFF"}
-                  ios_backgroundColor="#3A3A3C"
+                  trackColor={{ false: colors.switchTrackOff, true: colors.switchTrackOn }}
+                  thumbColor={colors.switchThumb}
                 />
               </View>
             </View>
@@ -2204,10 +2215,10 @@ const GroupSettingsScreen = () => {
               <View
                 className="rounded-2xl p-5 mb-4"
                 style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  backgroundColor: colors.glassBackground,
                   borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.2)",
-                  shadowColor: "#000",
+                  borderColor: colors.glassBorder,
+                  shadowColor: colors.glassShadow,
                   shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.3,
                   shadowRadius: 8,
@@ -2221,33 +2232,33 @@ const GroupSettingsScreen = () => {
                         width: 36,
                         height: 36,
                         borderRadius: 18,
-                        backgroundColor: "rgba(255, 59, 48, 0.15)",
+                        backgroundColor: colors.error + "26",
                         alignItems: "center",
                         justifyContent: "center",
                       }}
                     >
                       <View style={{ position: 'relative' }}>
-                        <Users size={20} color="#FF3B30" />
+                        <Users size={20} color={colors.error} />
                         <View 
                           style={{ 
                             position: 'absolute', 
                             bottom: -2, 
                             right: -2, 
-                            backgroundColor: '#1A1A1A', 
+                            backgroundColor: colors.surface, 
                             borderRadius: 6 
                           }}
                         >
                           <View style={{ backgroundColor: '#FF3B30', borderRadius: 5, width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
-                            <Ionicons name="lock-closed" size={6} color="#FFFFFF" />
+                            <Ionicons name="lock-closed" size={6} color={colors.text} />
                           </View>
                         </View>
                       </View>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                      <Text className="text-base font-semibold" style={{ color: colors.text }}>
                         Restricted Mode
                       </Text>
-                      <Text className="text-xs text-gray-400">
+                      <Text className="text-xs" style={{ color: colors.textSecondary }}>
                         Only the creator can invite members and change group settings
                       </Text>
                     </View>
@@ -2258,9 +2269,8 @@ const GroupSettingsScreen = () => {
                       Haptics.selectionAsync();
                       updateSettingsMutation.mutate({ isRestricted: value });
                     }}
-                    trackColor={{ false: "#3A3A3C", true: "#FF3B30" }}
-                    thumbColor={"#FFFFFF"}
-                    ios_backgroundColor="#3A3A3C"
+                    trackColor={{ false: colors.switchTrackOff, true: colors.error }}
+                    thumbColor={colors.switchThumb}
                   />
                 </View>
               </View>
@@ -2270,9 +2280,9 @@ const GroupSettingsScreen = () => {
             <View
               className="rounded-2xl p-5 mb-4"
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                backgroundColor: colors.inputBackground,
                 borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.2)",
+                borderColor: colors.border,
                 shadowColor: "#000",
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.3,
@@ -2281,7 +2291,7 @@ const GroupSettingsScreen = () => {
               }}
             >
               <View className="flex-row items-center justify-between mb-3">
-                <Text className="text-sm font-semibold" style={{ color: "#8E8E93" }}>
+                <Text className="text-sm font-semibold" style={{ color: colors.textSecondary }}>
                   MEMBERS ({chat?.members?.length || 0})
                 </Text>
                 {/* Invite Button - Hide in Restricted Mode if not Creator */}
@@ -2298,13 +2308,13 @@ const GroupSettingsScreen = () => {
                     <View
                       className="flex-row items-center px-3 py-2 rounded-lg"
                       style={{
-                        backgroundColor: "rgba(0, 122, 255, 0.15)",
+                        backgroundColor: colors.primary + "26",
                         borderWidth: 1,
-                        borderColor: "rgba(0, 122, 255, 0.3)",
+                        borderColor: colors.primary + "4D",
                       }}
                     >
-                      <UserPlus size={16} color="#007AFF" />
-                      <Text className="ml-2 font-semibold text-sm" style={{ color: "#007AFF" }}>
+                      <UserPlus size={16} color={colors.primary} />
+                      <Text className="ml-2 font-semibold text-sm" style={{ color: colors.primary }}>
                         Invite
                       </Text>
                     </View>
@@ -2315,7 +2325,7 @@ const GroupSettingsScreen = () => {
                 <View
                   key={member.id}
                   className="flex-row items-center py-3"
-                  style={{ borderBottomWidth: 0.5, borderBottomColor: "rgba(255, 255, 255, 0.1)" }}
+                  style={{ borderBottomWidth: 0.5, borderBottomColor: colors.glassBorder }}
                 >
                   {member.user?.image && getFullImageUrl(member.user.image) ? (
                     <Image
@@ -2336,12 +2346,12 @@ const GroupSettingsScreen = () => {
                       style={{
                         backgroundColor: getColorFromName(member.user?.name),
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.2)",
+                        borderColor: colors.border,
                       }}
                     >
                       <Text
                         style={{
-                          color: "#FFFFFF",
+                          color: colors.text,
                           fontSize: 18,
                           fontWeight: "600",
                         }}
@@ -2351,11 +2361,11 @@ const GroupSettingsScreen = () => {
                     </View>
                   )}
                   <View className="ml-3 flex-1">
-                    <Text className="text-base font-semibold" style={{ color: "#FFFFFF" }}>
+                    <Text className="text-base font-semibold" style={{ color: colors.text }}>
                       {member.user?.name || "Unknown"}
                     </Text>
                     {member.user?.bio && (
-                      <Text className="text-sm" style={{ color: "#8E8E93" }}>
+                      <Text className="text-sm" style={{ color: colors.textSecondary }}>
                         {member.user.bio}
                       </Text>
                     )}
@@ -2371,12 +2381,12 @@ const GroupSettingsScreen = () => {
                       <View
                         className="p-2 rounded-lg"
                         style={{
-                          backgroundColor: "rgba(255, 59, 48, 0.15)",
+                          backgroundColor: colors.error + "26",
                           borderWidth: 1,
-                          borderColor: "rgba(255, 59, 48, 0.3)",
+                          borderColor: colors.error + "4D",
                         }}
                       >
-                        <X size={18} color="#FF3B30" />
+                        <X size={18} color={colors.error} />
                       </View>
                     </Pressable>
                   )}
@@ -2388,9 +2398,9 @@ const GroupSettingsScreen = () => {
             <View
               className="rounded-2xl p-5"
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                backgroundColor: colors.inputBackground,
                 borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.2)",
+                borderColor: colors.border,
                 shadowColor: "#000",
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.3,
@@ -2398,7 +2408,7 @@ const GroupSettingsScreen = () => {
                 elevation: 2,
               }}
             >
-              <Text className="text-sm font-semibold mb-3" style={{ color: "#8E8E93" }}>
+              <Text className="text-sm font-semibold mb-3" style={{ color: colors.textSecondary }}>
                 DANGER ZONE
               </Text>
               <Pressable
@@ -2406,7 +2416,7 @@ const GroupSettingsScreen = () => {
                 disabled={clearMessagesMutation.isPending}
                 className="flex-row items-center justify-center rounded-lg p-4"
                 style={{
-                  backgroundColor: "rgba(255, 59, 48, 0.15)",
+                  backgroundColor: colors.error + "26",
                   borderWidth: 1,
                   borderColor: "rgba(255, 59, 48, 0.5)",
                 }}
@@ -2415,14 +2425,14 @@ const GroupSettingsScreen = () => {
                   <LuxeLogoLoader size="small" />
                 ) : (
                   <>
-                    <Trash2 size={20} color="#FF3B30" />
-                    <Text className="font-semibold ml-2" style={{ color: "#FF3B30" }}>
+                    <Trash2 size={20} color={colors.error} />
+                    <Text className="font-semibold ml-2" style={{ color: colors.error }}>
                       Clear All Messages
                     </Text>
                   </>
                 )}
               </Pressable>
-              <Text className="text-xs mt-2 text-center" style={{ color: "#666666" }}>
+              <Text className="text-xs mt-2 text-center" style={{ color: colors.textTertiary }}>
                 This will permanently delete all messages from the conversation
               </Text>
 
@@ -2443,14 +2453,14 @@ const GroupSettingsScreen = () => {
                       <LuxeLogoLoader size="small" />
                     ) : (
                       <>
-                        <Trash2 size={20} color="#FF3B30" />
-                        <Text className="font-semibold ml-2" style={{ color: "#FF3B30" }}>
+                        <Trash2 size={20} color={colors.error} />
+                        <Text className="font-semibold ml-2" style={{ color: colors.error }}>
                           Delete Chat
                         </Text>
                       </>
                     )}
                   </Pressable>
-                  <Text className="text-xs mt-2 text-center" style={{ color: "#666666" }}>
+                  <Text className="text-xs mt-2 text-center" style={{ color: colors.textTertiary }}>
                     This will permanently delete the entire chat, including all messages, settings, and member data
                   </Text>
                 </>
@@ -2471,7 +2481,7 @@ const GroupSettingsScreen = () => {
               onPress={() => setShowAvatarViewer(false)}
               style={{
                 flex: 1,
-                backgroundColor: "rgba(0, 0, 0, 0.95)",
+                backgroundColor: colors.background,
                 justifyContent: "center",
                 alignItems: "center",
               }}
@@ -2487,12 +2497,12 @@ const GroupSettingsScreen = () => {
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  backgroundColor: "rgba(255, 255, 255, 0.15)",
+                  backgroundColor: colors.inputBackground,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <X size={24} color="#FFFFFF" />
+                <X size={24} color={colors.text} />
               </Pressable>
 
               {/* Full-screen avatar image */}
@@ -2522,7 +2532,7 @@ const GroupSettingsScreen = () => {
                   style={{
                     fontSize: 18,
                     fontWeight: "600",
-                    color: "#FFFFFF",
+                    color: colors.text,
                   }}
                 >
                   {chat?.name || "Vibecode Chat"}
@@ -2544,12 +2554,12 @@ const GroupSettingsScreen = () => {
             style={{ flex: 1 }}
           >
             <Pressable 
-              style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }} 
+              style={{ flex: 1, backgroundColor: colors.overlay }} 
               onPress={() => setShowEditProfileModal(false)}
             />
             <View
               style={{
-                backgroundColor: "#1A1A1A",
+                backgroundColor: colors.surface,
                 borderTopLeftRadius: 24,
                 borderTopRightRadius: 24,
                 paddingTop: 24,
@@ -2559,57 +2569,57 @@ const GroupSettingsScreen = () => {
               }}
             >
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                <Text style={{ fontSize: 20, fontWeight: "bold", color: "#FFFFFF" }}>
+                <Text style={{ fontSize: 20, fontWeight: "bold", color: colors.text }}>
                   Edit Group Info
                 </Text>
                 <Pressable
                   onPress={() => setShowEditProfileModal(false)}
                   style={{ padding: 4 }}
                 >
-                  <X size={24} color="#FFFFFF" />
+                  <X size={24} color={colors.text} />
                 </Pressable>
               </View>
 
               <View className="mb-6">
-                <Text className="text-sm font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                <Text className="text-sm font-semibold mb-2" style={{ color: colors.textSecondary }}>
                   GROUP NAME
                 </Text>
                 <TextInput
                   value={name}
                   onChangeText={setName}
                   className="rounded-lg px-4 py-3 text-base"
-                  keyboardAppearance="dark"
+                  keyboardAppearance={isDark ? "dark" : "light"}
                   style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "#FFFFFF",
+                    backgroundColor: colors.inputBackground,
+                    color: colors.text,
                     borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    borderColor: colors.border,
                   }}
                   placeholder="Enter group name"
-                  placeholderTextColor="#666666"
+                  placeholderTextColor={colors.inputPlaceholder}
                   maxLength={50}
                 />
               </View>
 
               <View className="mb-8">
-                <Text className="text-sm font-semibold mb-2" style={{ color: "#8E8E93" }}>
+                <Text className="text-sm font-semibold mb-2" style={{ color: colors.textSecondary }}>
                   GROUP BIO
                 </Text>
                 <TextInput
                   value={bio}
                   onChangeText={setBio}
                   className="rounded-lg px-4 py-3 text-base"
-                  keyboardAppearance="dark"
+                  keyboardAppearance={isDark ? "dark" : "light"}
                   style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "#FFFFFF",
+                    backgroundColor: colors.inputBackground,
+                    color: colors.text,
                     borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    borderColor: colors.border,
                     minHeight: 100,
                     textAlignVertical: "top",
                   }}
                   placeholder="Enter group bio (optional)"
-                  placeholderTextColor="#666666"
+                  placeholderTextColor={colors.inputPlaceholder}
                   multiline
                   numberOfLines={4}
                   maxLength={200}
@@ -2636,7 +2646,7 @@ const GroupSettingsScreen = () => {
                   {updateSettingsMutation.isPending ? (
                     <LuxeLogoLoader size={20} />
                   ) : (
-                    <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "bold" }}>
+                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: "bold" }}>
                       Save Changes
                     </Text>
                   )}
@@ -2660,13 +2670,13 @@ const GroupSettingsScreen = () => {
             <View
               style={{
                 flex: 1,
-                backgroundColor: "rgba(0, 0, 0, 0.9)",
+                backgroundColor: colors.overlay,
                 justifyContent: "flex-end",
               }}
             >
               <View
                 style={{
-                  backgroundColor: "#1A1A1A",
+                  backgroundColor: colors.surface,
                   borderTopLeftRadius: 24,
                   borderTopRightRadius: 24,
                   paddingTop: 24,
@@ -2676,7 +2686,7 @@ const GroupSettingsScreen = () => {
               >
                 {/* Header */}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                  <Text style={{ fontSize: 24, fontWeight: "bold", color: "#FFFFFF" }}>
+                  <Text style={{ fontSize: 24, fontWeight: "bold", color: colors.text }}>
                     Invite to Chat
                   </Text>
                   <Pressable
@@ -2686,16 +2696,16 @@ const GroupSettingsScreen = () => {
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      backgroundColor: colors.inputBackground,
                       alignItems: "center",
                       justifyContent: "center",
                     })}
                   >
-                    <X size={20} color="#FFFFFF" />
+                    <X size={20} color={colors.text} />
                   </Pressable>
                 </View>
 
-                <Text style={{ fontSize: 15, color: "rgba(255, 255, 255, 0.6)", marginBottom: 20 }}>
+                <Text style={{ fontSize: 15, color: colors.textSecondary, marginBottom: 20 }}>
                   Share this link with anyone to invite them to join this chat
                 </Text>
 
@@ -2703,7 +2713,7 @@ const GroupSettingsScreen = () => {
                 {generateInviteLinkMutation.isPending ? (
                   <View style={{ padding: 20, alignItems: "center" }}>
                     <LuxeLogoLoader size="small" />
-                    <Text style={{ color: "rgba(255, 255, 255, 0.6)", marginTop: 8, fontSize: 14 }}>
+                    <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 14 }}>
                       Generating invite code...
                     </Text>
                   </View>
@@ -2712,7 +2722,7 @@ const GroupSettingsScreen = () => {
                     {/* Invite Code - Prominent Display */}
                     <View
                       style={{
-                        backgroundColor: "rgba(79, 195, 247, 0.15)",
+                        backgroundColor: colors.primary + "26",
                         borderRadius: 16,
                         padding: 20,
                         marginBottom: 16,
@@ -2721,14 +2731,14 @@ const GroupSettingsScreen = () => {
                         alignItems: "center",
                       }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: "600", color: "#4FC3F7", marginBottom: 12 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primary, marginBottom: 12 }}>
                         INVITE CODE
                       </Text>
                       <Text
                         style={{
                           fontSize: 32,
                           fontWeight: "bold",
-                          color: "#FFFFFF",
+                          color: colors.text,
                           fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
                           letterSpacing: 4,
                         }}
@@ -2744,12 +2754,12 @@ const GroupSettingsScreen = () => {
                     {/* Full Link (Collapsed) */}
                     <View
                       style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.05)",
+                        backgroundColor: colors.inputBackground,
                         borderRadius: 12,
                         padding: 12,
                         marginBottom: 16,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderColor: colors.border,
                       }}
                     >
                       <Text style={{ fontSize: 11, fontWeight: "600", color: "rgba(255, 255, 255, 0.5)", marginBottom: 6 }}>
@@ -2787,7 +2797,7 @@ const GroupSettingsScreen = () => {
                       >
                         <View
                           style={{
-                            backgroundColor: "rgba(79, 195, 247, 0.15)",
+                            backgroundColor: colors.primary + "26",
                             borderWidth: 1,
                             borderColor: "rgba(79, 195, 247, 0.3)",
                             borderRadius: 12,
@@ -2799,15 +2809,15 @@ const GroupSettingsScreen = () => {
                         >
                           {linkCopied ? (
                             <>
-                              <Check size={20} color="#4FC3F7" />
-                              <Text style={{ fontSize: 16, fontWeight: "600", color: "#4FC3F7", marginLeft: 8 }}>
+                              <Check size={20} color={colors.primary} />
+                              <Text style={{ fontSize: 16, fontWeight: "600", color: colors.primary, marginLeft: 8 }}>
                                 Copied!
                               </Text>
                             </>
                           ) : (
                             <>
-                              <Copy size={20} color="#4FC3F7" />
-                              <Text style={{ fontSize: 16, fontWeight: "600", color: "#4FC3F7", marginLeft: 8 }}>
+                              <Copy size={20} color={colors.primary} />
+                              <Text style={{ fontSize: 16, fontWeight: "600", color: colors.primary, marginLeft: 8 }}>
                                 Copy Code
                               </Text>
                             </>
@@ -2843,8 +2853,8 @@ const GroupSettingsScreen = () => {
                             justifyContent: "center",
                           }}
                         >
-                          <Share2 size={20} color="#FFFFFF" />
-                          <Text style={{ fontSize: 16, fontWeight: "600", color: "#FFFFFF", marginLeft: 8 }}>
+                          <Share2 size={20} color={colors.text} />
+                          <Text style={{ fontSize: 16, fontWeight: "600", color: colors.text, marginLeft: 8 }}>
                             Share
                           </Text>
                         </LinearGradient>
@@ -2869,7 +2879,7 @@ const GroupSettingsScreen = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <Text style={{ fontSize: 17, fontWeight: "600", color: "#FFFFFF" }}>
+                      <Text style={{ fontSize: 17, fontWeight: "600", color: colors.text }}>
                         Generate Invite Code
                       </Text>
                     </LinearGradient>
@@ -2888,7 +2898,7 @@ const GroupSettingsScreen = () => {
           onRequestClose={() => setShowPhotoGallery(false)}
         >
           <LinearGradient
-            colors={["#0A0A0A", "#1A1A2E", "#16213E"]}
+            colors={colors.chatBackgroundGradient}
             style={{ flex: 1 }}
           >
             {/* Header */}
@@ -2898,7 +2908,7 @@ const GroupSettingsScreen = () => {
                 paddingBottom: 16,
                 paddingHorizontal: 20,
                 borderBottomWidth: 1,
-                borderBottomColor: "rgba(255, 255, 255, 0.1)",
+                borderBottomColor: colors.glassBorder,
               }}
             >
               <View style={{ borderRadius: 16, overflow: "hidden" }}>
@@ -2926,12 +2936,12 @@ const GroupSettingsScreen = () => {
                     }}
                   />
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Images size={24} color="#FFFFFF" />
+                    <Images size={24} color={colors.text} />
                     <View>
-                      <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>
+                      <Text style={{ color: colors.text, fontSize: 18, fontWeight: "700" }}>
                         Photo Gallery
                       </Text>
-                      <Text style={{ color: "#A0A0A0", fontSize: 13, marginTop: 2 }}>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
                         {mediaMessages.length} {mediaMessages.length === 1 ? "item" : "items"}
                       </Text>
                     </View>
@@ -2942,12 +2952,12 @@ const GroupSettingsScreen = () => {
                       width: 36,
                       height: 36,
                       borderRadius: 18,
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      backgroundColor: colors.inputBackground,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    <X size={20} color="#FFFFFF" />
+                    <X size={20} color={colors.text} />
                   </Pressable>
                 </BlurView>
               </View>
@@ -2964,7 +2974,7 @@ const GroupSettingsScreen = () => {
                 }}
               >
                 <Images size={64} color="#666" />
-                <Text style={{ color: "#8E8E93", fontSize: 17, fontWeight: "600", marginTop: 16, textAlign: "center" }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 17, fontWeight: "600", marginTop: 16, textAlign: "center" }}>
                   No Media Yet
                 </Text>
                 <Text style={{ color: "#666", fontSize: 15, marginTop: 8, textAlign: "center", lineHeight: 20 }}>
@@ -3022,7 +3032,7 @@ const GroupSettingsScreen = () => {
                       padding: 0.5,
                     }}
                   >
-                    <View style={{ flex: 1, backgroundColor: "#2A2A2A" }}>
+                    <View style={{ flex: 1, backgroundColor: colors.background }}>
                       <Image
                         source={{ uri: thumbnailUrl }}
                         style={{ width: "100%", height: "100%" }}
@@ -3044,7 +3054,7 @@ const GroupSettingsScreen = () => {
                             width: 32,
                             height: 32,
                             borderRadius: 16,
-                            backgroundColor: "rgba(0,0,0,0.5)",
+                            backgroundColor: colors.overlay,
                             alignItems: "center",
                             justifyContent: "center",
                           }}>
@@ -3066,7 +3076,7 @@ const GroupSettingsScreen = () => {
                           paddingBottom: 6,
                         }}
                       >
-                        <Text style={{ color: "#FFFFFF", fontSize: 10, fontWeight: "600" }}>
+                        <Text style={{ color: colors.text, fontSize: 10, fontWeight: "600" }}>
                           {new Date(item.createdAt).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
@@ -3090,7 +3100,7 @@ const GroupSettingsScreen = () => {
           onRequestClose={() => setShowLinksCollection(false)}
         >
           <LinearGradient
-            colors={["#0A0A0A", "#1A1A2E", "#16213E"]}
+            colors={colors.chatBackgroundGradient}
             style={{ flex: 1 }}
           >
             {/* Header */}
@@ -3100,7 +3110,7 @@ const GroupSettingsScreen = () => {
                 paddingBottom: 16,
                 paddingHorizontal: 20,
                 borderBottomWidth: 1,
-                borderBottomColor: "rgba(255, 255, 255, 0.1)",
+                borderBottomColor: colors.glassBorder,
               }}
             >
               <View style={{ borderRadius: 16, overflow: "hidden" }}>
@@ -3128,12 +3138,12 @@ const GroupSettingsScreen = () => {
                     }}
                   />
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Link2 size={24} color="#FFFFFF" />
+                    <Link2 size={24} color={colors.text} />
                     <View>
-                      <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>
+                      <Text style={{ color: colors.text, fontSize: 18, fontWeight: "700" }}>
                         Links Collection
                       </Text>
-                      <Text style={{ color: "#A0A0A0", fontSize: 13, marginTop: 2 }}>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
                         {linkMessages.length} {linkMessages.length === 1 ? "link" : "links"}
                       </Text>
                     </View>
@@ -3144,12 +3154,12 @@ const GroupSettingsScreen = () => {
                       width: 36,
                       height: 36,
                       borderRadius: 18,
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      backgroundColor: colors.inputBackground,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    <X size={20} color="#FFFFFF" />
+                    <X size={20} color={colors.text} />
                   </Pressable>
                 </BlurView>
               </View>
@@ -3166,7 +3176,7 @@ const GroupSettingsScreen = () => {
                 }}
               >
                 <Link2 size={64} color="#666" />
-                <Text style={{ color: "#8E8E93", fontSize: 17, fontWeight: "600", marginTop: 16, textAlign: "center" }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 17, fontWeight: "600", marginTop: 16, textAlign: "center" }}>
                   No Links Yet
                 </Text>
                 <Text style={{ color: "#666", fontSize: 15, marginTop: 8, textAlign: "center", lineHeight: 20 }}>
@@ -3199,9 +3209,9 @@ const GroupSettingsScreen = () => {
                       style={{
                         borderRadius: 16,
                         overflow: "hidden",
-                        backgroundColor: "rgba(255, 255, 255, 0.05)",
+                        backgroundColor: colors.inputBackground,
                         borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderColor: colors.border,
                       }}
                     >
                       {item.linkPreview?.linkPreviewImage && (
@@ -3216,14 +3226,14 @@ const GroupSettingsScreen = () => {
                       )}
                       <View style={{ padding: 16 }}>
                         <Text
-                          style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600", marginBottom: 6 }}
+                          style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 6 }}
                           numberOfLines={2}
                         >
                           {item.linkPreview?.linkPreviewTitle || item.linkPreview?.url}
                         </Text>
                         {item.linkPreview?.linkPreviewDescription && (
                           <Text
-                            style={{ color: "#8E8E93", fontSize: 14, marginBottom: 8, lineHeight: 18 }}
+                            style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 8, lineHeight: 18 }}
                             numberOfLines={2}
                           >
                             {item.linkPreview.linkPreviewDescription}
@@ -3243,7 +3253,7 @@ const GroupSettingsScreen = () => {
                                 (item.linkPreview?.url ? new URL(item.linkPreview.url).hostname : '')}
                             </Text>
                           </View>
-                          <ExternalLink size={16} color="#007AFF" style={{ marginLeft: 8 }} />
+                          <ExternalLink size={16} color={colors.primary} style={{ marginLeft: 8 }} />
                         </View>
                         <Text style={{ color: "#444", fontSize: 11, marginTop: 8 }}>
                           {new Date(item.createdAt).toLocaleDateString("en-US", {

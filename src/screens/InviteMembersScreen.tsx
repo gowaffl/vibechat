@@ -22,6 +22,7 @@ import { getFullImageUrl } from "@/utils/imageHelpers";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { User, InviteUserToChatRequest } from "@/shared/contracts";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const InviteMembersScreen = () => {
   const insets = useSafeAreaInsets();
@@ -29,6 +30,7 @@ const InviteMembersScreen = () => {
   const route = useRoute<RootStackScreenProps<"InviteMembers">["route"]>();
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const { colors, isDark } = useTheme();
 
   const { chatId, chatName } = route.params;
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -127,15 +129,15 @@ const InviteMembersScreen = () => {
             alignItems: "center",
             padding: 16,
             backgroundColor: isSelected
-              ? "rgba(79, 195, 247, 0.15)"
-              : "rgba(255, 255, 255, 0.05)",
+              ? (isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)")
+              : (isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)"),
             borderRadius: 16,
             marginHorizontal: 16,
             marginBottom: 12,
             borderWidth: 1,
             borderColor: isSelected
-              ? "rgba(79, 195, 247, 0.5)"
-              : "rgba(255, 255, 255, 0.1)",
+              ? (isDark ? "rgba(79, 195, 247, 0.5)" : "rgba(0, 122, 255, 0.5)")
+              : colors.border,
           }}
         >
           {/* User Avatar */}
@@ -148,8 +150,8 @@ const InviteMembersScreen = () => {
                 marginRight: 12,
                 borderWidth: 2,
                 borderColor: isSelected
-                  ? "rgba(79, 195, 247, 0.5)"
-                  : "rgba(79, 195, 247, 0.3)",
+                  ? (isDark ? "rgba(79, 195, 247, 0.5)" : "rgba(0, 122, 255, 0.5)")
+                  : (isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 122, 255, 0.3)"),
                 overflow: "hidden",
               }}
             >
@@ -175,8 +177,8 @@ const InviteMembersScreen = () => {
                 marginRight: 12,
                 borderWidth: 2,
                 borderColor: isSelected
-                  ? "rgba(79, 195, 247, 0.5)"
-                  : "rgba(79, 195, 247, 0.3)",
+                  ? (isDark ? "rgba(79, 195, 247, 0.5)" : "rgba(0, 122, 255, 0.5)")
+                  : (isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 122, 255, 0.3)"),
               }}
             >
               <Text
@@ -197,7 +199,7 @@ const InviteMembersScreen = () => {
               style={{
                 fontSize: 17,
                 fontWeight: "600",
-                color: "#FFFFFF",
+                color: colors.text,
                 marginBottom: 2,
               }}
             >
@@ -207,7 +209,7 @@ const InviteMembersScreen = () => {
               <Text
                 style={{
                   fontSize: 14,
-                  color: "rgba(255, 255, 255, 0.6)",
+                  color: colors.textSecondary,
                 }}
                 numberOfLines={1}
               >
@@ -223,8 +225,8 @@ const InviteMembersScreen = () => {
               height: 28,
               borderRadius: 14,
               backgroundColor: isSelected
-                ? "#4FC3F7"
-                : "rgba(255, 255, 255, 0.1)",
+                ? colors.primary
+                : (isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"),
               alignItems: "center",
               justifyContent: "center",
               marginLeft: 12,
@@ -238,7 +240,7 @@ const InviteMembersScreen = () => {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Content */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -253,12 +255,12 @@ const InviteMembersScreen = () => {
             paddingHorizontal: 32,
           }}
         >
-          <UserPlus size={64} color="rgba(255, 255, 255, 0.2)" strokeWidth={1.5} />
+          <UserPlus size={64} color={colors.textTertiary} strokeWidth={1.5} />
           <Text
             style={{
               fontSize: 20,
               fontWeight: "600",
-              color: "#FFFFFF",
+              color: colors.text,
               marginTop: 16,
               textAlign: "center",
             }}
@@ -268,7 +270,7 @@ const InviteMembersScreen = () => {
           <Text
             style={{
               fontSize: 15,
-              color: "rgba(255, 255, 255, 0.6)",
+              color: colors.textSecondary,
               marginTop: 8,
               textAlign: "center",
             }}
@@ -282,7 +284,7 @@ const InviteMembersScreen = () => {
             <Text
               style={{
                 fontSize: 15,
-                color: "rgba(255, 255, 255, 0.6)",
+                color: colors.textSecondary,
                 textAlign: "center",
               }}
             >
@@ -330,7 +332,7 @@ const InviteMembersScreen = () => {
                     flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "center",
-                    shadowColor: "#4FC3F7",
+                    shadowColor: colors.primary,
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: 0.4,
                     shadowRadius: 12,

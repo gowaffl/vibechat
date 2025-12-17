@@ -19,6 +19,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { api } from "@/lib/api";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { OnboardingProgress } from "@/components/OnboardingProgress";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { width, height } = Dimensions.get("window");
 
@@ -26,6 +27,7 @@ export default function BirthdateScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { userId, hasCompletedOnboarding } = route.params || {};
+  const { colors, isDark } = useTheme();
   
   const [date, setDate] = useState(new Date(2000, 0, 1)); // Default to Jan 1, 2000
   const [loading, setLoading] = useState(false);
@@ -102,23 +104,36 @@ export default function BirthdateScreen() {
     }
   };
 
+  const backgroundGradientColors = isDark 
+    ? ["#000000", "#0A0A0F", "#050508", "#000000"]
+    : [colors.background, colors.backgroundSecondary, colors.surfaceSecondary, colors.background];
+
+  const overlayGradientColors = isDark
+    ? [
+        "rgba(79, 195, 247, 0.05)",
+        "rgba(0, 122, 255, 0.03)",
+        "transparent",
+        "rgba(52, 199, 89, 0.03)",
+      ]
+    : [
+        "rgba(0, 122, 255, 0.05)",
+        "rgba(79, 195, 247, 0.05)",
+        "transparent",
+        "rgba(52, 199, 89, 0.05)",
+      ];
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Animated Gradient Background */}
       <View style={styles.backgroundContainer}>
         <LinearGradient
-          colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+          colors={backgroundGradientColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.flexOne}
         />
         <LinearGradient
-          colors={[
-            "rgba(79, 195, 247, 0.05)",
-            "rgba(0, 122, 255, 0.03)",
-            "transparent",
-            "rgba(52, 199, 89, 0.03)",
-          ]}
+          colors={overlayGradientColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.overlayGradient}
@@ -148,7 +163,7 @@ export default function BirthdateScreen() {
                  position: "absolute",
                  width: 200,
                  height: 200,
-                 backgroundColor: "rgba(236, 72, 153, 0.15)", // Pink glow for Bday
+                 backgroundColor: isDark ? "rgba(236, 72, 153, 0.15)" : "rgba(236, 72, 153, 0.1)", // Pink glow for Bday
                  borderRadius: 100,
                  top: "15%",
                }} />
@@ -176,14 +191,14 @@ export default function BirthdateScreen() {
         ]}
       >
         <View style={styles.header}>
-                <Text style={styles.title}>When's your birthday?</Text>
-          <Text style={styles.subtitle}>
+                <Text style={[styles.title, { color: colors.text }]}>When's your birthday?</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
                   Just to make sure you're old enough to vibe. We won't show this on your profile.
           </Text>
         </View>
 
-        <View style={styles.pickerContainer}>
-          <BlurView intensity={Platform.OS === "ios" ? 30 : 60} tint="dark" style={styles.blurContainer}>
+        <View style={[styles.pickerContainer, { borderColor: colors.glassBorder, backgroundColor: colors.glassBackground }]}>
+          <BlurView intensity={Platform.OS === "ios" ? 30 : 60} tint={isDark ? "dark" : "light"} style={styles.blurContainer}>
              <DateTimePicker
                 testID="dateTimePicker"
                 value={date}
@@ -193,8 +208,8 @@ export default function BirthdateScreen() {
                   const currentDate = selectedDate || date;
                   setDate(currentDate);
                 }}
-                textColor="white"
-                themeVariant="dark"
+                textColor={colors.text}
+                themeVariant={isDark ? "dark" : "light"}
                 style={styles.datePicker}
                 maximumDate={new Date()}
               />
@@ -204,7 +219,7 @@ export default function BirthdateScreen() {
         <Pressable
           onPress={handleContinue}
           disabled={loading}
-          style={styles.buttonContainer}
+          style={[styles.buttonContainer, { shadowColor: colors.primary }]}
         >
           <LinearGradient
             colors={["#0061FF", "#00C6FF", "#00E676"]} // New VibeChat Gradient
@@ -229,7 +244,6 @@ export default function BirthdateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
   },
   flexOne: {
     flex: 1,
@@ -261,13 +275,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#FFFFFF",
     marginBottom: 12,
     textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.6)",
     textAlign: "center",
     lineHeight: 24,
     paddingHorizontal: 16,
@@ -277,8 +289,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 40,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    backgroundColor: "rgba(0,0,0,0.3)",
   },
   blurContainer: {
     padding: 10,
@@ -292,7 +302,6 @@ const styles = StyleSheet.create({
   buttonContainer: {
     overflow: "hidden",
     borderRadius: 16,
-    shadowColor: "#3B82F6",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

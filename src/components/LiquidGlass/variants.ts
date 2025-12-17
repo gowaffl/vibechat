@@ -20,7 +20,7 @@ export interface VariantColors {
   textColor: string;
 }
 
-export const variantColorMap: Record<LiquidGlassVariant, VariantColors> = {
+const darkVariants: Record<LiquidGlassVariant, VariantColors> = {
   default: {
     borderColor: "rgba(255, 255, 255, 0.2)",
     shadowColor: "rgba(255, 255, 255, 0.3)",
@@ -123,3 +123,112 @@ export const variantColorMap: Record<LiquidGlassVariant, VariantColors> = {
   },
 };
 
+const lightVariants: Record<LiquidGlassVariant, VariantColors> = {
+  default: {
+    borderColor: "rgba(226, 232, 240, 0.6)",
+    shadowColor: "rgba(0, 0, 0, 0.05)",
+    gradientColors: [
+      "rgba(255, 255, 255, 0.8)",
+      "rgba(255, 255, 255, 0.6)",
+      "rgba(255, 255, 255, 0.4)",
+    ],
+    iconColor: "#1A1A1A",
+    textColor: "#1A1A1A",
+  },
+  success: {
+    borderColor: "rgba(52, 199, 89, 0.3)",
+    shadowColor: "rgba(52, 199, 89, 0.2)",
+    gradientColors: [
+      "rgba(52, 199, 89, 0.1)",
+      "rgba(52, 199, 89, 0.05)",
+      "rgba(52, 199, 89, 0.02)",
+    ],
+    iconColor: "#248A3D", // Darker for light mode visibility
+    textColor: "#248A3D",
+  },
+  warning: {
+    borderColor: "rgba(255, 149, 0, 0.3)",
+    shadowColor: "rgba(255, 149, 0, 0.2)",
+    gradientColors: [
+      "rgba(255, 149, 0, 0.1)",
+      "rgba(255, 149, 0, 0.05)",
+      "rgba(255, 149, 0, 0.02)",
+    ],
+    iconColor: "#CC7700",
+    textColor: "#CC7700",
+  },
+  danger: {
+    borderColor: "rgba(255, 59, 48, 0.3)",
+    shadowColor: "rgba(255, 59, 48, 0.2)",
+    gradientColors: [
+      "rgba(255, 59, 48, 0.1)",
+      "rgba(255, 59, 48, 0.05)",
+      "rgba(255, 59, 48, 0.02)",
+    ],
+    iconColor: "#D12A22",
+    textColor: "#D12A22",
+  },
+  info: {
+    borderColor: "rgba(0, 122, 255, 0.3)",
+    shadowColor: "rgba(0, 122, 255, 0.2)",
+    gradientColors: [
+      "rgba(0, 122, 255, 0.1)",
+      "rgba(0, 122, 255, 0.05)",
+      "rgba(0, 122, 255, 0.02)",
+    ],
+    iconColor: "#0056B3",
+    textColor: "#0056B3",
+  },
+  // AI Super Features variants
+  catchup: {
+    borderColor: "rgba(255, 144, 82, 0.3)",
+    shadowColor: "rgba(255, 144, 82, 0.2)",
+    gradientColors: [
+      "rgba(255, 144, 82, 0.1)",
+      "rgba(255, 144, 82, 0.05)",
+      "rgba(255, 144, 82, 0.02)",
+    ],
+    iconColor: "#E66A2C",
+    textColor: "#E66A2C",
+  },
+  event: {
+    borderColor: "rgba(0, 122, 255, 0.3)",
+    shadowColor: "rgba(0, 122, 255, 0.2)",
+    gradientColors: [
+      "rgba(0, 122, 255, 0.1)",
+      "rgba(0, 122, 255, 0.05)",
+      "rgba(0, 122, 255, 0.02)",
+    ],
+    iconColor: "#0062CC",
+    textColor: "#0062CC",
+  },
+  reactor: {
+    borderColor: "rgba(168, 85, 247, 0.3)",
+    shadowColor: "rgba(168, 85, 247, 0.2)",
+    gradientColors: [
+      "rgba(168, 85, 247, 0.1)",
+      "rgba(168, 85, 247, 0.05)",
+      "rgba(168, 85, 247, 0.02)",
+    ],
+    iconColor: "#7E22CE",
+    textColor: "#7E22CE",
+  },
+  thread: {
+    borderColor: "rgba(20, 184, 166, 0.3)",
+    shadowColor: "rgba(20, 184, 166, 0.2)",
+    gradientColors: [
+      "rgba(20, 184, 166, 0.1)",
+      "rgba(20, 184, 166, 0.05)",
+      "rgba(20, 184, 166, 0.02)",
+    ],
+    iconColor: "#0F766E",
+    textColor: "#0F766E",
+  },
+};
+
+export const getVariantColors = (variant: LiquidGlassVariant, isDark: boolean): VariantColors => {
+  return isDark ? darkVariants[variant] : lightVariants[variant];
+};
+
+// Default export for backward compatibility (defaults to dark)
+export const variantColorMap = darkVariants;

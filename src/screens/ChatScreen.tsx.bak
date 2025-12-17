@@ -53,7 +53,7 @@ import { setActiveChatId } from "@/lib/notifications";
 import { BACKEND_URL } from "@/config";
 import { authClient, supabaseClient } from "@/lib/authClient";
 import { aiFriendsApi } from "@/api/ai-friends";
-import { useTheme } from "@/contexts/ThemeContext";
+// TEMP: import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
 import { useDraftStore } from "@/stores/draftStore";
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
@@ -145,7 +145,6 @@ const ChatHeader = ({
   onJoinVoiceRoom: () => void; // Added
 }) => {
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useTheme();
   const navigation = useNavigation();
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
   
@@ -171,38 +170,32 @@ const ChatHeader = ({
       {/* Liquid Glass Background */}
       <BlurView
         intensity={80}
-        tint={isDark ? "dark" : "light"}
+        tint={colors.blurTint}
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: Platform.OS === "ios" 
-            ? (isDark ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.3)")
-            : (isDark ? "rgba(0, 0, 0, 0.85)" : "rgba(255, 255, 255, 0.85)"),
+          backgroundColor: Platform.OS === 'ios' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.85)',
           borderBottomWidth: 0.5,
-          borderBottomColor: colors.glassBorder,
+          borderBottomColor: 'rgba(255, 255, 255, 0.1)',
         }}
       >
         <LinearGradient
-          colors={isDark 
-            ? [
-                "rgba(79, 195, 247, 0.15)",
-                "rgba(0, 122, 255, 0.1)",
-                "rgba(0, 0, 0, 0)",
-              ]
-            : [
-                "rgba(0, 122, 255, 0.05)",
-                "rgba(79, 195, 247, 0.05)",
-                "rgba(255, 255, 255, 0)",
-              ]
-          }
+          colors={[
+            'rgba(79, 195, 247, 0.15)',
+            'rgba(0, 122, 255, 0.1)',
+            'rgba(0, 0, 0, 0)',
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{
             flex: 1,
-            opacity: 0.5,
+            shadowColor: 'rgba(79, 195, 247, 0.5)',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 12,
           }}
         />
       </BlurView>
@@ -239,14 +232,14 @@ const ChatHeader = ({
           <View
             className="w-9 h-9 rounded-full items-center justify-center"
             style={{
-              backgroundColor: colors.inputBackground,
-              shadowColor: colors.glassShadow,
+              backgroundColor: "rgba(255, 255, 255, 0.15)",
+              shadowColor: "#000",
               shadowOffset: { width: 0, height: 1 },
               shadowOpacity: 0.1,
               shadowRadius: 2,
             }}
           >
-            <ChevronLeft size={22} color={colors.text} strokeWidth={2.5} />
+            <ChevronLeft size={22} color="#FFFFFF" strokeWidth={2.5} />
           </View>
         </Pressable>
 
@@ -278,19 +271,19 @@ const ChatHeader = ({
                   width: 48,
                   height: 48,
                   borderRadius: 24,
-                  backgroundColor: colors.inputBackground,
+                  backgroundColor: "rgba(255, 255, 255, 0.15)",
                   alignItems: "center",
                   justifyContent: "center",
                   marginBottom: 2,
                 }}
               >
-                <Users size={24} color={colors.text} />
+                <Users size={24} color="#FFFFFF" />
               </View>
             )}
             {/* Group Name */}
             <Text
               className="text-sm font-semibold"
-              style={{ color: colors.text }}
+              style={{ color: "#FFFFFF" }}
               numberOfLines={1}
             >
               {chatName || "Vibecode Chat"}
@@ -308,14 +301,14 @@ const ChatHeader = ({
           <View
             className="w-9 h-9 rounded-full items-center justify-center"
             style={{
-              backgroundColor: colors.inputBackground,
-              shadowColor: colors.glassShadow,
+              backgroundColor: "rgba(255, 255, 255, 0.15)",
+              shadowColor: "#000",
               shadowOffset: { width: 0, height: 1 },
               shadowOpacity: 0.1,
               shadowRadius: 2,
             }}
           >
-            <MoreVertical size={20} color={colors.text} />
+            <MoreVertical size={20} color="#FFFFFF" />
           </View>
         </Pressable>
       </View>
@@ -330,7 +323,7 @@ const ChatHeader = ({
         <Pressable
           style={{
             flex: 1,
-            backgroundColor: colors.overlay,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
             justifyContent: "flex-start",
             alignItems: "flex-end",
             paddingTop: insets.top + 43,
@@ -346,20 +339,16 @@ const ChatHeader = ({
                 borderRadius: 16,
                 overflow: "hidden",
                 minWidth: 200,
-                backgroundColor: colors.glassBackgroundSecondary,
+                backgroundColor: "rgba(0, 0, 0, 0.3)",
                 borderWidth: 1,
-                borderColor: colors.glassBorder,
+                borderColor: "rgba(255, 255, 255, 0.1)",
               }}
             >
               <LinearGradient
-                colors={isDark ? [
+                colors={[
                   "rgba(255, 255, 255, 0.15)",
                   "rgba(255, 255, 255, 0.10)",
                   "rgba(255, 255, 255, 0.05)",
-                ] : [
-                  "rgba(255, 255, 255, 0.8)",
-                  "rgba(255, 255, 255, 0.6)",
-                  "rgba(255, 255, 255, 0.4)",
                 ]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -385,15 +374,15 @@ const ChatHeader = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: colors.inputBackground,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
                     }}
                   >
-                    <Mic size={18} color={colors.text} />
+                    <Mic size={18} color="#FFFFFF" />
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     Vibe Call
                   </Text>
                 </Pressable>
@@ -418,7 +407,7 @@ const ChatHeader = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: colors.inputBackground,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
@@ -430,7 +419,7 @@ const ChatHeader = ({
                       resizeMode="contain"
                     />
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     Smart Threads
                   </Text>
                 </Pressable>
@@ -455,15 +444,15 @@ const ChatHeader = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: colors.inputBackground,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
                     }}
                   >
-                    <Calendar size={18} color={colors.text} />
+                    <Calendar size={18} color="#FFFFFF" />
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     Events
                   </Text>
                 </Pressable>
@@ -488,15 +477,15 @@ const ChatHeader = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: colors.inputBackground,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
                     }}
                   >
-                    <Bookmark size={18} color={colors.text} />
+                    <Bookmark size={18} color="#FFFFFF" />
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     Bookmarks
                   </Text>
                 </Pressable>
@@ -521,20 +510,20 @@ const ChatHeader = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: colors.inputBackground,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
                     }}
                   >
-                    <Search size={18} color={colors.text} />
+                    <Search size={18} color="#FFFFFF" />
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     Search
                   </Text>
                 </Pressable>
 
-                <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 8 }} />
+                <View style={{ height: 1, backgroundColor: "rgba(255, 255, 255, 0.1)", marginVertical: 8 }} />
 
                 {/* Send Invite Option */}
                 <Pressable
@@ -555,15 +544,15 @@ const ChatHeader = ({
                       width: 32,
                       height: 32,
                       borderRadius: 16,
-                      backgroundColor: colors.inputBackground,
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
                     }}
                   >
-                    <UserPlus size={18} color={colors.text} />
+                    <UserPlus size={18} color="#FFFFFF" />
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     Send Invite
                   </Text>
                 </Pressable>
@@ -763,8 +752,6 @@ const MessageContextMenu = ({
   onReactor?: (message: Message) => void;
   onCopy: (message: Message) => void;
 }) => {
-  const { colors, isDark } = useTheme();
-  
   if (!message) return null;
 
   const quickEmojis = ["❤️", "👍", "👎", "😂", "😮", "🔥", "🎉", "👏", "❓"];
@@ -798,18 +785,18 @@ const MessageContextMenu = ({
         {/* MED-B: Message preview bubble above context menu */}
         <View
           style={{
-            backgroundColor: isDark ? "rgba(45, 45, 45, 0.95)" : "rgba(255, 255, 255, 0.95)",
+            backgroundColor: "rgba(45, 45, 45, 0.95)",
             borderRadius: 12,
             padding: 10,
             marginBottom: 12,
             maxWidth: 280,
             borderWidth: 1,
-            borderColor: colors.glassBorder,
+            borderColor: "rgba(255, 255, 255, 0.08)",
           }}
         >
           <Text
             style={{
-              color: colors.textSecondary,
+              color: "#AAAAAA",
               fontSize: 13,
               lineHeight: 18,
             }}
@@ -821,12 +808,12 @@ const MessageContextMenu = ({
 
         <View
           style={{
-            backgroundColor: isDark ? "rgba(20, 20, 20, 0.95)" : "rgba(255, 255, 255, 0.98)",
+            backgroundColor: "rgba(20, 20, 20, 0.95)",
             borderRadius: 16,
             padding: 8,
             minWidth: 280,
             borderWidth: 1,
-            borderColor: colors.glassBorder,
+            borderColor: "rgba(255, 255, 255, 0.1)",
           }}
           onStartShouldSetResponder={() => true}
         >
@@ -840,7 +827,7 @@ const MessageContextMenu = ({
               paddingHorizontal: 8,
               gap: 8,
               borderBottomWidth: 1,
-              borderBottomColor: colors.glassBorder,
+              borderBottomColor: "rgba(255, 255, 255, 0.1)",
               marginBottom: 8,
             }}
           >
@@ -858,9 +845,7 @@ const MessageContextMenu = ({
                   alignItems: "center",
                   justifyContent: "center",
                   borderRadius: 22,
-                  backgroundColor: pressed 
-                    ? (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)") 
-                    : (isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)"),
+                  backgroundColor: pressed ? "rgba(255, 255, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
                   transform: [{ scale: pressed ? 1.2 : 1 }],
                 })}
               >
@@ -883,8 +868,8 @@ const MessageContextMenu = ({
               borderRadius: 12,
             }}
           >
-            <Reply size={20} color={colors.text} />
-            <Text style={{ color: colors.text, fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
+            <Reply size={20} color="#FFFFFF" />
+            <Text style={{ color: "#FFFFFF", fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
               Reply
             </Text>
           </Pressable>
@@ -903,8 +888,8 @@ const MessageContextMenu = ({
                 borderRadius: 12,
               }}
             >
-              <Copy size={20} color={colors.text} />
-              <Text style={{ color: colors.text, fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
+              <Copy size={20} color="#FFFFFF" />
+              <Text style={{ color: "#FFFFFF", fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
                 Copy
               </Text>
             </Pressable>
@@ -923,8 +908,8 @@ const MessageContextMenu = ({
               borderRadius: 12,
             }}
           >
-            <Bookmark size={20} color={isBookmarked ? colors.warning : colors.text} fill={isBookmarked ? colors.warning : "none"} />
-            <Text style={{ color: isBookmarked ? colors.warning : colors.text, fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
+            <Bookmark size={20} color={isBookmarked ? "#FF9500" : "#FFFFFF"} fill={isBookmarked ? "#FF9500" : "none"} />
+            <Text style={{ color: isBookmarked ? "#FF9500" : "#FFFFFF", fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
               {isBookmarked ? "Remove Bookmark" : "Bookmark"}
             </Text>
           </Pressable>
@@ -942,8 +927,8 @@ const MessageContextMenu = ({
               borderRadius: 12,
             }}
           >
-            <Settings size={20} color={colors.text} />
-            <Text style={{ color: colors.text, fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
+            <Settings size={20} color="#FFFFFF" />
+            <Text style={{ color: "#FFFFFF", fontSize: 16, marginLeft: 12, fontWeight: "500" }}>
               Select
             </Text>
           </Pressable>
@@ -1051,7 +1036,6 @@ const ReactionPickerModal = ({
   onClose: () => void;
   onSelectEmoji: (emoji: string, message: Message) => void;
 }) => {
-  const { colors, isDark } = useTheme();
   const emojis = ["❤️", "👍", "👎", "😂", "😮", "❓"];
 
   if (!message) return null;
@@ -1070,15 +1054,15 @@ const ReactionPickerModal = ({
       >
         <View
           style={{
-            backgroundColor: isDark ? "rgba(20, 20, 20, 0.95)" : "rgba(255, 255, 255, 0.98)",
+            backgroundColor: "rgba(20, 20, 20, 0.95)",
             borderRadius: 20,
             padding: 16,
             borderWidth: 1,
-            borderColor: colors.glassBorder,
+            borderColor: "rgba(255, 255, 255, 0.1)",
           }}
           onStartShouldSetResponder={() => true}
         >
-          <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 16, textAlign: "center" }}>
+          <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600", marginBottom: 16, textAlign: "center" }}>
             React with an emoji
           </Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
@@ -1094,11 +1078,11 @@ const ReactionPickerModal = ({
                   width: 56,
                   height: 56,
                   borderRadius: 28,
-                  backgroundColor: colors.inputBackground,
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: colors.glassBorder,
+                  borderColor: "rgba(255, 255, 255, 0.2)",
                 }}
               >
                 <Text style={{ fontSize: 32 }}>{emoji}</Text>
@@ -1113,7 +1097,6 @@ const ReactionPickerModal = ({
 
 // Typing Indicator Component
 const TypingIndicator = ({ typingUsers }: { typingUsers: { id: string; name: string }[] }) => {
-  const { colors, isDark } = useTheme();
   const [dots, setDots] = useState(".");
   
   useEffect(() => {
@@ -1142,16 +1125,16 @@ const TypingIndicator = ({ typingUsers }: { typingUsers: { id: string; name: str
     >
       <View
         style={{
-          backgroundColor: isDark ? "rgba(142, 142, 147, 0.15)" : "rgba(142, 142, 147, 0.12)",
+          backgroundColor: "rgba(142, 142, 147, 0.15)",
           borderRadius: 20,
           paddingHorizontal: 16,
           paddingVertical: 10,
           borderWidth: 1,
-          borderColor: isDark ? "rgba(142, 142, 147, 0.3)" : "rgba(142, 142, 147, 0.25)",
+          borderColor: "rgba(142, 142, 147, 0.3)",
           maxWidth: "80%",
         }}
       >
-        <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: "italic" }}>
+        <Text style={{ color: "#8E8E93", fontSize: 14, fontStyle: "italic" }}>
           {displayText}
         </Text>
       </View>
@@ -1169,7 +1152,6 @@ const MessageSelectionToolbar = ({
   onDelete: () => void;
   onCancel: () => void;
 }) => {
-  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   
   return (
@@ -1179,9 +1161,9 @@ const MessageSelectionToolbar = ({
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: isDark ? "rgba(28, 28, 30, 0.95)" : "rgba(255, 255, 255, 0.98)",
+        backgroundColor: "rgba(28, 28, 30, 0.95)",
         borderTopWidth: 1,
-        borderTopColor: colors.glassBorder,
+        borderTopColor: "rgba(255, 255, 255, 0.1)",
         paddingBottom: insets.bottom,
         paddingTop: 8,
         paddingHorizontal: 12,
@@ -1193,13 +1175,13 @@ const MessageSelectionToolbar = ({
         onPress={onCancel}
         style={{
           flex: 1,
-                      backgroundColor: colors.inputBackground,
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
           borderRadius: 12,
           padding: 16,
           alignItems: "center",
         }}
       >
-        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
+        <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>
           Cancel
         </Text>
       </Pressable>
@@ -1215,7 +1197,7 @@ const MessageSelectionToolbar = ({
           alignItems: "center",
         }}
       >
-        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
+        <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>
           Delete ({selectedCount})
         </Text>
       </Pressable>
@@ -1239,7 +1221,6 @@ const ImageSelectionToolbar = ({
   onDelete: () => void;
   onCancel: () => void;
 }) => {
-  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   
   return (
@@ -1269,7 +1250,7 @@ const ImageSelectionToolbar = ({
           }}
         >
           <LinearGradient
-            colors={isDark ? ["rgba(255, 255, 255, 0.2)", "rgba(255, 255, 255, 0.08)"] : ["rgba(0, 0, 0, 0.05)", "rgba(0, 0, 0, 0.02)"]}
+            colors={["rgba(255, 255, 255, 0.2)", "rgba(255, 255, 255, 0.08)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -1284,7 +1265,7 @@ const ImageSelectionToolbar = ({
           {/* Selected count */}
           <Text
             style={{
-              color: colors.text,
+              color: "#FFFFFF",
               fontSize: 14,
               fontWeight: "600",
               textAlign: "center",
@@ -1383,13 +1364,13 @@ const ImageSelectionToolbar = ({
           <Pressable
             onPress={onCancel}
             style={{
-              backgroundColor: colors.inputBackground,
+              backgroundColor: "rgba(255, 255, 255, 0.1)",
               borderRadius: 12,
               padding: 14,
               alignItems: "center",
             }}
           >
-            <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}>
+            <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}>
               Cancel
             </Text>
           </Pressable>
@@ -1411,8 +1392,6 @@ const ReactionDetailsModal = ({
   reactions: Reaction[];
   onClose: () => void;
 }) => {
-  const { colors, isDark } = useTheme();
-  
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
@@ -1427,11 +1406,11 @@ const ReactionDetailsModal = ({
       >
         <View
           style={{
-            backgroundColor: isDark ? "rgba(20, 20, 20, 0.95)" : "rgba(255, 255, 255, 0.98)",
+            backgroundColor: "rgba(20, 20, 20, 0.95)",
             borderRadius: 20,
             padding: 20,
             borderWidth: 1,
-            borderColor: colors.glassBorder,
+            borderColor: "rgba(255, 255, 255, 0.1)",
             width: "90%",
             maxWidth: 400,
           }}
@@ -1439,7 +1418,7 @@ const ReactionDetailsModal = ({
         >
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
             <Text style={{ fontSize: 36, marginRight: 12 }}>{emoji}</Text>
-            <Text style={{ color: colors.text, fontSize: 20, fontWeight: "600" }}>
+            <Text style={{ color: "#FFFFFF", fontSize: 20, fontWeight: "600" }}>
               {reactions.length} {reactions.length === 1 ? "reaction" : "reactions"}
             </Text>
           </View>
@@ -1458,7 +1437,7 @@ const ReactionDetailsModal = ({
                     alignItems: "center",
                     paddingVertical: 12,
                     borderBottomWidth: 1,
-                    borderBottomColor: colors.glassBorder,
+                    borderBottomColor: "rgba(255, 255, 255, 0.1)",
                   }}
                 >
                   {user?.image ? (
@@ -1495,7 +1474,7 @@ const ReactionDetailsModal = ({
                       </Text>
                     </View>
                   )}
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "500" }}>
                     {user?.name || "Unknown User"}
                   </Text>
                 </View>
@@ -1513,10 +1492,10 @@ const MAX_INPUT_HEIGHT = 110;
 
 const ChatScreen = () => {
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useTheme();
   const navigation = useNavigation<RootStackScreenProps<"Chat">["navigation"]>();
   const route = useRoute<RootStackScreenProps<"Chat">["route"]>();
   const { user, updateUser } = useUser();
+  // TEMP: const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
   const colorScheme = useColorScheme();
 
@@ -5795,7 +5774,7 @@ const ChatScreen = () => {
   });
 
   const inputTextColor = useMemo(() => 
-    isAIMessage ? "#14B8A6" : colors.text,
+    isAIMessage ? "#14B8A6" : "#FFFFFF",
     [isAIMessage]
   );
 
@@ -5971,7 +5950,7 @@ const ChatScreen = () => {
       
       return (
         <View style={{ alignItems: 'center', marginVertical: 16 }}>
-           <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '600' }}>
+           <Text style={{ color: '#8E8E93', fontSize: 12, fontWeight: '600' }}>
              {dateText}
            </Text>
         </View>
@@ -6074,11 +6053,11 @@ const ChatScreen = () => {
         return (
           <View style={{ marginVertical: 8, paddingHorizontal: 16 }}>
             <View style={{
-              backgroundColor: isDark ? "rgba(142, 142, 147, 0.15)" : "rgba(142, 142, 147, 0.08)",
+              backgroundColor: "rgba(142, 142, 147, 0.15)",
               borderRadius: 16,
               padding: 12,
               borderWidth: 1,
-              borderColor: isDark ? "rgba(142, 142, 147, 0.3)" : "rgba(142, 142, 147, 0.2)",
+              borderColor: "rgba(142, 142, 147, 0.3)",
               alignSelf: "stretch",
             }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 }}>
@@ -6086,7 +6065,7 @@ const ChatScreen = () => {
                   <Sparkles size={14} color="#FFF" />
                 </View>
                 <Text style={{
-                  color: isDark ? "#8E8E93" : "#6D6D72",
+                  color: "#8E8E93",
                   fontSize: 12,
                   fontWeight: "700",
                   textTransform: "uppercase",
@@ -6100,19 +6079,19 @@ const ChatScreen = () => {
                     <ShimmeringText 
                       text="Reading conversation..." 
                       style={{ 
-                        color: isDark ? '#B0B0B0' : '#636366',
+                        color: '#B0B0B0', // Slightly darker base for better contrast
                         fontSize: 14, 
                         fontStyle: "italic",
                         fontWeight: "500"
                       }}
-                      shimmerColor={isDark ? "#FFFFFF" : "#000000"} // Theme-aware shimmer
+                      shimmerColor="#FFFFFF" // Pure white shimmer
                       duration={1200} // Faster
                     />
                  </View>
               ) : (
                 <MessageText 
                   content={message.content} 
-                  style={{ color: isDark ? '#E0E0E0' : '#1C1C1E' }}
+                  style={{ color: '#E0E0E0' }}
                   isOwnMessage={false}
                 />
               )}
@@ -6179,7 +6158,7 @@ const ChatScreen = () => {
                 <ActivityIndicator size="small" color="#30D158" />
                 <Text
                   style={{
-                    color: colors.textSecondary,
+                    color: "rgba(255, 255, 255, 0.6)",
                     fontSize: 13,
                     textAlign: "center",
                     marginTop: 8,
@@ -6207,14 +6186,14 @@ const ChatScreen = () => {
               paddingHorizontal: 16,
               paddingVertical: 8,
               borderRadius: 12,
-              backgroundColor: isDark ? "rgba(142, 142, 147, 0.15)" : "rgba(142, 142, 147, 0.08)",
+              backgroundColor: "rgba(142, 142, 147, 0.15)",
               borderWidth: 1,
-              borderColor: isDark ? "rgba(142, 142, 147, 0.3)" : "rgba(142, 142, 147, 0.2)",
+              borderColor: "rgba(142, 142, 147, 0.3)",
             }}
           >
             <Text
               style={{
-                color: isDark ? "#8E8E93" : "#6D6D72",
+                color: "#8E8E93",
                 fontSize: 13,
                 textAlign: "center",
               }}
@@ -6248,7 +6227,7 @@ const ChatScreen = () => {
               borderColor: "rgba(142, 142, 147, 0.3)",
             }}
           >
-            <Text style={{ fontSize: 15, color: isDark ? "#8E8E93" : "#6D6D72", fontStyle: "italic" }}>
+            <Text style={{ fontSize: 15, color: "#8E8E93", fontStyle: "italic" }}>
               You unsent a message
             </Text>
           </View>
@@ -6286,9 +6265,9 @@ const ChatScreen = () => {
           }
         : isCurrentUser
         ? {
-            backgroundColor: isDark ? "rgba(0, 122, 255, 0.15)" : "rgba(0, 122, 255, 0.12)",
-            borderColor: colors.primary,
-            shadowColor: colors.primary,
+            backgroundColor: "rgba(0, 122, 255, 0.15)",
+            borderColor: "#007AFF",
+            shadowColor: "#007AFF",
           }
         : isAI
         ? {
@@ -6297,9 +6276,9 @@ const ChatScreen = () => {
             shadowColor: aiColor,
           }
         : {
-            backgroundColor: isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.06)",
-            borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.15)",
-            shadowColor: isDark ? "#000" : "rgba(0, 0, 0, 0.1)",
+            backgroundColor: "rgba(255, 255, 255, 0.15)",
+            borderColor: "#FFFFFF", // White - opacity added via suffix in clip container
+            shadowColor: "#000",
           };
 
       const bubbleContent = (
@@ -6332,10 +6311,10 @@ const ChatScreen = () => {
                 : vibeConfig
                   ? `${vibeConfig.color}60` // 38% opacity for vibes
                   : isCurrentUser 
-                    ? colors.primary + "4D"
+                    ? "rgba(0, 122, 255, 0.3)" 
                     : isAI 
                       ? "rgba(20, 184, 166, 0.3)" 
-                      : isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
+                      : "rgba(255, 255, 255, 0.15)",
             }}
           >
           {/* Liquid Glass Background */}
@@ -6351,18 +6330,22 @@ const ChatScreen = () => {
                 vibeConfig
                   ? vibeConfig.gradient
                   : isCurrentUser
-                  ? isDark 
-                    ? ["rgba(0, 122, 255, 0.25)", "rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.08)"]
-                    : ["rgba(0, 122, 255, 0.18)", "rgba(0, 122, 255, 0.10)", "rgba(0, 122, 255, 0.05)"]
+                  ? [
+                      "rgba(0, 122, 255, 0.25)",
+                      "rgba(0, 122, 255, 0.15)",
+                      "rgba(0, 122, 255, 0.08)",
+                    ]
                   : isAI
                   ? [
                       "rgba(20, 184, 166, 0.25)",
                       "rgba(20, 184, 166, 0.15)",
                       "rgba(20, 184, 166, 0.08)",
                     ]
-                  : isDark
-                    ? ["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.10)", "rgba(255, 255, 255, 0.05)"]
-                    : ["rgba(0, 0, 0, 0.06)", "rgba(0, 0, 0, 0.04)", "rgba(0, 0, 0, 0.02)"]
+                  : [
+                      "rgba(255, 255, 255, 0.15)",
+                      "rgba(255, 255, 255, 0.10)",
+                      "rgba(255, 255, 255, 0.05)",
+                    ]
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -6380,27 +6363,27 @@ const ChatScreen = () => {
               <View style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 6,
-                      gap: 4,
-                    }}>
-                    <Text style={{
-                      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 6,
+                gap: 4,
+              }}>
+                <Text style={{
+                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                  fontSize: 11,
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontWeight: '600',
+                }}>
+                  {metadata.slashCommand.command}
+                </Text>
+                {metadata.slashCommand.prompt && (
+                  <Text 
+                    style={{
                       fontSize: 11,
-                      color: colors.textSecondary,
-                      fontWeight: '600',
-                    }}>
-                      {metadata.slashCommand.command}
-                    </Text>
-                    {metadata.slashCommand.prompt && (
-                      <Text 
-                        style={{
-                          fontSize: 11,
-                          color: colors.textTertiary,
-                          maxWidth: 150,
-                        }}
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      maxWidth: 150,
+                    }} 
                     numberOfLines={1} 
                     ellipsizeMode="tail"
                   >
@@ -6448,7 +6431,7 @@ const ChatScreen = () => {
                       backgroundColor: 'rgba(0,0,0,0.6)',
                       borderRadius: 24,
                     }}>
-                      <ActivityIndicator size="small" color={colors.text} />
+                      <ActivityIndicator size="small" color="#FFFFFF" />
                     </View>
                   </View>
                 )}
@@ -6459,12 +6442,12 @@ const ChatScreen = () => {
                   <TruncatedText
                     maxLines={20}
                     lineHeight={20}
-                    expandButtonColor={isCurrentUser ? colors.primary : colors.text}
+                    expandButtonColor={isCurrentUser ? "#007AFF" : "#FFFFFF"}
                   >
                     <MessageText
                       content={message.content}
                       mentions={message.mentions}
-                      style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
+                      style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
                     />
                   </TruncatedText>
@@ -6503,7 +6486,7 @@ const ChatScreen = () => {
                     backgroundColor: 'rgba(0,0,0,0.3)',
                     zIndex: 10
                   }}>
-                    <ActivityIndicator size="large" color={colors.text} />
+                    <ActivityIndicator size="large" color="#FFFFFF" />
                   </View>
                 )}
               </View>
@@ -6513,12 +6496,12 @@ const ChatScreen = () => {
                   <TruncatedText
                     maxLines={20}
                     lineHeight={20}
-                    expandButtonColor={isCurrentUser ? colors.primary : colors.text}
+                    expandButtonColor={isCurrentUser ? "#007AFF" : "#FFFFFF"}
                   >
                     <MessageText
                       content={message.content}
                       mentions={message.mentions}
-                      style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
+                      style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
                     />
                   </TruncatedText>
@@ -6558,7 +6541,7 @@ const ChatScreen = () => {
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        backgroundColor: colors.inputBackground,
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
                         alignItems: "center",
                         justifyContent: "center",
                       }}
@@ -6626,7 +6609,7 @@ const ChatScreen = () => {
                       backgroundColor: 'rgba(0,0,0,0.3)',
                       zIndex: 10
                     }}>
-                      <ActivityIndicator size="large" color={colors.text} />
+                      <ActivityIndicator size="large" color="#FFFFFF" />
                     </View>
                   )}
 
@@ -6644,13 +6627,13 @@ const ChatScreen = () => {
                           ? "#007AFF"
                           : "rgba(0, 0, 0, 0.5)",
                         borderWidth: 2,
-                        borderColor: colors.text,
+                        borderColor: "#FFFFFF",
                         alignItems: "center",
                         justifyContent: "center",
                       }}
                     >
                       {selectedImageMessageIds.has(message.id) && (
-                        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "bold" }}>✓</Text>
+                        <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "bold" }}>✓</Text>
                       )}
                     </View>
                   )}
@@ -6676,12 +6659,12 @@ const ChatScreen = () => {
                   <TruncatedText
                     maxLines={20}
                     lineHeight={20}
-                    expandButtonColor={isCurrentUser ? colors.primary : colors.text}
+                    expandButtonColor={isCurrentUser ? "#007AFF" : "#FFFFFF"}
                   >
                     <MessageText
                       content={message.content}
                       mentions={message.mentions}
-                      style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
+                      style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
                     />
                   </TruncatedText>
@@ -6725,18 +6708,18 @@ const ChatScreen = () => {
                             }
                           }}
                           style={{
-                            body: { color: colors.text, fontSize: 15.5, lineHeight: 20 },
-                            heading1: { color: colors.text, fontSize: 22, fontWeight: "bold", marginBottom: 6 },
-                            heading2: { color: colors.text, fontSize: 20, fontWeight: "bold", marginBottom: 5 },
-                            heading3: { color: colors.text, fontSize: 18, fontWeight: "bold", marginBottom: 4 },
-                            heading4: { color: colors.text, fontSize: 17, fontWeight: "bold", marginBottom: 3 },
-                            heading5: { color: colors.text, fontSize: 16, fontWeight: "bold", marginBottom: 2 },
-                            heading6: { color: colors.text, fontSize: 15.5, fontWeight: "bold", marginBottom: 2 },
-                            strong: { fontWeight: "bold", color: colors.text },
-                            em: { fontStyle: "italic", color: colors.text },
+                            body: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20 },
+                            heading1: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
+                            heading2: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
+                            heading3: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
+                            heading4: { color: "#FFFFFF", fontSize: 17, fontWeight: "bold", marginBottom: 3 },
+                            heading5: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginBottom: 2 },
+                            heading6: { color: "#FFFFFF", fontSize: 15.5, fontWeight: "bold", marginBottom: 2 },
+                            strong: { fontWeight: "bold", color: "#FFFFFF" },
+                            em: { fontStyle: "italic", color: "#FFFFFF" },
                             link: { color: "#14B8A6", textDecorationLine: "underline" },
                             blockquote: {
-                              backgroundColor: colors.inputBackground,
+                              backgroundColor: "rgba(255, 255, 255, 0.1)",
                               borderLeftWidth: 3,
                               borderLeftColor: "#14B8A6",
                               paddingLeft: 10,
@@ -6744,7 +6727,7 @@ const ChatScreen = () => {
                               marginVertical: 8
                             },
                             code_inline: {
-                              backgroundColor: isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.08)",
+                              backgroundColor: "rgba(255, 255, 255, 0.2)",
                               color: "#14B8A6",
                               paddingHorizontal: 6,
                               paddingVertical: 2,
@@ -6753,7 +6736,7 @@ const ChatScreen = () => {
                             },
                             code_block: {
                               backgroundColor: "rgba(0, 0, 0, 0.3)",
-                              color: colors.text,
+                              color: "#FFFFFF",
                               padding: 12,
                               borderRadius: 8,
                               marginVertical: 8,
@@ -6761,7 +6744,7 @@ const ChatScreen = () => {
                             },
                             fence: {
                               backgroundColor: "rgba(0, 0, 0, 0.3)",
-                              color: colors.text,
+                              color: "#FFFFFF",
                               padding: 12,
                               borderRadius: 8,
                               marginVertical: 8,
@@ -6772,8 +6755,8 @@ const ChatScreen = () => {
                             list_item: { 
                               marginVertical: 4,
                             },
-                            paragraph: { color: colors.text, fontSize: 15.5, lineHeight: 20, marginVertical: 3 },
-                            text: { color: colors.text, fontSize: 15.5 },
+                            paragraph: { color: "#FFFFFF", fontSize: 15.5, lineHeight: 20, marginVertical: 3 },
+                            text: { color: "#FFFFFF", fontSize: 15.5 },
                             hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
                           }}
                         >
@@ -6798,7 +6781,7 @@ const ChatScreen = () => {
                         <MessageText
                           content={message.content}
                           mentions={message.mentions}
-                          style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
+                          style={{ fontSize: 15, color: "#FFFFFF", lineHeight: 20 }}
                           isOwnMessage={isCurrentUser}
                         />
                       </TruncatedText>
@@ -6890,7 +6873,7 @@ const ChatScreen = () => {
             }}
           >
             {selectedMessageIds.has(message.id) && (
-              <Text style={{ color: colors.text, fontSize: 14, fontWeight: "bold" }}>✓</Text>
+              <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "bold" }}>✓</Text>
             )}
           </Pressable>
         )}
@@ -6915,7 +6898,7 @@ const ChatScreen = () => {
           {!isCurrentUser && showName && (
             <Text
               className="text-xs font-medium mb-1 ml-2"
-              style={{ color: isAI ? aiColor : colors.textSecondary, fontSize: 13, fontWeight: isAI ? "600" : "500" }}
+              style={{ color: isAI ? aiColor : "#6B7280", fontSize: 13, fontWeight: isAI ? "600" : "500" }}
             >
               {isAI ? aiName : message.user?.name || "Unknown"}
             </Text>
@@ -6941,9 +6924,9 @@ const ChatScreen = () => {
                     paddingVertical: 6,
                     paddingHorizontal: 10,
                     borderRadius: 12,
-                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
+                    backgroundColor: "rgba(255, 255, 255, 0.08)",
                     borderLeftWidth: 3,
-                    borderLeftColor: isCurrentUser ? colors.primary : colors.textSecondary,
+                    borderLeftColor: isCurrentUser ? "#007AFF" : "#8E8E93",
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 8,
@@ -6953,7 +6936,7 @@ const ChatScreen = () => {
                   }}
                 >
                   <View pointerEvents="none" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ fontSize: 12, color: isCurrentUser ? colors.primary : colors.textSecondary, fontWeight: "600" }} numberOfLines={1}>
+                    <Text style={{ fontSize: 12, color: isCurrentUser ? "#60A5FA" : "#9CA3AF", fontWeight: "600" }} numberOfLines={1}>
                       {replyToMessage?.aiFriendId
                         ? (replyToMessage?.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage?.aiFriendId)?.name || "AI Friend")
                         : (replyToMessage?.user?.name || "Unknown User")}
@@ -6968,11 +6951,11 @@ const ChatScreen = () => {
                             contentFit="cover"
                           />
                         )}
-                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>Photo</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>Photo</Text>
                       </View>
                     ) : (
                       <Text
-                        style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }}
+                        style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", flex: 1 }}
                         numberOfLines={1}
                       >
                         {replyToMessage?.content}
@@ -7066,9 +7049,9 @@ const ChatScreen = () => {
                           paddingHorizontal: 12,
                           paddingVertical: 6,
                           borderRadius: 20,
-                        backgroundColor: isDark ? "rgba(40, 40, 40, 1)" : "rgba(240, 240, 240, 1)",
-                        borderWidth: 1,
-                        borderColor: userReacted ? colors.primary : colors.border,
+                          backgroundColor: "rgba(40, 40, 40, 1)",
+                          borderWidth: 1,
+                          borderColor: userReacted ? "#007AFF" : "rgba(255, 255, 255, 0.2)",
                           marginRight: 6,
                           marginBottom: 6,
                         }}
@@ -7078,7 +7061,7 @@ const ChatScreen = () => {
                           <Text
                             style={{
                               fontSize: 13,
-                              color: userReacted ? colors.primary : colors.text,
+                              color: userReacted ? "#007AFF" : "#FFFFFF",
                               fontWeight: "600",
                               marginLeft: 6,
                             }}
@@ -7161,16 +7144,11 @@ const ChatScreen = () => {
         }}
       >
         <LinearGradient
-          colors={isDark ? [
+          colors={[
             "#000000",
             "#0A0A0F",
             "#050508",
             "#000000",
-          ] : [
-            colors.background,
-            colors.backgroundSecondary,
-            colors.surfaceSecondary,
-            colors.background,
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -7178,16 +7156,11 @@ const ChatScreen = () => {
         />
         {/* Subtle animated overlay for depth */}
         <LinearGradient
-          colors={isDark ? [
+          colors={[
             "rgba(79, 195, 247, 0.03)",
             "rgba(0, 122, 255, 0.02)",
             "transparent",
             "rgba(52, 199, 89, 0.02)",
-          ] : [
-            "rgba(79, 195, 247, 0.02)",
-            "rgba(0, 122, 255, 0.01)",
-            "transparent",
-            "rgba(52, 199, 89, 0.01)",
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -7284,9 +7257,9 @@ const ChatScreen = () => {
                 }}
               >
                 {(currentThreadId ? isLoadingMoreThread : isLoadingMore) ? (
-                  <ActivityIndicator size="small" color={colors.textSecondary} />
+                  <ActivityIndicator size="small" color="rgba(255, 255, 255, 0.6)" />
                 ) : (
-                  <Text style={{ color: colors.textSecondary, fontSize: 14 }}>
+                  <Text style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: 14 }}>
                     Load earlier messages
                   </Text>
                 )}
@@ -7444,7 +7417,7 @@ const ChatScreen = () => {
                                 justifyContent: 'center',
                               }}
                             >
-                              <Sparkles size={17} color={colors.text} strokeWidth={2.5} style={{ marginRight: 8 }} />
+                              <Sparkles size={17} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 8 }} />
                               <Text style={{
                                 fontSize: 15,
                                 fontWeight: '700',
@@ -7568,12 +7541,12 @@ const ChatScreen = () => {
                         paddingHorizontal: 16,
                         paddingVertical: 10,
                         borderWidth: 1,
-                        borderColor: colors.primary + "4D",
+                        borderColor: "rgba(0, 122, 255, 0.3)",
                         borderRadius: 20,
                       }}
                     >
                       <LinearGradient
-                        colors={isDark ? ["rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.05)"] : [colors.primary + "26", colors.primary + "0D"]}
+                        colors={["rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.05)"]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={{
@@ -7584,7 +7557,7 @@ const ChatScreen = () => {
                           bottom: 0,
                         }}
                       />
-                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: "500" }}>
+                      <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "500" }}>
                         {reply}
                       </Text>
                     </BlurView>
@@ -7599,22 +7572,22 @@ const ChatScreen = () => {
                   marginBottom: 12,
                   padding: 12,
                   borderRadius: 12,
-                      backgroundColor: colors.inputBackground,
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
                   borderLeftWidth: 3,
-                  borderLeftColor: colors.primary,
+                  borderLeftColor: "#007AFF",
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>
+                  <Text style={{ fontSize: 12, color: "#007AFF", fontWeight: "600" }}>
                     Replying to {replyToMessage.aiFriendId 
                       ? (replyToMessage.aiFriend?.name || aiFriends.find(f => f.id === replyToMessage.aiFriendId)?.name || "AI Friend")
                       : (replyToMessage.user?.name || "Unknown User")}
                   </Text>
                   <Text
-                    style={{ fontSize: 13, color: colors.text, marginTop: 2 }}
+                    style={{ fontSize: 13, color: "#FFFFFF", marginTop: 2 }}
                     numberOfLines={1}
                   >
                     {replyToMessage.messageType === "image"
@@ -7631,12 +7604,12 @@ const ChatScreen = () => {
                     width: 24,
                     height: 24,
                     borderRadius: 12,
-                    backgroundColor: isDark ? "rgba(0, 0, 0, 0.3)" : "rgba(0, 0, 0, 0.1)",
+                    backgroundColor: "rgba(0, 0, 0, 0.3)",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <X size={16} color={colors.text} />
+                  <X size={16} color="#FFFFFF" />
                 </Pressable>
               </View>
             )}
@@ -7663,7 +7636,7 @@ const ChatScreen = () => {
                     }}
                   >
                     <ActivityIndicator size="small" color="#007AFF" />
-                    <Text style={{ color: colors.textSecondary, fontSize: 14 }}>
+                    <Text style={{ color: "#8E8E93", fontSize: 14 }}>
                       Fetching link preview...
                     </Text>
                   </View>
@@ -7693,7 +7666,7 @@ const ChatScreen = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <X size={16} color={colors.text} />
+                      <X size={16} color="#FFFFFF" />
                     </Pressable>
                   </View>
                 ) : null}
@@ -7766,7 +7739,7 @@ const ChatScreen = () => {
                           justifyContent: "center",
                         }}
                       >
-                        <X size={16} color={colors.text} />
+                        <X size={16} color="#FFFFFF" />
                       </Pressable>
                       {/* Uploading overlay */}
                       {isUploadingImage && (
@@ -7806,7 +7779,7 @@ const ChatScreen = () => {
                     width: 120,
                   }}
                 >
-                  <View style={{ position: "relative", width: 120, height: 160, backgroundColor: isDark ? "#1C1C1E" : "#E5E5EA" }}>
+                  <View style={{ position: "relative", width: 120, height: 160, backgroundColor: "#1C1C1E" }}>
                     {/* Video icon overlay */}
                     <View
                       style={{
@@ -7868,7 +7841,7 @@ const ChatScreen = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <X size={16} color={colors.text} />
+                      <X size={16} color="#FFFFFF" />
                     </Pressable>
                     {/* Uploading overlay */}
                     {isUploadingVideo && (
@@ -7954,20 +7927,16 @@ const ChatScreen = () => {
                       alignItems: "center",
                       justifyContent: "center",
                       borderWidth: 1.5,
-                      borderColor: isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
+                      borderColor: "rgba(255, 255, 255, 0.2)",
                       borderRadius: 19,
                       overflow: "hidden",
                     }}
                   >
                     <LinearGradient
-                      colors={isDark ? [
+                      colors={[
                         "rgba(255, 255, 255, 0.12)",
                         "rgba(255, 255, 255, 0.08)",
                         "rgba(255, 255, 255, 0.04)",
-                      ] : [
-                        "rgba(0, 0, 0, 0.04)",
-                        "rgba(0, 0, 0, 0.02)",
-                        "rgba(0, 0, 0, 0.01)",
                       ]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
@@ -7981,7 +7950,7 @@ const ChatScreen = () => {
                       }}
                       pointerEvents="none"
                     />
-                    <Plus size={20} color={colors.text} />
+                    <Plus size={20} color="#FFFFFF" />
                   </BlurView>
                 </View>
               </Pressable>
@@ -8002,7 +7971,7 @@ const ChatScreen = () => {
                       flex: 1,
                       borderRadius: 20,
                       overflow: "hidden",
-                      backgroundColor: isDark ? "#1C1C1E" : "#F2F2F7", // Theme-aware background
+                      backgroundColor: "#1C1C1E", // Solid dark background
                     }}
                   >
                     <Animated.View
@@ -8028,14 +7997,10 @@ const ChatScreen = () => {
                         pointerEvents="none"
                       >
                         <LinearGradient
-                          colors={isDark ? [
+                          colors={[
                             "rgba(255, 255, 255, 0.12)",
                             "rgba(255, 255, 255, 0.08)",
                             "rgba(255, 255, 255, 0.04)",
-                          ] : [
-                            "rgba(0, 0, 0, 0.06)",
-                            "rgba(0, 0, 0, 0.04)",
-                            "rgba(0, 0, 0, 0.02)",
                           ]}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 1, y: 1 }}
@@ -8096,7 +8061,7 @@ const ChatScreen = () => {
                     value={messageText}
                     onChangeText={handleTyping}
                     placeholder={selectedImages.length > 0 || selectedVideo ? "Add a caption (optional)" : "Message"}
-                    placeholderTextColor={colors.inputPlaceholder}
+                    placeholderTextColor="#666666"
                     style={{
                       flex: 1,
                       paddingHorizontal: 14,
@@ -8115,7 +8080,7 @@ const ChatScreen = () => {
                     onSubmitEditing={() => handleSend()}
                     blurOnSubmit={false}
                     keyboardType="default"
-                    keyboardAppearance={isDark ? "dark" : "light"}
+                    keyboardAppearance="dark"
                     returnKeyType="default"
                     enablesReturnKeyAutomatically={false}
                     onFocus={() => {
@@ -8139,16 +8104,16 @@ const ChatScreen = () => {
                         paddingVertical: 2,
                         borderRadius: 8,
                         backgroundColor: messageText.length > 3800 
-                          ? colors.error + "33"
-                          : colors.inputBackground,
+                          ? "rgba(255, 59, 48, 0.2)" 
+                          : "rgba(255, 255, 255, 0.15)",
                       }}
                     >
                       <Text
                         style={{
                           fontSize: 11,
                           color: messageText.length > 3800 
-                            ? colors.error 
-                            : colors.textTertiary,
+                            ? "#FF3B30" 
+                            : "rgba(255, 255, 255, 0.5)",
                           fontWeight: "500",
                         }}
                       >
@@ -8301,7 +8266,7 @@ const ChatScreen = () => {
                               ],
                             }}
                           >
-                            <Mic size={20} color={colors.text} />
+                            <Mic size={20} color="#FFFFFF" />
                           </Animated.View>
                         ) : (
                           <Animated.View
@@ -8312,7 +8277,7 @@ const ChatScreen = () => {
                               ],
                             }}
                           >
-                            <ArrowUp size={20} color={colors.text} strokeWidth={2.5} />
+                            <ArrowUp size={20} color="#FFFFFF" strokeWidth={2.5} />
                           </Animated.View>
                         )}
                         
@@ -8417,7 +8382,7 @@ const ChatScreen = () => {
             >
               <Animated.View
                 style={{
-                  backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+                  backgroundColor: "#1C1C1E",
                   borderTopLeftRadius: 20,
                   borderTopRightRadius: 20,
                   maxHeight: "90%",
@@ -8438,7 +8403,7 @@ const ChatScreen = () => {
                     style={{
                       width: 40,
                       height: 5,
-                      backgroundColor: isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 0, 0, 0.2)",
+                      backgroundColor: "rgba(255, 255, 255, 0.25)",
                       borderRadius: 2.5,
                     }}
                   />
@@ -8446,9 +8411,9 @@ const ChatScreen = () => {
 
                 <View style={{ padding: 20, paddingTop: 8, paddingBottom: insets.bottom + 20 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                    <Text style={{ color: colors.text, fontSize: 18, fontWeight: "600" }}>Edit Message</Text>
+                    <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "600" }}>Edit Message</Text>
                     <Pressable onPress={() => setEditingMessage(null)}>
-                      <X size={24} color={colors.text} />
+                      <X size={24} color="#FFFFFF" />
                     </Pressable>
                   </View>
 
@@ -8518,9 +8483,9 @@ const ChatScreen = () => {
                   <View style={{ flexDirection: "row", alignItems: "flex-end", marginBottom: 16 }}>
                     <TouchableOpacity 
                       onPress={() => setShowAttachmentsMenu(true)}
-                      style={{ padding: 10, marginRight: 8, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", borderRadius: 12 }}
+                      style={{ padding: 10, marginRight: 8, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12 }}
                     >
-                      <Plus color={colors.text} size={24} />
+                      <Plus color="white" size={24} />
                     </TouchableOpacity>
 
                     <TextInput
@@ -8528,19 +8493,19 @@ const ChatScreen = () => {
                       onChangeText={handleEditTyping}
                       multiline
                       autoFocus
-                      keyboardAppearance={isDark ? "dark" : "light"}
+                      keyboardAppearance="dark"
                       style={{
                         flex: 1,
-                        backgroundColor: colors.inputBackground,
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
                         borderRadius: 12,
                         padding: 12,
-                        color: colors.text,
+                        color: "#FFFFFF",
                         fontSize: 16,
                         minHeight: 40,
                         maxHeight: 150,
                       }}
                       placeholder="Edit your message..."
-                      placeholderTextColor={colors.inputPlaceholder}
+                      placeholderTextColor="rgba(255, 255, 255, 0.5)"
                     />
                   </View>
 
@@ -8549,13 +8514,13 @@ const ChatScreen = () => {
                       onPress={() => setEditingMessage(null)}
                       style={{
                         flex: 1,
-                        backgroundColor: colors.inputBackground,
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
                         borderRadius: 12,
                         padding: 16,
                         alignItems: "center",
                       }}
                     >
-                      <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>Cancel</Text>
+                      <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Cancel</Text>
                     </Pressable>
 
                     <Pressable
@@ -8572,7 +8537,7 @@ const ChatScreen = () => {
                       {editMessageMutation.isPending ? (
                         <LuxeLogoLoader size={20} />
                       ) : (
-                        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>Save</Text>
+                        <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>Save</Text>
                       )}
                     </Pressable>
                   </View>
@@ -8637,7 +8602,7 @@ const ChatScreen = () => {
                   justifyContent: "center",
                 }}
               >
-                <X size={24} color={colors.text} />
+                <X size={24} color="#FFFFFF" />
               </Pressable>
 
               {/* Full-screen avatar image */}
@@ -8772,7 +8737,7 @@ const ChatScreen = () => {
                       style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
                     />
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                      <Search size={24} color={colors.text} />
+                      <Search size={24} color="#FFFFFF" />
                       <TextInput
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -8780,10 +8745,10 @@ const ChatScreen = () => {
                         placeholderTextColor="#666"
                         style={{ flex: 1, color: "#FFFFFF", fontSize: 17 }}
                         autoFocus
-                        keyboardAppearance={isDark ? "dark" : "light"}
+                        keyboardAppearance="dark"
                       />
                       <Pressable onPress={() => { setShowSearchModal(false); setSearchQuery(""); }}>
-                        <X size={20} color={colors.text} />
+                        <X size={20} color="#FFFFFF" />
                       </Pressable>
                     </View>
                   </BlurView>
@@ -8798,7 +8763,7 @@ const ChatScreen = () => {
               ListEmptyComponent={
                 <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 60 }}>
                   <Search size={64} color="#666" />
-                  <Text style={{ color: colors.textSecondary, fontSize: 17, fontWeight: "600", marginTop: 16 }}>
+                  <Text style={{ color: "#8E8E93", fontSize: 17, fontWeight: "600", marginTop: 16 }}>
                     {searchQuery ? "No results found" : "Start typing to search"}
                   </Text>
                 </View>
@@ -8865,11 +8830,11 @@ const ChatScreen = () => {
                       style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
                     />
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                      <Bookmark size={24} color={colors.text} />
+                      <Bookmark size={24} color="#FFFFFF" />
                       <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>Bookmarks</Text>
                     </View>
                     <Pressable onPress={() => setShowBookmarksModal(false)}>
-                      <X size={20} color={colors.text} />
+                      <X size={20} color="#FFFFFF" />
                     </Pressable>
                   </BlurView>
                 </View>
@@ -8882,7 +8847,7 @@ const ChatScreen = () => {
               ListEmptyComponent={
                 <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 60 }}>
                   <Bookmark size={64} color="#666" />
-                  <Text style={{ color: colors.textSecondary, fontSize: 17, fontWeight: "600", marginTop: 16 }}>No Bookmarks</Text>
+                  <Text style={{ color: "#8E8E93", fontSize: 17, fontWeight: "600", marginTop: 16 }}>No Bookmarks</Text>
                 </View>
               }
               renderItem={({ item }) => (
@@ -9009,10 +8974,10 @@ const ChatScreen = () => {
                     <Text style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>
                       New Messages
                     </Text>
-                    <ChevronDown size={16} color={colors.text} />
+                    <ChevronDown size={16} color="#FFFFFF" />
                   </>
                 ) : (
-                  <ChevronDown size={20} color={colors.text} />
+                  <ChevronDown size={20} color="#FFFFFF" />
                 )}
               </BlurView>
             </Pressable>
@@ -9061,7 +9026,7 @@ const ChatScreen = () => {
                       <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "700" }}>Events</Text>
                     </View>
                     <Pressable onPress={() => setShowEventsTab(false)}>
-                      <X size={20} color={colors.text} />
+                      <X size={20} color="#FFFFFF" />
                     </Pressable>
                   </BlurView>
                 </View>

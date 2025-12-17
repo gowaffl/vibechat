@@ -20,12 +20,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { height } = Dimensions.get("window");
 
 const JoinChatScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { colors, isDark } = useTheme();
 
   const [inviteCode, setInviteCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
@@ -71,13 +73,17 @@ const JoinChatScreen = () => {
     }
   };
 
+  const backgroundGradientColors = isDark 
+    ? ["#000000", "#0A0A0F", "#050508", "#000000"]
+    : [colors.background, colors.backgroundSecondary, colors.surfaceSecondary, colors.background];
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Background */}
         <View style={styles.backgroundContainer}>
           <LinearGradient
-            colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+            colors={backgroundGradientColors}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.flexOne}
@@ -104,7 +110,7 @@ const JoinChatScreen = () => {
               ]}
             >
               {/* Glowing background circle */}
-              <View style={styles.glowingCircle} />
+              <View style={[styles.glowingCircle, { backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)" }]} />
               
               <Image
                 source={require("../../assets/glitch_thinking.png")}
@@ -115,26 +121,33 @@ const JoinChatScreen = () => {
 
             {/* Form - Bottom */}
             <View style={styles.formContainer}>
-            <Text style={styles.title}>Join Chat</Text>
-            <Text style={styles.subtitle}>Enter an invite code to join a group</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Join Chat</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Enter an invite code to join a group</Text>
 
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>
-                  Invite Code <Text style={styles.required}>*</Text>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Invite Code <Text style={[styles.required, { color: colors.error }]}>*</Text>
                 </Text>
                 <TextInput
                   value={inviteCode}
                   onChangeText={setInviteCode}
                   placeholder="Enter 8-character code..."
-                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                  placeholderTextColor={colors.inputPlaceholder}
                   maxLength={8}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  keyboardAppearance="dark"
-                  style={styles.input}
+                  keyboardAppearance={isDark ? "dark" : "light"}
+                  style={[
+                    styles.input, 
+                    { 
+                      backgroundColor: colors.inputBackground, 
+                      borderColor: colors.border, 
+                      color: colors.text 
+                    }
+                  ]}
                 />
-                <Text style={styles.helperText}>
+                <Text style={[styles.helperText, { color: colors.textSecondary }]}>
                   Enter the invite code shared with you
                 </Text>
               </View>
@@ -145,6 +158,11 @@ const JoinChatScreen = () => {
                 style={({ pressed }) => ({
                   opacity: pressed || isJoining || !inviteCode.trim() ? 0.7 : 1,
                   marginTop: 20,
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 5,
                 })}
               >
                 <LinearGradient
@@ -172,7 +190,6 @@ const JoinChatScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
   },
   flexOne: {
     flex: 1,
@@ -197,7 +214,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 220,
     height: 220,
-    backgroundColor: "rgba(79, 195, 247, 0.15)",
     borderRadius: 110,
   },
   glitchImage: {
@@ -210,12 +226,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.6)",
     marginBottom: 32,
   },
   form: {
@@ -227,26 +241,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
   required: {
     color: "#EF4444",
   },
   input: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 18,
-    color: "#FFFFFF",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
     letterSpacing: 2,
   },
   helperText: {
     fontSize: 13,
-    color: "rgba(255, 255, 255, 0.5)",
   },
   button: {
     paddingVertical: 16,
@@ -262,4 +271,3 @@ const styles = StyleSheet.create({
 });
 
 export default JoinChatScreen;
-

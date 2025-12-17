@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,6 +19,7 @@ import * as Haptics from "expo-haptics";
 import { Sparkles, Zap, MessageCircle, User, Bell, BellOff } from "lucide-react-native";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface CreateAIFriendModalProps {
   visible: boolean;
@@ -36,7 +36,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
   onCreate,
   isCreating = false,
 }) => {
-  const colorScheme = useColorScheme();
+  const { colors, isDark } = useTheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [showModal, setShowModal] = useState(visible);
@@ -146,7 +146,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
           opacity: fadeAnim,
         }}
       >
-        <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={40} tint={colors.blurTint} style={{ flex: 1 }}>
           {/* Backdrop */}
           <Pressable style={{ flex: 1 }} onPress={handleClose}>
             <View style={{ flex: 1 }} />
@@ -175,7 +175,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                     overflow: "hidden",
                   }}
                 >
-                  <BlurView intensity={80} tint="dark">
+                  <BlurView intensity={80} tint={colors.blurTint}>
                     <LinearGradient
                       colors={[
                         "rgba(52, 199, 89, 0.15)",
@@ -213,7 +213,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                             style={{
                               fontSize: 24,
                               fontWeight: "700",
-                              color: "#FFFFFF",
+                              color: colors.text,
                               marginBottom: 4,
                             }}
                           >
@@ -296,7 +296,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                               borderRadius: 12,
                               padding: 14,
                               fontSize: 16,
-                              color: "#FFFFFF",
+                              color: colors.text,
                               fontWeight: "600",
                             }}
                             maxLength={50}
@@ -321,7 +321,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                               borderRadius: 12,
                               padding: 14,
                               fontSize: 15,
-                              color: "#FFFFFF",
+                              color: colors.text,
                               minHeight: 80,
                             }}
                             multiline

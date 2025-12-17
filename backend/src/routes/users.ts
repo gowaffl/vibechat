@@ -27,6 +27,7 @@ const formatUserResponse = (user: any) => ({
   image: user.image,
   birthdate: user.birthdate,
   hasCompletedOnboarding: user.hasCompletedOnboarding || false,
+  themePreference: user.themePreference || "system",
   summaryPreference: user.summaryPreference || "concise",
   hasSeenSummaryPreferencePrompt: user.hasSeenSummaryPreferencePrompt || false,
   createdAt: typeof user.createdAt === 'string' ? user.createdAt : new Date(user.createdAt).toISOString(),
@@ -72,7 +73,7 @@ users.post("/", zValidator("json", createUserRequestSchema), async (c) => {
 // PATCH /api/users/:id - Update user
 users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   const id = c.req.param("id");
-  const { name, bio, image, birthdate, hasCompletedOnboarding, summaryPreference, hasSeenSummaryPreferencePrompt } = c.req.valid("json");
+  const { name, bio, image, birthdate, hasCompletedOnboarding, themePreference, summaryPreference, hasSeenSummaryPreferencePrompt } = c.req.valid("json");
   const authHeader = c.req.header("Authorization");
   const token = authHeader?.replace("Bearer ", "");
 
@@ -82,6 +83,7 @@ users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   if (image !== undefined) updateData.image = image;
   if (birthdate !== undefined) updateData.birthdate = birthdate;
   if (hasCompletedOnboarding !== undefined) updateData.hasCompletedOnboarding = hasCompletedOnboarding;
+  if (themePreference !== undefined) updateData.themePreference = themePreference;
   if (summaryPreference !== undefined) updateData.summaryPreference = summaryPreference;
   if (hasSeenSummaryPreferencePrompt !== undefined) updateData.hasSeenSummaryPreferencePrompt = hasSeenSummaryPreferencePrompt;
 

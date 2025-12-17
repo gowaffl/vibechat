@@ -3,9 +3,10 @@ import { View, Text, Pressable, Animated } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import LiquidGlassView from "../LiquidGlass/LiquidGlassView";
-import { variantColorMap } from "../LiquidGlass/variants";
+import { getVariantColors } from "../LiquidGlass/variants";
 import { BarChart3, Check, Users, Clock, Award } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { Poll } from "@shared/contracts";
 
 interface PollCardProps {
@@ -21,6 +22,7 @@ const PollCard: React.FC<PollCardProps> = ({
   onVote,
   isVoting = false,
 }) => {
+  const { colors, isDark } = useTheme();
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
 
   // Check if user has already voted
@@ -44,7 +46,7 @@ const PollCard: React.FC<PollCardProps> = ({
 
   // Variant based on status
   const variant = isPollClosed ? "success" : "info";
-  const variantColors = variantColorMap[variant];
+  const variantColors = getVariantColors(variant, isDark);
 
   const handleOptionPress = (optionId: string) => {
     if (!canVote) return;
@@ -57,7 +59,7 @@ const PollCard: React.FC<PollCardProps> = ({
   return (
     <LiquidGlassView
       intensity={30}
-      tint="dark"
+      tint={colors.blurTint}
       borderRadius={24}
       gradientColors={variantColors.gradientColors}
       borderColor={variantColors.borderColor}
@@ -139,7 +141,7 @@ const PollCard: React.FC<PollCardProps> = ({
           style={{
             fontSize: 18,
             fontWeight: "700",
-            color: "#FFFFFF",
+            color: colors.text,
             lineHeight: 24,
             marginBottom: 4,
           }}
@@ -155,11 +157,11 @@ const PollCard: React.FC<PollCardProps> = ({
             marginTop: 8,
           }}
         >
-          <Users size={14} color="rgba(255, 255, 255, 0.5)" strokeWidth={2} />
+          <Users size={14} color={colors.textSecondary} strokeWidth={2} />
           <Text
             style={{
               fontSize: 12,
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colors.textSecondary,
               marginLeft: 4,
             }}
           >
@@ -172,15 +174,15 @@ const PollCard: React.FC<PollCardProps> = ({
                   width: 3,
                   height: 3,
                   borderRadius: 1.5,
-                  backgroundColor: "rgba(255, 255, 255, 0.3)",
+                  backgroundColor: colors.textTertiary,
                   marginHorizontal: 8,
                 }}
               />
-              <Clock size={14} color="rgba(255, 255, 255, 0.5)" strokeWidth={2} />
+              <Clock size={14} color={colors.textSecondary} strokeWidth={2} />
               <Text
                 style={{
                   fontSize: 12,
-                  color: "rgba(255, 255, 255, 0.5)",
+                  color: colors.textSecondary,
                   marginLeft: 4,
                 }}
               >
@@ -221,14 +223,14 @@ const PollCard: React.FC<PollCardProps> = ({
                     ? "rgba(0, 122, 255, 0.15)"
                     : isWinner
                     ? "rgba(48, 209, 88, 0.15)"
-                    : "rgba(255, 255, 255, 0.05)",
+                    : isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
                   borderRadius: 14,
                   borderWidth: isUserChoice ? 2 : isWinner ? 2 : 1,
                   borderColor: isUserChoice
                     ? "rgba(0, 122, 255, 0.4)"
                     : isWinner
                     ? "rgba(48, 209, 88, 0.4)"
-                    : "rgba(255, 255, 255, 0.1)",
+                    : isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)",
                   overflow: "hidden",
                 }}
               >
@@ -245,7 +247,7 @@ const PollCard: React.FC<PollCardProps> = ({
                         ? "rgba(0, 122, 255, 0.15)"
                         : isWinner
                         ? "rgba(48, 209, 88, 0.15)"
-                        : "rgba(255, 255, 255, 0.05)",
+                        : isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
                     }}
                   />
                 )}
@@ -267,7 +269,7 @@ const PollCard: React.FC<PollCardProps> = ({
                         ? "rgba(0, 122, 255, 0.3)"
                         : isWinner
                         ? "rgba(48, 209, 88, 0.3)"
-                        : "rgba(255, 255, 255, 0.1)",
+                        : isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: 12,
@@ -286,7 +288,7 @@ const PollCard: React.FC<PollCardProps> = ({
                         style={{
                           fontSize: 13,
                           fontWeight: "700",
-                          color: "rgba(255, 255, 255, 0.6)",
+                          color: colors.textSecondary,
                         }}
                       >
                         {index + 1}
@@ -304,7 +306,7 @@ const PollCard: React.FC<PollCardProps> = ({
                           ? "#007AFF"
                           : isWinner
                           ? "#30D158"
-                          : "#FFFFFF",
+                          : colors.text,
                       }}
                     >
                       {option.optionText}
@@ -327,7 +329,7 @@ const PollCard: React.FC<PollCardProps> = ({
                             ? "#007AFF"
                             : isWinner
                             ? "#30D158"
-                            : "rgba(255, 255, 255, 0.8)",
+                            : colors.text,
                         }}
                       >
                         {percentage}%
@@ -335,7 +337,7 @@ const PollCard: React.FC<PollCardProps> = ({
                       <Text
                         style={{
                           fontSize: 11,
-                          color: "rgba(255, 255, 255, 0.5)",
+                          color: colors.textSecondary,
                           marginTop: 1,
                         }}
                       >
@@ -358,7 +360,7 @@ const PollCard: React.FC<PollCardProps> = ({
             paddingBottom: 16,
             paddingTop: 8,
             borderTopWidth: 1,
-            borderTopColor: "rgba(255, 255, 255, 0.1)",
+            borderTopColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
           }}
         >
           <View
@@ -383,7 +385,7 @@ const PollCard: React.FC<PollCardProps> = ({
             <Text
               style={{
                 fontSize: 13,
-                color: "rgba(255, 255, 255, 0.7)",
+                color: colors.textSecondary,
               }}
             >
               Winner:{" "}
@@ -403,7 +405,7 @@ const PollCard: React.FC<PollCardProps> = ({
             paddingBottom: 16,
             paddingTop: 8,
             borderTopWidth: 1,
-            borderTopColor: "rgba(255, 255, 255, 0.1)",
+            borderTopColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
           }}
         >
           <View
@@ -421,7 +423,7 @@ const PollCard: React.FC<PollCardProps> = ({
             <Text
               style={{
                 fontSize: 13,
-                color: "rgba(255, 255, 255, 0.6)",
+                color: colors.textSecondary,
               }}
             >
               You voted • Waiting for {memberCount - totalVotes} more

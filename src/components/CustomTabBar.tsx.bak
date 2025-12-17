@@ -18,7 +18,7 @@ import { GradientIcon } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 import * as Haptics from "expo-haptics";
 import { useSearchStore } from "@/stores/searchStore";
-import { useTheme } from "@/contexts/ThemeContext";
+// TEMP: import { useTheme } from "@/contexts/ThemeContext";
 
 interface CustomTabBarProps {
   activeRouteName: string;
@@ -29,7 +29,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
   const navigation = useNavigation();
   const { width: screenWidth } = useWindowDimensions();
   const { isSearchOpen, toggleSearch, searchQuery, setSearchQuery, setSearchOpen, searchMode, setSearchMode } = useSearchStore();
-  const { colors, isDark } = useTheme();
+  // TEMP: const { colors, isDark } = useTheme();
   
   // Animation values
   const searchAnim = useSharedValue(0); // 0 = closed, 1 = open
@@ -152,7 +152,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
           borderRadius: 32, // Pill radius
           overflow: 'hidden',
           borderWidth: 1,
-          borderColor: colors.glassBorder,
+          borderColor: colors.tabBarBorder,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between', // Distribute items
@@ -161,42 +161,13 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
         tabContainerStyle
       ]}>
         {Platform.OS === "ios" ? (
-            <BlurView 
-                tint={isDark ? "dark" : "light"} 
-                intensity={80} 
-                style={[
-                    StyleSheet.absoluteFill,
-                    { 
-                        backgroundColor: isDark ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.3)"
-                    }
-                ]} 
-            />
+            <BlurView tint={colors.blurTint} intensity={95} style={StyleSheet.absoluteFill} />
         ) : (
-            <View 
-                style={[
-                    StyleSheet.absoluteFill, 
-                    { 
-                        backgroundColor: isDark ? "rgba(0, 0, 0, 0.85)" : "rgba(255, 255, 255, 0.85)" 
-                    }
-                ]} 
-            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBarBackground }]} />
         )}
         <LinearGradient
-            colors={isDark 
-              ? [
-                  "rgba(79, 195, 247, 0.15)",
-                  "rgba(0, 122, 255, 0.1)",
-                  "rgba(0, 0, 0, 0)",
-                ]
-              : [
-                  "rgba(0, 122, 255, 0.05)",
-                  "rgba(79, 195, 247, 0.05)",
-                  "rgba(255, 255, 255, 0)",
-                ]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[StyleSheet.absoluteFill, { opacity: 0.5 }]}
+            colors={[colors.tabBarGradientStart, colors.tabBarGradientEnd]}
+            style={StyleSheet.absoluteFill}
         />
         
         {/* Render Tabs Inside */}
@@ -212,7 +183,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
               borderRadius: 32,
               overflow: 'hidden',
               borderWidth: 1,
-              borderColor: colors.glassBorder,
+              borderColor: colors.borderSecondary,
               zIndex: 100,
               alignItems: 'center',
               justifyContent: 'center',
@@ -220,17 +191,19 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
           searchContainerStyle
       ]}>
           <BlurView 
-              intensity={Platform.OS === 'ios' ? 95 : 80} 
-              tint={isDark ? "dark" : "light"}
+              intensity={Platform.OS === 'ios' ? 95 : 100} 
+              tint={colors.blurTint}
               style={StyleSheet.absoluteFill} 
           />
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: searchAnim }]}>
               <LinearGradient
-                  colors={[colors.tabBarGradientStart, colors.tabBarGradientEnd]}
+                  colors={isDark 
+                    ? ["rgba(40, 40, 50, 0.8)", "rgba(20, 20, 30, 0.9)"]
+                    : ["rgba(250, 250, 250, 0.9)", "rgba(245, 245, 245, 0.95)"]}
                   style={StyleSheet.absoluteFill}
               />
               <View style={[StyleSheet.absoluteFill, { 
-                  borderColor: colors.glassBorder, 
+                  borderColor: colors.borderSecondary, 
                   borderWidth: 1,
                   borderRadius: 32
               }]} />
@@ -252,9 +225,9 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
               ]}>
                   <View style={{ 
                       width: 50, height: 50, borderRadius: 25, 
-                      backgroundColor: colors.glassBackground,
+                      backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
                       alignItems: 'center', justifyContent: 'center',
-                      borderWidth: 1, borderColor: colors.glassBorder
+                      borderWidth: 1, borderColor: colors.border
                   }}>
                       <Search size={22} color={colors.textSecondary} />
                   </View>
@@ -278,8 +251,8 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
                       flexDirection: 'row',
                   }}
               >
-                  <ChevronLeft size={24} color={colors.primary} style={{ marginRight: 4 }} />
-                  <MessageCircle size={24} color={colors.primary} fill={activeRouteName === 'Chats' ? colors.primary : "transparent"} fillOpacity={0.2} />
+                  <ChevronLeft size={24} color="#4FC3F7" style={{ marginRight: 4 }} />
+                  <MessageCircle size={24} color="#4FC3F7" fill={activeRouteName === 'Chats' ? "#4FC3F7" : "transparent"} fillOpacity={0.2} />
               </Pressable>
 
               <TextInput
@@ -305,11 +278,11 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
                   }}
                   style={{
                       padding: 8,
-                      backgroundColor: searchMode === "semantic" ? (isDark ? "rgba(79, 195, 247, 0.2)" : "rgba(0, 122, 255, 0.1)") : colors.glassBackground,
+                      backgroundColor: searchMode === "semantic" ? "rgba(79, 195, 247, 0.2)" : (isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)"),
                       borderRadius: 20,
                       marginRight: 4,
                       borderWidth: 1,
-                      borderColor: searchMode === "semantic" ? (isDark ? "rgba(79, 195, 247, 0.4)" : "rgba(0, 122, 255, 0.3)") : colors.glassBorder,
+                      borderColor: searchMode === "semantic" ? "rgba(79, 195, 247, 0.4)" : colors.border,
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: 4
@@ -317,12 +290,12 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
               >
                   <Sparkles 
                       size={14} 
-                      color={searchMode === "semantic" ? colors.primary : colors.textSecondary} 
-                      fill={searchMode === "semantic" ? colors.primary : "transparent"}
+                      color={searchMode === "semantic" ? "#4FC3F7" : "rgba(255, 255, 255, 0.6)"} 
+                      fill={searchMode === "semantic" ? "#4FC3F7" : "transparent"}
                       fillOpacity={0.2}
                   />
                   <Text style={{ 
-                      color: searchMode === "semantic" ? colors.primary : colors.textSecondary,
+                      color: searchMode === "semantic" ? "#4FC3F7" : colors.textSecondary,
                       fontSize: 11,
                       fontWeight: "600"
                   }}>
@@ -337,8 +310,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
 
   function renderTab(tab: typeof tabs[0]) {
     const isFocused = activeRouteName === tab.name;
-    // In light mode, inactive tabs should be darker so they are visible on light background
-    const color = isFocused ? colors.primary : colors.textSecondary;
+    const color = isFocused ? "#4FC3F7" : colors.textSecondary;
 
     return (
       <TouchableOpacity
@@ -361,10 +333,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
       >
         {isFocused && (
           <LinearGradient
-            colors={isDark 
-                ? ["rgba(79, 195, 247, 0.15)", "rgba(0, 168, 232, 0.05)"]
-                : ["rgba(0, 122, 255, 0.1)", "rgba(0, 122, 255, 0.02)"]
-            }
+            colors={["rgba(79, 195, 247, 0.15)", "rgba(0, 168, 232, 0.05)"]}
             style={{
               position: "absolute",
               left: 0, 
@@ -373,7 +342,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
               bottom: 0,
               borderRadius: 24, // Pill shape
               borderWidth: 1,
-              borderColor: isDark ? "rgba(79, 195, 247, 0.2)" : "rgba(0, 122, 255, 0.2)",
+              borderColor: "rgba(79, 195, 247, 0.2)",
             }}
           />
         )}

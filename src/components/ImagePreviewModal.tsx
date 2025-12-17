@@ -27,6 +27,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import LiquidGlassButton from "./LiquidGlass/LiquidGlassButton";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -80,23 +81,30 @@ import { ShimmeringText } from "@/components/ShimmeringText";
 // Full-screen Shimmer Loading Component (for initial generation)
 const ShimmerLoader: React.FC = () => {
   const { shimmerStyle } = useShimmerAnimation();
+  const { colors, isDark } = useTheme();
 
   return (
     <View style={shimmerStyles.container}>
       {/* Dark background with subtle gradient */}
       <LinearGradient
-        colors={['#0a0a0a', '#111111', '#0a0a0a']}
+        colors={isDark ? ['#0a0a0a', '#111111', '#0a0a0a'] : ['#f0f0f0', '#ffffff', '#f0f0f0']}
         style={StyleSheet.absoluteFill}
       />
       
       {/* Animated shimmer sweep */}
       <Animated.View style={[shimmerStyles.shimmerContainer, shimmerStyle]}>
         <LinearGradient
-          colors={[
+          colors={isDark ? [
             'transparent',
             'rgba(255, 255, 255, 0.02)',
             'rgba(255, 255, 255, 0.06)',
             'rgba(255, 255, 255, 0.02)',
+            'transparent',
+          ] : [
+            'transparent',
+            'rgba(0, 0, 0, 0.02)',
+            'rgba(0, 0, 0, 0.06)',
+            'rgba(0, 0, 0, 0.02)',
             'transparent',
           ]}
           start={{ x: 0, y: 0 }}
@@ -108,11 +116,17 @@ const ShimmerLoader: React.FC = () => {
       {/* Secondary shimmer layer for depth */}
       <Animated.View style={[shimmerStyles.shimmerContainer, shimmerStyle, { opacity: 0.5 }]}>
         <LinearGradient
-          colors={[
+          colors={isDark ? [
             'transparent',
             'rgba(100, 150, 255, 0.02)',
             'rgba(100, 150, 255, 0.04)',
             'rgba(100, 150, 255, 0.02)',
+            'transparent',
+          ] : [
+            'transparent',
+            'rgba(0, 122, 255, 0.02)',
+            'rgba(0, 122, 255, 0.04)',
+            'rgba(0, 122, 255, 0.02)',
             'transparent',
           ]}
           start={{ x: 0, y: 0.3 }}
@@ -125,11 +139,11 @@ const ShimmerLoader: React.FC = () => {
       <View style={shimmerStyles.textContainer}>
         <ShimmeringText 
            text="Creating your masterpiece..."
-           style={shimmerStyles.loadingText}
-           shimmerColor="#FFFFFF"
+           style={[shimmerStyles.loadingText, { color: isDark ? '#FFF' : colors.text }]}
+           shimmerColor={isDark ? "#FFFFFF" : "#000000"}
            duration={1200}
         />
-        <Text style={shimmerStyles.loadingSubtext}>This may take a moment</Text>
+        <Text style={[shimmerStyles.loadingSubtext, { color: isDark ? 'rgba(255,255,255,0.4)' : colors.textSecondary }]}>This may take a moment</Text>
       </View>
     </View>
   );
@@ -138,21 +152,28 @@ const ShimmerLoader: React.FC = () => {
 // Shimmer Overlay Component (for refining/editing existing image)
 const ShimmerOverlay: React.FC<{ text?: string }> = ({ text = "Refining..." }) => {
   const { shimmerStyle } = useShimmerAnimation();
+  const { colors, isDark } = useTheme();
 
   return (
     <View style={shimmerOverlayStyles.container}>
       {/* Dark semi-transparent backdrop */}
-      <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={shimmerOverlayStyles.darkOverlay} />
+      <BlurView intensity={25} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
+      <View style={[shimmerOverlayStyles.darkOverlay, { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.4)' }]} />
       
       {/* Animated shimmer sweep */}
       <Animated.View style={[shimmerOverlayStyles.shimmerContainer, shimmerStyle]}>
         <LinearGradient
-          colors={[
+          colors={isDark ? [
             'transparent',
             'rgba(255, 255, 255, 0.03)',
             'rgba(255, 255, 255, 0.08)',
             'rgba(255, 255, 255, 0.03)',
+            'transparent',
+          ] : [
+            'transparent',
+            'rgba(0, 0, 0, 0.03)',
+            'rgba(0, 0, 0, 0.08)',
+            'rgba(0, 0, 0, 0.03)',
             'transparent',
           ]}
           start={{ x: 0, y: 0 }}
@@ -165,8 +186,8 @@ const ShimmerOverlay: React.FC<{ text?: string }> = ({ text = "Refining..." }) =
       <View style={shimmerOverlayStyles.textContainer}>
          <ShimmeringText 
            text={text}
-           style={shimmerOverlayStyles.loadingText}
-           shimmerColor="#FFFFFF"
+           style={[shimmerOverlayStyles.loadingText, { color: isDark ? '#FFF' : colors.text }]}
+           shimmerColor={isDark ? "#FFFFFF" : "#000000"}
            duration={1200}
         />
       </View>
@@ -266,6 +287,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   const [editPrompt, setEditPrompt] = useState("");
   const [finalCaption, setFinalCaption] = useState("");
   const [localProcessing, setLocalProcessing] = useState(false);
+  const { colors, isDark } = useTheme();
 
   const slideAnim = useSharedValue(SCREEN_HEIGHT);
   const opacityAnim = useSharedValue(0);
@@ -327,12 +349,12 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
       onRequestClose={onCancel}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <Animated.View style={[styles.container, containerStyle]}>
-          <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
+        <Animated.View style={[styles.container, containerStyle, { backgroundColor: isDark ? "rgba(0,0,0,0.9)" : "rgba(255,255,255,0.9)" }]}>
+          <BlurView intensity={90} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
           
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>
+            <Text style={[styles.title, { color: colors.text }]}>
               {previewType === "meme" ? "Meme Preview" : previewType === "remix" ? "Remix Preview" : "Image Preview"}
             </Text>
             <LiquidGlassButton
@@ -341,7 +363,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               size="small"
               style={{ width: 40, height: 40, paddingHorizontal: 0, paddingVertical: 0 }}
             >
-              <X size={20} color="#FFF" />
+              <X size={20} color={colors.text} />
             </LiquidGlassButton>
           </View>
 
@@ -354,7 +376,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               {imageUrl ? (
                 <Image
                   source={{ uri: imageUrl }}
-                  style={styles.image}
+                  style={[styles.image, { backgroundColor: colors.background }]}
                   resizeMode="contain"
                 />
               ) : (
@@ -367,14 +389,21 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             </View>
 
             {/* Controls */}
-            <Animated.View style={[styles.controlsContainer, modalContentStyle]}>
+            <Animated.View style={[styles.controlsContainer, modalContentStyle, { 
+              backgroundColor: isDark ? "rgba(20,20,20,0.8)" : "rgba(240,240,240,0.8)",
+              borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"
+            }]}>
               {isEditing ? (
                 <View style={styles.editContainer}>
-                  <Text style={styles.helperText}>Describe how you want to change this image:</Text>
+                  <Text style={[styles.helperText, { color: colors.textSecondary }]}>Describe how you want to change this image:</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { 
+                      backgroundColor: colors.inputBackground, 
+                      color: colors.text,
+                      borderColor: colors.border
+                    }]}
                     placeholder="Make it cyberpunk, add a cat, etc..."
-                    placeholderTextColor="rgba(255,255,255,0.5)"
+                    placeholderTextColor={colors.inputPlaceholder}
                     value={editPrompt}
                     onChangeText={setEditPrompt}
                     autoFocus
@@ -385,16 +414,19 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     <TouchableOpacity 
                       onPress={() => setIsEditing(false)}
                       activeOpacity={0.7}
-                      style={[styles.actionButton, styles.cancelButton]}
+                      style={[styles.actionButton, styles.cancelButton, { 
+                        backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                        borderColor: colors.border
+                      }]}
                     >
-                      <Text style={styles.buttonText}>Cancel</Text>
+                      <Text style={[styles.buttonText, { color: colors.text }]}>Cancel</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity 
                       onPress={handleEditSubmit}
                       activeOpacity={0.7}
                       disabled={!editPrompt.trim()}
-                      style={[styles.actionButton, styles.updateButton, !editPrompt.trim() && styles.disabledButton]}
+                      style={[styles.actionButton, styles.updateButton, { backgroundColor: colors.primary }, !editPrompt.trim() && styles.disabledButton]}
                     >
                       <Text style={styles.buttonText}>Update</Text>
                     </TouchableOpacity>
@@ -402,11 +434,15 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 </View>
               ) : isFinalizing ? (
                 <View style={styles.editContainer}>
-                  <Text style={styles.helperText}>Add a caption (optional):</Text>
+                  <Text style={[styles.helperText, { color: colors.textSecondary }]}>Add a caption (optional):</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { 
+                      backgroundColor: colors.inputBackground, 
+                      color: colors.text,
+                      borderColor: colors.border
+                    }]}
                     placeholder="Enter a caption..."
-                    placeholderTextColor="rgba(255,255,255,0.5)"
+                    placeholderTextColor={colors.inputPlaceholder}
                     value={finalCaption}
                     onChangeText={setFinalCaption}
                     autoFocus
@@ -417,15 +453,18 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     <TouchableOpacity 
                       onPress={() => setIsFinalizing(false)}
                       activeOpacity={0.7}
-                      style={[styles.actionButton, styles.cancelButton]}
+                      style={[styles.actionButton, styles.cancelButton, { 
+                        backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                        borderColor: colors.border
+                      }]}
                     >
-                      <Text style={styles.buttonText}>Back</Text>
+                      <Text style={[styles.buttonText, { color: colors.text }]}>Back</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity 
                       onPress={handleFinalize}
                       activeOpacity={0.7}
-                      style={[styles.actionButton, styles.updateButton]}
+                      style={[styles.actionButton, styles.updateButton, { backgroundColor: colors.primary }]}
                     >
                       <Text style={styles.buttonText}>Send</Text>
                     </TouchableOpacity>
@@ -435,8 +474,11 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 <View style={styles.actionButtons}>
                   {/* Reject / Cancel - always enabled so user can cancel during generation */}
                   <TouchableOpacity onPress={onCancel} activeOpacity={0.7}>
-                    <View style={[styles.iconButton, styles.rejectButton]}>
-                      <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                    <View style={[styles.iconButton, styles.rejectButton, { 
+                      borderColor: isDark ? "rgba(255, 69, 58, 0.3)" : "rgba(255, 69, 58, 0.2)",
+                      backgroundColor: isDark ? "rgba(255, 69, 58, 0.15)" : "rgba(255, 69, 58, 0.1)"
+                    }]}>
+                      <BlurView intensity={30} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
                       <X size={28} color="#FF453A" />
                     </View>
                   </TouchableOpacity>
@@ -447,9 +489,12 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     activeOpacity={0.7}
                     disabled={!imageUrl}
                   >
-                    <View style={[styles.iconButton, !imageUrl && styles.disabledIconButton]}>
-                      <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                      <Edit2 size={28} color={imageUrl ? "#FFF" : "rgba(255,255,255,0.3)"} />
+                    <View style={[styles.iconButton, !imageUrl && styles.disabledIconButton, {
+                      borderColor: colors.border,
+                      backgroundColor: isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.3)"
+                    }]}>
+                      <BlurView intensity={30} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
+                      <Edit2 size={28} color={imageUrl ? colors.text : colors.textTertiary} />
                     </View>
                   </TouchableOpacity>
 
@@ -459,7 +504,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     activeOpacity={0.7}
                     disabled={!imageUrl}
                   >
-                    <View style={[styles.iconButton, styles.acceptButton, !imageUrl && styles.disabledAcceptButton]}>
+                    <View style={[styles.iconButton, styles.acceptButton, { backgroundColor: colors.primary, borderColor: colors.primary }, !imageUrl && styles.disabledAcceptButton]}>
                       <Send size={28} color="#FFF" fill="white" />
                     </View>
                   </TouchableOpacity>

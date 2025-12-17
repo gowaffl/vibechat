@@ -23,11 +23,13 @@ import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { OnboardingProgress } from "@/components/OnboardingProgress";
 import { authClient, supabaseClient } from "@/lib/authClient";
 import type { User } from "@/shared/contracts";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { width, height } = Dimensions.get("window");
 
 export default function PhoneAuthScreen() {
   const navigation = useNavigation<any>();
+  const { colors, isDark } = useTheme();
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"phone" | "code">("phone");
@@ -184,25 +186,25 @@ export default function PhoneAuthScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Animated Gradient Background */}
-      <View style={styles.backgroundContainer}>
+      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
         <LinearGradient
-          colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+          colors={isDark ? ["#000000", "#0A0A0F", "#050508", "#000000"] : [colors.gradientStart, colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.flexOne}
+          style={{ flex: 1 }}
         />
         <LinearGradient
           colors={[
-            "rgba(79, 195, 247, 0.05)",
-            "rgba(0, 122, 255, 0.03)",
+            isDark ? "rgba(79, 195, 247, 0.05)" : "rgba(0, 122, 255, 0.05)",
+            isDark ? "rgba(0, 122, 255, 0.03)" : "rgba(0, 122, 255, 0.02)",
             "transparent",
-            "rgba(52, 199, 89, 0.03)",
+            isDark ? "rgba(52, 199, 89, 0.03)" : "rgba(52, 199, 89, 0.02)",
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.overlayGradient}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
         />
       </View>
 
@@ -266,33 +268,33 @@ export default function PhoneAuthScreen() {
           ]}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>
+            <Text style={{ fontSize: 28, fontWeight: "700", color: colors.text, marginBottom: 12, textAlign: "center" }}>
                   {step === "phone" ? "What's your number?" : "Verify it's you"}
             </Text>
-            <Text style={styles.subtitle}>
+            <Text style={{ fontSize: 16, color: colors.textSecondary, textAlign: "center", lineHeight: 24, paddingHorizontal: 20 }}>
               {step === "phone"
                     ? "We'll text you a code to verify your phone."
                     : `Enter the code sent to ${phone}`}
             </Text>
           </View>
 
-          <View style={styles.inputContainer}>
-            <BlurView intensity={Platform.OS === "ios" ? 30 : 60} tint="dark" style={styles.blurContainer}>
+          <View style={{ borderRadius: 16, overflow: "hidden", marginBottom: 24, borderWidth: 1, borderColor: colors.glassBorder }}>
+            <BlurView intensity={isDark ? 60 : 80} tint={isDark ? "dark" : "light"} style={styles.blurContainer}>
               <LinearGradient
-                colors={["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.03)"]}
+                colors={isDark ? ["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.03)"] : ["rgba(255, 255, 255, 0.6)", "rgba(255, 255, 255, 0.4)"]}
                 style={styles.inputGradient}
               >
                 <TextInput
-                  style={styles.input}
+                  style={{ fontSize: 24, color: colors.text, textAlign: "center", letterSpacing: 2, fontWeight: "600" }}
                       placeholder={step === "phone" ? "+1 555 000 0000" : "000 000"}
-                  placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                  placeholderTextColor={colors.inputPlaceholder}
                   value={step === "phone" ? phone : code}
                   onChangeText={step === "phone" ? (t) => setPhone(formatPhoneNumber(t)) : setCode}
                   keyboardType={step === "phone" ? "phone-pad" : "number-pad"}
                       autoFocus={false} 
                   maxLength={step === "phone" ? 15 : 6}
-                  selectionColor="#3B82F6"
-                  keyboardAppearance="dark"
+                  selectionColor={colors.primary}
+                  keyboardAppearance={isDark ? "dark" : "light"}
                 />
               </LinearGradient>
             </BlurView>

@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,6 +19,7 @@ import * as Haptics from "expo-haptics";
 import { Sparkles, Wand2 } from "lucide-react-native";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface CreateCustomCommandModalProps {
   visible: boolean;
@@ -36,7 +36,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
   onCreate,
   isCreating = false,
 }) => {
-  const colorScheme = useColorScheme();
+  const { colors, isDark } = useTheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -132,7 +132,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
           opacity: fadeAnim,
         }}
       >
-        <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={40} tint={colors.blurTint} style={{ flex: 1 }}>
           {/* Backdrop */}
           <Pressable style={{ flex: 1 }} onPress={handleClose}>
             <View style={{ flex: 1 }} />
@@ -161,12 +161,16 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                     overflow: "hidden",
                   }}
                 >
-                  <BlurView intensity={80} tint="dark">
+                  <BlurView intensity={80} tint={colors.blurTint}>
                     <LinearGradient
-                      colors={[
+                      colors={isDark ? [
                         "rgba(255, 159, 10, 0.15)",
                         "rgba(255, 159, 10, 0.08)",
                         "rgba(0, 0, 0, 0.5)",
+                      ] : [
+                        "rgba(255, 159, 10, 0.12)",
+                        "rgba(255, 159, 10, 0.06)",
+                        "rgba(255, 255, 255, 0.95)",
                       ]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
@@ -179,7 +183,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             width: 40,
                             height: 5,
                             borderRadius: 2.5,
-                            backgroundColor: "rgba(255, 255, 255, 0.3)",
+                            backgroundColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.15)",
                           }}
                         />
                       </View>
@@ -199,7 +203,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             style={{
                               fontSize: 24,
                               fontWeight: "700",
-                              color: "#FFFFFF",
+                              color: colors.text,
                               marginBottom: 4,
                             }}
                           >
@@ -208,7 +212,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                           <Text
                             style={{
                               fontSize: 14,
-                              color: "rgba(255, 255, 255, 0.6)",
+                              color: colors.textSecondary,
                             }}
                           >
                             Make AI work your way
@@ -222,13 +226,13 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             height: 36,
                             borderRadius: 18,
                             backgroundColor: pressed
-                              ? "rgba(255, 255, 255, 0.15)"
-                              : "rgba(255, 255, 255, 0.1)",
+                              ? (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)")
+                              : (isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"),
                             alignItems: "center",
                             justifyContent: "center",
                           })}
                         >
-                          <Text style={{ fontSize: 20, color: "#FFFFFF" }}>✕</Text>
+                          <Text style={{ fontSize: 20, color: colors.text }}>✕</Text>
                         </Pressable>
                       </View>
 
@@ -256,7 +260,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                           <Text
                             style={{
                               fontSize: 13,
-                              color: "rgba(255, 255, 255, 0.9)",
+                              color: colors.text,
                               lineHeight: 18,
                             }}
                           >
@@ -275,14 +279,14 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             value={command}
                             onChangeText={setCommand}
                             placeholder="e.g., /summarize, /translate, /joke"
-                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                            keyboardAppearance="dark"
+                            placeholderTextColor={colors.inputPlaceholder}
+                            keyboardAppearance={isDark ? "dark" : "light"}
                             style={{
-                              backgroundColor: "rgba(255, 255, 255, 0.08)",
+                              backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                               borderRadius: 12,
                               padding: 14,
                               fontSize: 16,
-                              color: "#FFFFFF",
+                              color: colors.text,
                               fontWeight: "600",
                             }}
                             maxLength={30}
@@ -301,14 +305,14 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                             value={prompt}
                             onChangeText={setPrompt}
                             placeholder="e.g., Summarize the above conversation in 3 bullet points"
-                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                            keyboardAppearance="dark"
+                            placeholderTextColor={colors.inputPlaceholder}
+                            keyboardAppearance={isDark ? "dark" : "light"}
                             style={{
-                              backgroundColor: "rgba(255, 255, 255, 0.08)",
+                              backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                               borderRadius: 12,
                               padding: 14,
                               fontSize: 15,
-                              color: "#FFFFFF",
+                              color: colors.text,
                               minHeight: 100,
                             }}
                             multiline
@@ -319,18 +323,18 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                         {/* Examples */}
                         <View
                           style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.05)",
+                            backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
                             borderRadius: 12,
                             padding: 14,
                             borderWidth: 1,
-                            borderColor: "rgba(255, 255, 255, 0.1)",
+                            borderColor: colors.glassBorder,
                           }}
                         >
                           <Text
                             style={{
                               fontSize: 13,
                               fontWeight: "600",
-                              color: "rgba(255, 255, 255, 0.8)",
+                              color: colors.text,
                               marginBottom: 8,
                             }}
                           >
@@ -339,7 +343,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                           <Text
                             style={{
                               fontSize: 12,
-                              color: "rgba(255, 255, 255, 0.6)",
+                              color: colors.textSecondary,
                               lineHeight: 18,
                             }}
                           >
@@ -357,7 +361,7 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
                           paddingTop: 16,
                           paddingBottom: 16,
                           borderTopWidth: 1,
-                          borderTopColor: "rgba(255, 255, 255, 0.1)",
+                          borderTopColor: colors.glassBorder,
                         }}
                       >
                         <LiquidGlassButton
@@ -384,4 +388,3 @@ const CreateCustomCommandModal: React.FC<CreateCustomCommandModalProps> = ({
 };
 
 export default CreateCustomCommandModal;
-

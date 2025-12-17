@@ -4,6 +4,7 @@ import { BlurView } from "expo-blur";
 import { X } from "lucide-react-native";
 import { useCreateRequest } from "@/hooks/useFeedback";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface CreateRequestModalProps {
   visible: boolean;
@@ -11,6 +12,7 @@ interface CreateRequestModalProps {
 }
 
 const CreateRequestModal: React.FC<CreateRequestModalProps> = ({ visible, onClose }) => {
+  const { colors, isDark } = useTheme();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const { mutate: createRequest, isPending } = useCreateRequest();
@@ -39,7 +41,7 @@ const CreateRequestModal: React.FC<CreateRequestModalProps> = ({ visible, onClos
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
       >
-        <BlurView intensity={80} tint="dark" style={styles.blur}>
+        <BlurView intensity={80} tint={colors.blurTint} style={styles.blur}>
           <View style={styles.content}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>New Request</Text>

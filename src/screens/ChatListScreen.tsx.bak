@@ -24,7 +24,7 @@ import * as Haptics from "expo-haptics";
 import { api, BACKEND_URL } from "@/lib/api";
 import { supabaseClient } from "@/lib/authClient";
 import { useUser } from "@/contexts/UserContext";
-import { useTheme } from "@/contexts/ThemeContext";
+// TEMP: import { useTheme } from "@/contexts/ThemeContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { ChatWithMetadata, GetUserChatsResponse, UnreadCount } from "@/shared/contracts";
@@ -35,7 +35,6 @@ import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { CustomRefreshControl } from "@/components/CustomRefreshControl";
 import { useDebounce } from "@/hooks/useDebounce";
 import { SearchMessagesResponse, SearchMessageResult } from "@/shared/contracts";
-import { ColorPalette } from "@/constants/theme";
 
 // Separated component for performance optimization with memoization
 const ChatItem = React.memo(({ 
@@ -50,7 +49,7 @@ const ChatItem = React.memo(({
   unreadCount: number, 
   onPress: (chat: ChatWithMetadata) => void, 
   onLongPress: (chat: ChatWithMetadata) => void,
-  colors: ColorPalette,
+  colors: any,
   isDark: boolean
 }) => {
   
@@ -84,53 +83,44 @@ const ChatItem = React.memo(({
           marginBottom: 12,
           borderRadius: 20,
           overflow: "hidden",
-          shadowColor: unreadCount > 0 
-            ? colors.primary 
-            : (isDark ? colors.glassShadow : "rgba(0, 0, 0, 0.15)"),
-          shadowOffset: { width: 0, height: isDark ? 4 : 2 },
-          shadowOpacity: unreadCount > 0 ? 0.4 : (isDark ? 0.2 : 0.12),
-          shadowRadius: isDark ? 8 : 10,
-          elevation: isDark ? 4 : 3,
+          shadowColor: unreadCount > 0 ? "#4FC3F7" : "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: unreadCount > 0 ? 0.4 : 0.2,
+          shadowRadius: 8,
+          elevation: 4,
         }}
       >
         <BlurView
-          intensity={Platform.OS === "ios" ? (isDark ? 40 : 60) : 80}
-          tint={isDark ? "dark" : "light"}
+          intensity={Platform.OS === "ios" ? 40 : 80}
+          tint={colors.blurTint}
           style={{
             borderRadius: 20,
-            borderWidth: isDark ? 1 : 1.5,
+            borderWidth: 1,
             borderColor: unreadCount > 0
-              ? (isDark ? "rgba(79, 195, 247, 0.4)" : "rgba(0, 122, 255, 0.4)")
-              : (isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)"),
+              ? "rgba(79, 195, 247, 0.4)"
+              : colors.border,
             overflow: "hidden",
-            backgroundColor: isDark ? "transparent" : "rgba(255, 255, 255, 0.85)"
           }}
         >
           <LinearGradient
             colors={
               unreadCount > 0
-                ? (isDark 
-                    ? [
-                        "rgba(79, 195, 247, 0.25)",
-                        "rgba(79, 195, 247, 0.15)",
-                        "rgba(79, 195, 247, 0.08)",
-                      ]
-                    : [
-                        "rgba(0, 122, 255, 0.12)",
-                        "rgba(0, 122, 255, 0.08)",
-                        "rgba(255, 255, 255, 0.95)",
-                      ])
-                : (isDark
-                    ? [
-                        "rgba(255, 255, 255, 0.08)",
-                        "rgba(255, 255, 255, 0.05)",
-                        "rgba(255, 255, 255, 0.02)",
-                      ]
-                    : [
-                        "rgba(255, 255, 255, 0.98)",
-                        "rgba(255, 255, 255, 0.95)",
-                        "rgba(250, 250, 250, 0.92)",
-                      ])
+                ? [
+                    "rgba(79, 195, 247, 0.25)",
+                    "rgba(79, 195, 247, 0.15)",
+                    "rgba(79, 195, 247, 0.08)",
+                  ]
+                : isDark
+                  ? [
+                      "rgba(255, 255, 255, 0.08)",
+                      "rgba(255, 255, 255, 0.05)",
+                      "rgba(255, 255, 255, 0.02)",
+                    ]
+                  : [
+                      "rgba(255, 255, 255, 0.9)",
+                      "rgba(255, 255, 255, 0.7)",
+                      "rgba(250, 250, 250, 0.85)",
+                    ]
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -149,12 +139,12 @@ const ChatItem = React.memo(({
             width: 56,
             height: 56,
             borderRadius: 28,
-            backgroundColor: isDark ? "rgba(79, 195, 247, 0.2)" : "rgba(0, 122, 255, 0.1)",
+            backgroundColor: "rgba(79, 195, 247, 0.2)",
             alignItems: "center",
             justifyContent: "center",
             marginRight: 12,
             borderWidth: 2,
-            borderColor: isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 122, 255, 0.2)",
+            borderColor: "rgba(79, 195, 247, 0.3)",
             position: "relative",
           }}
         >
@@ -171,7 +161,7 @@ const ChatItem = React.memo(({
             />
           ) : (
             <GradientIcon
-              icon={<MessageCircle size={28} color={colors.text} />}
+              icon={<MessageCircle size={28} color="#000" />}
               style={{ width: 28, height: 28 }}
             />
           )}
@@ -183,7 +173,7 @@ const ChatItem = React.memo(({
                 position: "absolute",
                 top: -4,
                 right: -4,
-                backgroundColor: colors.notification || "#EF4444",
+                backgroundColor: "#EF4444",
                 borderRadius: 12,
                 minWidth: 24,
                 height: 24,
@@ -236,7 +226,7 @@ const ChatItem = React.memo(({
                 <Text
                   style={{
                     fontSize: 13,
-                    color: colors.textTertiary,
+                    color: colors.textSecondary,
                     marginLeft: 8,
                     fontWeight: "400",
                   }}
@@ -248,11 +238,11 @@ const ChatItem = React.memo(({
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Users size={14} color={colors.textTertiary} />
+            <Users size={14} color={colors.textSecondary} />
             <Text
               style={{
                 fontSize: 14,
-                color: colors.textTertiary,
+                color: colors.textSecondary,
                 marginLeft: 4,
                 marginRight: 12,
               }}
@@ -262,12 +252,12 @@ const ChatItem = React.memo(({
             {item.isCreator && (
               <View
                 style={{
-                  backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
+                  backgroundColor: "rgba(79, 195, 247, 0.15)",
                   paddingHorizontal: 8,
                   paddingVertical: 2,
                   borderRadius: 8,
                   borderWidth: 1,
-                  borderColor: isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 122, 255, 0.2)",
+                  borderColor: "rgba(79, 195, 247, 0.3)",
                 }}
               >
                 <GradientText style={{ fontSize: 11, fontWeight: "600" }}>
@@ -281,7 +271,7 @@ const ChatItem = React.memo(({
             <Text
               style={{
                 fontSize: 14,
-                color: unreadCount > 0 ? colors.textSecondary : colors.textTertiary,
+                color: unreadCount > 0 ? "rgba(255, 255, 255, 0.8)" : "rgba(255, 255, 255, 0.6)",
                 marginTop: 4,
                 fontWeight: unreadCount > 0 ? "500" : "400",
               }}
@@ -293,7 +283,7 @@ const ChatItem = React.memo(({
         </View>
 
         {/* Arrow */}
-        <ChevronRight size={20} color={colors.textTertiary} style={{ marginLeft: 8 }} />
+        <ChevronRight size={20} color="rgba(255, 255, 255, 0.3)" style={{ marginLeft: 8 }} />
             </View>
           </LinearGradient>
         </BlurView>
@@ -309,7 +299,7 @@ const ChatListScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<RootStackScreenProps<"ChatList">["navigation"]>();
   const { user } = useUser();
-  const { colors, isDark } = useTheme();
+  // TEMP: const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
 
   const { searchQuery, searchMode } = useSearchStore();
@@ -349,6 +339,7 @@ const ChatListScreen = () => {
       
       // Prefetch messages for top 5 chats to ensure instant load
       if (chats.length > 0 && user?.id) {
+        // Sort by last activity to get most relevant chats
         const sortedChats = [...chats].sort((a, b) => {
           const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
           const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
@@ -356,6 +347,8 @@ const ChatListScreen = () => {
         });
 
         const topChats = sortedChats.slice(0, 5);
+        
+        console.log(`[ChatList] Prefetching messages for top ${topChats.length} chats`);
         
         topChats.forEach((chat) => {
           queryClient.prefetchQuery({
@@ -365,7 +358,7 @@ const ChatListScreen = () => {
                 `/api/chats/${chat.id}/messages?userId=${user.id}`
               );
             },
-            staleTime: 1000 * 60,
+            staleTime: 1000 * 60, // Consider fresh for 1 minute for prefetch purposes
           });
         });
       }
@@ -378,17 +371,20 @@ const ChatListScreen = () => {
     try {
       await Promise.all([refetch(), refetchUnread()]);
     } finally {
+      // Ensure refresh state is cleared even if there's an error
       setTimeout(() => {
         setIsRefreshing(false);
-      }, 500);
+      }, 500); // Small delay to ensure smooth animation completion
     }
   }, [refetch, refetchUnread]);
 
   // Auto-update on focus
   useFocusEffect(
     useCallback(() => {
+      // Silently refetch on focus without showing refresh indicator
       refetch();
       refetchUnread();
+      // Make sure we clear any stuck refresh state when focusing
       setIsRefreshing(false);
     }, [refetch, refetchUnread])
   );
@@ -407,7 +403,9 @@ const ChatListScreen = () => {
           table: "message",
         },
         (payload: any) => {
+          // Check if the message belongs to one of our chats
           if (chatIdsRef.current.has(payload.new.chatId)) {
+            console.log("[ChatList] New message received in chat", payload.new.chatId, "refetching...");
             refetch();
             refetchUnread();
           }
@@ -420,6 +418,7 @@ const ChatListScreen = () => {
     };
   }, [user?.id, refetch, refetchUnread]);
 
+  // Create a map of chatId -> unread count for quick lookup
   const unreadCountMap = React.useMemo(() => {
     const map = new Map<string, number>();
     unreadCounts.forEach((uc) => map.set(uc.chatId, uc.unreadCount));
@@ -446,6 +445,7 @@ const ChatListScreen = () => {
   const handleLongPress = (chat: ChatWithMetadata) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
+    // Prefetch messages on long press (high probability of opening)
     if (user?.id) {
       queryClient.prefetchQuery({
         queryKey: ["messages", chat.id],
@@ -461,6 +461,7 @@ const ChatListScreen = () => {
     setShowContextMenu(true);
   };
 
+  // Pin/unpin chat mutation
   const pinChatMutation = useMutation({
     mutationFn: ({ chatId, isPinned }: { chatId: string; isPinned: boolean }) =>
       api.patch(`/api/chats/${chatId}/pin`, { userId: user!.id, isPinned }),
@@ -474,6 +475,7 @@ const ChatListScreen = () => {
     },
   });
 
+  // Leave chat mutation
   const leaveChatMutation = useMutation({
     mutationFn: (chatId: string) =>
       api.delete(`/api/chats/${chatId}/members/${user!.id}`, { removerId: user!.id }),
@@ -489,6 +491,7 @@ const ChatListScreen = () => {
     },
   });
 
+  // Mute chat mutation
   const muteChatMutation = useMutation({
     mutationFn: ({ chatId, isMuted }: { chatId: string; isMuted: boolean }) =>
       api.patch(`/api/chats/${chatId}/mute`, { userId: user!.id, isMuted }),
@@ -555,6 +558,7 @@ const ChatListScreen = () => {
     return date.toLocaleDateString();
   };
 
+  // Filter chats based on search query
   const filteredChats = React.useMemo(() => {
     if (!searchQuery.trim()) return chats;
     const query = searchQuery.toLowerCase();
@@ -566,8 +570,10 @@ const ChatListScreen = () => {
     );
   }, [chats, searchQuery]);
 
+  // Split chats into pinned and unpinned and sort them
   const pinnedChats = React.useMemo(() => {
     const pinned = filteredChats.filter((chat) => chat.isPinned);
+    // Sort by lastMessageAt or createdAt, descending
     return pinned.sort((a, b) => {
       const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
       const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
@@ -577,12 +583,232 @@ const ChatListScreen = () => {
 
   const unpinnedChats = React.useMemo(() => {
     const unpinned = filteredChats.filter((chat) => !chat.isPinned);
+    // Sort by lastMessageAt or createdAt, descending
     return unpinned.sort((a, b) => {
       const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
       const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
       return dateB - dateA;
     });
   }, [filteredChats]);
+
+  const renderChatItem = ({ item }: { item: ChatWithMetadata }) => {
+    const unreadCount = unreadCountMap.get(item.id) || 0;
+
+    return (
+      <Pressable
+        onPress={() => handleChatPress(item)}
+        onLongPress={() => handleLongPress(item)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 12,
+            borderRadius: 20,
+            overflow: "hidden",
+            shadowColor: unreadCount > 0 ? "#4FC3F7" : "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: unreadCount > 0 ? 0.4 : 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+        >
+          <BlurView
+            intensity={Platform.OS === "ios" ? 40 : 80}
+            tint={colors.blurTint}
+            style={{
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: unreadCount > 0
+                ? "rgba(79, 195, 247, 0.4)"
+                : "rgba(255, 255, 255, 0.1)",
+              overflow: "hidden",
+            }}
+          >
+            <LinearGradient
+              colors={
+                unreadCount > 0
+                  ? [
+                      "rgba(79, 195, 247, 0.25)",
+                      "rgba(79, 195, 247, 0.15)",
+                      "rgba(79, 195, 247, 0.08)",
+                    ]
+                  : [
+                      "rgba(255, 255, 255, 0.08)",
+                      "rgba(255, 255, 255, 0.05)",
+                      "rgba(255, 255, 255, 0.02)",
+                    ]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ flex: 1 }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 16,
+                }}
+              >
+          {/* Chat Avatar */}
+          <View
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: "rgba(79, 195, 247, 0.2)",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 12,
+              borderWidth: 2,
+              borderColor: "rgba(79, 195, 247, 0.3)",
+              position: "relative",
+            }}
+          >
+            {item.image ? (
+              <Image
+                source={{ uri: getFullImageUrl(item.image) }}
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                }}
+                contentFit="cover"
+              />
+            ) : (
+              <GradientIcon
+                icon={<MessageCircle size={28} color="#000" />}
+                style={{ width: 28, height: 28 }}
+              />
+            )}
+
+            {/* Unread badge */}
+            {unreadCount > 0 && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: -4,
+                  right: -4,
+                  backgroundColor: "#EF4444",
+                  borderRadius: 12,
+                  minWidth: 24,
+                  height: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingHorizontal: 6,
+                  borderWidth: 2,
+                  borderColor: colors.background,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 12,
+                    fontWeight: "700",
+                  }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Chat Info */}
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+              <Text
+                style={{
+                  fontSize: 17,
+                  fontWeight: unreadCount > 0 ? "700" : "600",
+                  color: colors.text,
+                  flex: 1,
+                }}
+                numberOfLines={1}
+              >
+                {item.name}
+              </Text>
+              {item.lastMessageAt && (
+                unreadCount > 0 ? (
+                  <GradientText
+                    style={{
+                      fontSize: 13,
+                      marginLeft: 8,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {formatTime(item.lastMessageAt)}
+                  </GradientText>
+                ) : (
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: "rgba(255, 255, 255, 0.5)",
+                      marginLeft: 8,
+                      fontWeight: "400",
+                    }}
+                  >
+                    {formatTime(item.lastMessageAt)}
+                  </Text>
+                )
+              )}
+            </View>
+
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Users size={14} color="rgba(255, 255, 255, 0.5)" />
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "rgba(255, 255, 255, 0.5)",
+                  marginLeft: 4,
+                  marginRight: 12,
+                }}
+              >
+                {item.memberCount} {item.memberCount === 1 ? "member" : "members"}
+              </Text>
+              {item.isCreator && (
+                <View
+                  style={{
+                    backgroundColor: "rgba(79, 195, 247, 0.15)",
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "rgba(79, 195, 247, 0.3)",
+                  }}
+                >
+                  <GradientText style={{ fontSize: 11, fontWeight: "600" }}>
+                    Creator
+                  </GradientText>
+                </View>
+              )}
+            </View>
+
+            {item.lastMessage && (
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: unreadCount > 0 ? "rgba(255, 255, 255, 0.8)" : "rgba(255, 255, 255, 0.6)",
+                  marginTop: 4,
+                  fontWeight: unreadCount > 0 ? "500" : "400",
+                }}
+                numberOfLines={1}
+              >
+                {item.lastMessage}
+              </Text>
+            )}
+          </View>
+
+          {/* Arrow */}
+          <ChevronRight size={20} color="rgba(255, 255, 255, 0.3)" style={{ marginLeft: 8 }} />
+              </View>
+            </LinearGradient>
+          </BlurView>
+        </View>
+      </Pressable>
+    );
+  };
 
   const renderSearchResult = ({ item }: { item: SearchMessageResult }) => {
     return (
@@ -592,22 +818,16 @@ const ChatListScreen = () => {
           opacity: pressed ? 0.7 : 1,
           marginHorizontal: 16,
           marginBottom: 12,
-          shadowColor: isDark ? colors.glassShadow : "rgba(0, 0, 0, 0.15)",
-          shadowOffset: { width: 0, height: isDark ? 4 : 2 },
-          shadowOpacity: isDark ? 0.2 : 0.12,
-          shadowRadius: isDark ? 8 : 10,
-          elevation: isDark ? 4 : 3,
         })}
       >
         <BlurView
-          intensity={Platform.OS === "ios" ? (isDark ? 20 : 60) : 40}
-          tint={isDark ? "dark" : "light"}
+          intensity={Platform.OS === "ios" ? 20 : 40}
+          tint={colors.blurTint}
           style={{
             borderRadius: 16,
             overflow: "hidden",
-            borderWidth: isDark ? 1 : 1.5,
-            borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)",
-            backgroundColor: isDark ? "transparent" : "rgba(255, 255, 255, 0.85)"
+            borderWidth: 1,
+            borderColor: "rgba(255, 255, 255, 0.1)",
           }}
         >
           <View style={{ padding: 16 }}>
@@ -615,15 +835,15 @@ const ChatListScreen = () => {
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}>
-                  <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "700" }}>
+                  <Text style={{ color: "#4FC3F7", fontSize: 14, fontWeight: "700" }}>
                     {item.message.user?.name || "Unknown"}
                   </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: "600", marginLeft: 6 }}>
+                  <Text style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12, fontWeight: "600", marginLeft: 6 }}>
                     in {item.chat.name}
                   </Text>
                 </View>
               </View>
-              <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 2 }}>
+              <Text style={{ color: "rgba(255, 255, 255, 0.4)", fontSize: 11, marginTop: 2 }}>
                 {formatTime(item.message.createdAt)}
               </Text>
             </View>
@@ -637,13 +857,10 @@ const ChatListScreen = () => {
       </Pressable>
     );
   };
-  
-  const backgroundGradientColors = isDark 
-    ? ["#000000", "#0A0A0F", "#050508", "#000000"]
-    : ["#F5F5F4", "#EDEDED", "#F0F0EF", "#F5F5F4"]; // Slightly warmer/darker for better card contrast
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Custom Refresh Control Overlay */}
       <CustomRefreshControl 
         refreshing={isRefreshing} 
         message="Refreshing chats" 
@@ -661,7 +878,12 @@ const ChatListScreen = () => {
         }}
       >
         <LinearGradient
-          colors={backgroundGradientColors}
+          colors={[
+            "#000000",
+            "#0A0A0F",
+            "#050508",
+            "#000000",
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ flex: 1 }}
@@ -669,10 +891,10 @@ const ChatListScreen = () => {
         {/* Subtle animated overlay */}
         <LinearGradient
           colors={[
-            isDark ? "rgba(79, 195, 247, 0.05)" : "rgba(0, 122, 255, 0.03)",
-            isDark ? "rgba(0, 122, 255, 0.03)" : "rgba(0, 122, 255, 0.02)",
+            "rgba(79, 195, 247, 0.05)",
+            "rgba(0, 122, 255, 0.03)",
             "transparent",
-            isDark ? "rgba(52, 199, 89, 0.03)" : "rgba(52, 199, 89, 0.02)",
+            "rgba(52, 199, 89, 0.03)",
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -698,31 +920,22 @@ const ChatListScreen = () => {
       >
           <BlurView
           intensity={80}
-          tint={isDark ? "dark" : "light"}
+          tint={colors.blurTint}
           style={{
             paddingTop: insets.top + 4,
             paddingBottom: 4,
             paddingHorizontal: 20,
-            backgroundColor: Platform.OS === "ios" 
-              ? (isDark ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.3)")
-              : (isDark ? "rgba(0, 0, 0, 0.85)" : "rgba(255, 255, 255, 0.85)"),
+            backgroundColor: Platform.OS === "ios" ? "rgba(0, 0, 0, 0.3)" : "rgba(0, 0, 0, 0.85)",
             borderBottomWidth: 0.5,
-            borderBottomColor: colors.glassBorder,
+            borderBottomColor: "rgba(255, 255, 255, 0.1)",
           }}
         >
           <LinearGradient
-            colors={isDark 
-              ? [
-                  "rgba(79, 195, 247, 0.15)",
-                  "rgba(0, 122, 255, 0.1)",
-                  "rgba(0, 0, 0, 0)",
-                ]
-              : [
-                  "rgba(0, 122, 255, 0.05)",
-                  "rgba(79, 195, 247, 0.05)",
-                  "rgba(255, 255, 255, 0)",
-                ]
-            }
+            colors={[
+              "rgba(79, 195, 247, 0.15)",
+              "rgba(0, 122, 255, 0.1)",
+              "rgba(0, 0, 0, 0)",
+            ]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -767,13 +980,13 @@ const ChatListScreen = () => {
           </View>
         ) : searchResults.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
-            <Text style={{ fontSize: 16, fontWeight: "500", color: colors.textSecondary, textAlign: "center" }}>
+            <Text style={{ fontSize: 16, fontWeight: "500", color: "rgba(255, 255, 255, 0.5)", textAlign: "center" }}>
               No messages found for "{searchQuery}"
             </Text>
             {searchMode === "semantic" && (
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: isDark ? "rgba(79, 195, 247, 0.1)" : "rgba(0, 122, 255, 0.1)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                  <Search size={14} color={colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13, color: colors.primary }}>
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: "rgba(79, 195, 247, 0.1)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                  <Search size={14} color="#4FC3F7" style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 13, color: "#4FC3F7" }}>
                     Try simpler keywords or switch to text mode
                   </Text>
                 </View>
@@ -810,6 +1023,40 @@ const ChatListScreen = () => {
           <Text style={{ fontSize: 20, fontWeight: "600", color: colors.text, marginBottom: 24, textAlign: "center" }}>
             No chats yet
           </Text>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }}
+            style={{ display: 'none' }} 
+          >
+            <View
+              style={{
+                borderRadius: 16,
+                overflow: "hidden",
+                shadowColor: "#4FC3F7",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 12,
+                elevation: 8,
+              }}
+            >
+              <LinearGradient
+                colors={["#4FC3F7", "#007AFF", "#34C759"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  paddingHorizontal: 32,
+                  paddingVertical: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 17, fontWeight: "700", color: "#000000" }}>
+                  Create a Chat
+                </Text>
+              </LinearGradient>
+            </View>
+          </Pressable>
         </View>
       ) : (
           <FlashList
@@ -819,6 +1066,7 @@ const ChatListScreen = () => {
             ]}
             keyExtractor={(item) => item.id}
             estimatedItemSize={100}
+            // HIGH-B: Performance optimization - drawDistance for smoother scrolling
             drawDistance={300}
             renderItem={({ item }) => (
               <ChatItem 
@@ -839,7 +1087,7 @@ const ChatListScreen = () => {
                 <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
                     <GradientIcon
-                      icon={<Pin size={16} color={colors.text} />}
+                      icon={<Pin size={16} color="#000" />}
                       style={{ width: 16, height: 16 }}
                     />
                     <GradientText
@@ -857,6 +1105,12 @@ const ChatListScreen = () => {
                 </View>
               ) : null
             }
+            ItemSeparatorComponent={() => null} // Separators are handled within renderItem logic or we can adjust data structure. But let's keep logic simple.
+            // FlashList doesn't support functional ItemSeparatorComponent with 'leadingItem' in the same way easily.
+            // We should handle section headers/separators in the data array or renderItem. 
+            // For now, to keep it simple and quick, I'll move the "All Chats" separator logic into the data source or a specialized cell.
+            // But wait, I can just insert a "separator" item in the data.
+            
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -883,7 +1137,7 @@ const ChatListScreen = () => {
         <Pressable
           style={{
             flex: 1,
-            backgroundColor: isDark ? "rgba(0, 0, 0, 0.8)" : "rgba(0, 0, 0, 0.4)",
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
             justifyContent: "center",
             alignItems: "center",
             paddingHorizontal: 24,
@@ -899,7 +1153,7 @@ const ChatListScreen = () => {
                 marginHorizontal: 16,
                 borderRadius: 24,
                 overflow: "hidden",
-                shadowColor: colors.glassShadow,
+                shadowColor: "#000",
                 shadowOffset: { width: 0, height: 12 },
                 shadowOpacity: 0.6,
                 shadowRadius: 32,
@@ -908,28 +1162,20 @@ const ChatListScreen = () => {
             >
               <BlurView
                 intensity={Platform.OS === "ios" ? 90 : 100}
-                tint={isDark ? "dark" : "light"}
+                tint={colors.blurTint}
                 style={{
                   borderRadius: 24,
                   overflow: "hidden",
                   borderWidth: 1,
-                  borderColor: colors.glassBorder,
-                  backgroundColor: isDark ? "rgba(30,30,40,0.8)" : "rgba(255,255,255,0.8)",
+                  borderColor: "rgba(255, 255, 255, 0.12)",
                 }}
               >
                 <LinearGradient
-                  colors={isDark 
-                    ? [
-                        "rgba(40, 40, 50, 0.98)",
-                        "rgba(30, 30, 40, 0.98)",
-                        "rgba(20, 20, 30, 0.98)",
-                      ]
-                    : [
-                        "rgba(255, 255, 255, 0.98)",
-                        "rgba(245, 245, 250, 0.98)",
-                        "rgba(240, 240, 245, 0.98)",
-                      ]
-                  }
+                  colors={[
+                    "rgba(40, 40, 50, 0.98)",
+                    "rgba(30, 30, 40, 0.98)",
+                    "rgba(20, 20, 30, 0.98)",
+                  ]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{ paddingBottom: 8 }}
@@ -941,7 +1187,7 @@ const ChatListScreen = () => {
                       paddingTop: 24,
                       paddingBottom: 20,
                       borderBottomWidth: 1,
-                      borderBottomColor: colors.border,
+                      borderBottomColor: "rgba(255, 255, 255, 0.06)",
                     }}
                   >
                     <Text
@@ -964,7 +1210,7 @@ const ChatListScreen = () => {
                     <Pressable
                       onPress={handlePinChat}
                       style={({ pressed }) => ({
-                        backgroundColor: pressed ? (isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)") : "transparent",
+                        backgroundColor: pressed ? "rgba(79, 195, 247, 0.15)" : "transparent",
                         marginHorizontal: 12,
                         borderRadius: 16,
                         marginVertical: 4,
@@ -983,14 +1229,14 @@ const ChatListScreen = () => {
                             width: 42,
                             height: 42,
                             borderRadius: 21,
-                            backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
+                            backgroundColor: "rgba(79, 195, 247, 0.15)",
                             alignItems: "center",
                             justifyContent: "center",
                             marginRight: 16,
                           }}
                         >
                           <GradientIcon
-                            icon={<Pin size={22} color={colors.text} strokeWidth={2.5} />}
+                            icon={<Pin size={22} color="#000" strokeWidth={2.5} />}
                             style={{ width: 22, height: 22 }}
                           />
                         </View>
@@ -1011,7 +1257,7 @@ const ChatListScreen = () => {
                     <Pressable
                       onPress={handleMuteChat}
                       style={({ pressed }) => ({
-                        backgroundColor: pressed ? (isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)") : "transparent",
+                        backgroundColor: pressed ? "rgba(79, 195, 247, 0.15)" : "transparent",
                         marginHorizontal: 12,
                         borderRadius: 16,
                         marginVertical: 4,
@@ -1030,14 +1276,14 @@ const ChatListScreen = () => {
                             width: 42,
                             height: 42,
                             borderRadius: 21,
-                            backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
+                            backgroundColor: "rgba(79, 195, 247, 0.15)",
                             alignItems: "center",
                             justifyContent: "center",
                             marginRight: 16,
                           }}
                         >
                           <GradientIcon
-                            icon={contextMenuChat?.isMuted ? <Bell size={22} color={colors.text} strokeWidth={2.5} /> : <BellOff size={22} color={colors.text} strokeWidth={2.5} />}
+                            icon={contextMenuChat?.isMuted ? <Bell size={22} color="#000" strokeWidth={2.5} /> : <BellOff size={22} color="#000" strokeWidth={2.5} />}
                             style={{ width: 22, height: 22 }}
                           />
                         </View>
@@ -1105,7 +1351,7 @@ const ChatListScreen = () => {
                   <View 
                     style={{ 
                       borderTopWidth: 1, 
-                      borderTopColor: colors.border,
+                      borderTopColor: "rgba(255, 255, 255, 0.06)",
                       marginTop: 12,
                       paddingTop: 12,
                       paddingBottom: 4,
@@ -1115,7 +1361,7 @@ const ChatListScreen = () => {
                     <Pressable
                       onPress={() => setShowContextMenu(false)}
                       style={({ pressed }) => ({
-                        backgroundColor: pressed ? (isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)") : "transparent",
+                        backgroundColor: pressed ? "rgba(79, 195, 247, 0.15)" : "transparent",
                         paddingVertical: 16,
                         alignItems: "center",
                         justifyContent: "center",

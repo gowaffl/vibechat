@@ -13,7 +13,6 @@ import {
   Platform,
   Keyboard,
   PanResponder,
-  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,6 +20,7 @@ import * as Haptics from "expo-haptics";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
+import { useTheme } from "@/contexts/ThemeContext";
 
 import type { Event } from "@shared/contracts";
 
@@ -56,7 +56,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
   isCreating = false,
   initialEvent,
 }) => {
-  const colorScheme = useColorScheme();
+  const { colors, isDark } = useTheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
   const dragY = useRef(new Animated.Value(0)).current;
@@ -376,7 +376,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
           opacity: fadeAnim,
         }}
       >
-        <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={40} tint={colors.blurTint} style={{ flex: 1 }}>
           {/* Backdrop */}
           <Pressable style={{ flex: 1 }} onPress={handleClose}>
             <View style={{ flex: 1 }} />
@@ -414,7 +414,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                     style={{
                       width: 40,
                       height: 5,
-                      backgroundColor: "rgba(255, 255, 255, 0.25)",
+                      backgroundColor: isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 0, 0, 0.2)",
                       borderRadius: 2.5,
                     }}
                   />
@@ -427,7 +427,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                     overflow: "hidden",
                   }}
                 >
-                <BlurView intensity={80} tint="dark">
+                <BlurView intensity={80} tint={colors.blurTint}>
                   <LinearGradient
                     colors={[
                       "rgba(10, 149, 255, 0.15)",
@@ -445,7 +445,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           width: 40,
                           height: 5,
                           borderRadius: 2.5,
-                          backgroundColor: "rgba(255, 255, 255, 0.3)",
+                          backgroundColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.15)",
                         }}
                       />
                     </View>
@@ -465,7 +465,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           style={{
                             fontSize: 24,
                             fontWeight: "700",
-                            color: "#FFFFFF",
+                            color: colors.text,
                             marginBottom: 4,
                           }}
                         >
@@ -474,7 +474,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                         <Text
                           style={{
                             fontSize: 14,
-                            color: "rgba(255, 255, 255, 0.6)",
+                            color: colors.textSecondary,
                           }}
                         >
                           {initialEvent ? "Update event details" : "Plan something with your group"}
@@ -518,14 +518,14 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           value={title}
                           onChangeText={setTitle}
                           placeholder="e.g., Movie Night, Dinner Plans..."
-                          placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance="dark"
+                          placeholderTextColor={colors.inputPlaceholder}
+                          keyboardAppearance={isDark ? "dark" : "light"}
                           style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                            backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                             borderRadius: 12,
                             padding: 14,
                             fontSize: 16,
-                            color: "#FFFFFF",
+                            color: colors.text,
                             fontWeight: "600",
                           }}
                           maxLength={100}
@@ -542,16 +542,16 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           value={description}
                           onChangeText={setDescription}
                           placeholder="Add details about the event..."
-                          placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance="dark"
+                          placeholderTextColor={colors.inputPlaceholder}
+                          keyboardAppearance={isDark ? "dark" : "light"}
                           multiline
                           numberOfLines={3}
                           style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                            backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                             borderRadius: 12,
                             padding: 14,
                             fontSize: 15,
-                            color: "#FFFFFF",
+                            color: colors.text,
                             minHeight: 80,
                             textAlignVertical: "top",
                           }}
@@ -664,7 +664,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                 >
                                   <Text style={{ color: "#FF3B30", fontSize: 16 }}>Clear</Text>
                                 </Pressable>
-                                <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "600" }}>
+                                <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
                                   Select Date & Time
                                 </Text>
                                 <Pressable onPress={() => setShowDatePicker(false)}>
@@ -740,7 +740,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                   style={{
                                     fontSize: 15,
                                     fontWeight: "700",
-                                    color: "#FFFFFF",
+                                    color: colors.text,
                                     marginBottom: 2,
                                   }}
                                 >
@@ -749,7 +749,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                 <Text
                                   style={{
                                     fontSize: 12,
-                                    color: "rgba(255, 255, 255, 0.6)",
+                                    color: colors.textSecondary,
                                   }}
                                 >
                                   {eventType.example}
@@ -805,7 +805,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                 style={{
                                   fontSize: 15,
                                   fontWeight: "600",
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                   marginBottom: 4,
                                 }}
                               >
@@ -814,7 +814,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                               <Text
                                 style={{
                                   fontSize: 13,
-                                  color: "rgba(255, 255, 255, 0.6)",
+                                  color: colors.textSecondary,
                                   lineHeight: 18,
                                 }}
                               >
@@ -853,14 +853,14 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                         ? "e.g., Watch a movie"
                                         : "Option " + (index + 1)
                                     }
-                                    placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                    keyboardAppearance="dark"
+                                    placeholderTextColor={colors.inputPlaceholder}
+                                    keyboardAppearance={isDark ? "dark" : "light"}
                                     style={{
-                                      backgroundColor: "rgba(255, 255, 255, 0.08)",
+                                      backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                                       borderRadius: 10,
                                       padding: 12,
                                       fontSize: 15,
-                                      color: "#FFFFFF",
+                                      color: colors.text,
                                     }}
                                   />
                                 </View>

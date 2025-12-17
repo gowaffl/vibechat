@@ -3,6 +3,7 @@ import { View, Text, Pressable } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { Event } from "@shared/contracts";
 
 interface EventNotificationCardProps {
@@ -14,6 +15,8 @@ const EventNotificationCard: React.FC<EventNotificationCardProps> = ({
   event,
   onPress,
 }) => {
+  const { colors, isDark } = useTheme();
+  
   return (
     <Pressable
       onPress={() => {
@@ -33,7 +36,7 @@ const EventNotificationCard: React.FC<EventNotificationCardProps> = ({
         shadowRadius: 8,
       })}
     >
-      <BlurView intensity={25} tint="dark">
+      <BlurView intensity={25} tint={colors.blurTint}>
         {/* Subtle blue background tint */}
         <View
           style={{

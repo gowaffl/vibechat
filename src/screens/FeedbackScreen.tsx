@@ -10,6 +10,7 @@ import { useFeatureRequests, useChangelog, FeatureRequest } from "@/hooks/useFee
 import FeatureRequestCard from "@/components/Feedback/FeatureRequestCard";
 import ChangelogCard from "@/components/Feedback/ChangelogCard";
 import CreateRequestModal from "@/components/Feedback/CreateRequestModal";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type Tab = 'requests' | 'roadmap' | 'changelog';
 
@@ -18,6 +19,7 @@ const FeedbackScreen = () => {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState<Tab>('requests');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { colors, isDark } = useTheme();
 
   // Data Fetching
   const { data: requests, isLoading: isLoadingRequests } = useFeatureRequests(
@@ -30,7 +32,7 @@ const FeedbackScreen = () => {
   const renderContent = () => {
     if (activeTab === 'changelog') {
       if (isLoadingChangelog) {
-        return <ActivityIndicator color="#007AFF" style={styles.loader} />;
+        return <ActivityIndicator color={colors.primary} style={styles.loader} />;
       }
       
       return (
@@ -44,7 +46,7 @@ const FeedbackScreen = () => {
           exiting={FadeOut}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No changelog entries yet.</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No changelog entries yet.</Text>
             </View>
           }
         />
@@ -53,7 +55,7 @@ const FeedbackScreen = () => {
 
     // Requests & Roadmap share similar structure (list of requests)
     if (isLoadingRequests) {
-      return <ActivityIndicator color="#007AFF" style={styles.loader} />;
+      return <ActivityIndicator color={colors.primary} style={styles.loader} />;
     }
 
     return (
@@ -72,7 +74,7 @@ const FeedbackScreen = () => {
         exiting={FadeOut}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               {activeTab === 'roadmap' 
                 ? "Nothing on the roadmap yet." 
                 : "No requests yet. Be the first!"}
@@ -90,7 +92,7 @@ const FeedbackScreen = () => {
     >
       {activeTab === id && (
         <LinearGradient
-          colors={["rgba(79, 195, 247, 0.15)", "rgba(0, 168, 232, 0.05)"]}
+          colors={isDark ? ["rgba(79, 195, 247, 0.15)", "rgba(0, 168, 232, 0.05)"] : ["rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.05)"]}
           style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -99,11 +101,12 @@ const FeedbackScreen = () => {
       <View style={styles.tabContent}>
         <Icon 
           size={16} 
-          color={activeTab === id ? "#4FC3F7" : "rgba(255,255,255,0.5)"} 
+          color={activeTab === id ? colors.primary : colors.textSecondary} 
           style={styles.tabIcon}
         />
         <Text style={[
           styles.tabLabel, 
+          { color: activeTab === id ? colors.primary : colors.textSecondary },
           activeTab === id && styles.activeTabLabel
         ]}>
           {label}
@@ -112,31 +115,35 @@ const FeedbackScreen = () => {
     </TouchableOpacity>
   );
 
+  const backgroundGradientColors = isDark 
+    ? ["#000000", "#0A0A0F", "#050508", "#000000"]
+    : [colors.background, colors.backgroundSecondary, colors.surfaceSecondary, colors.background];
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.backgroundContainer}>
         <LinearGradient
-          colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+          colors={backgroundGradientColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.gradient}
         />
       </View>
 
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: insets.top, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)', borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
           <Pressable 
             onPress={() => navigation.goBack()}
-            style={styles.backButton}
+            style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
           >
-            <ChevronLeft size={24} color="#FFF" />
+            <ChevronLeft size={24} color={colors.text} />
           </Pressable>
-          <Text style={styles.title}>Feedback & Roadmap</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Feedback & Roadmap</Text>
           <View style={styles.placeholder} />
         </View>
 
         <View style={styles.tabsContainer}>
-          <View style={styles.tabsBackground}>
+          <View style={[styles.tabsBackground, { backgroundColor: isDark ? 'rgba(20, 20, 25, 0.6)' : 'rgba(255, 255, 255, 0.6)', borderColor: colors.border }]}>
             <TabButton id="requests" label="Requests" icon={List} />
             <TabButton id="roadmap" label="Roadmap" icon={Map} />
             <TabButton id="changelog" label="Changelog" icon={History} />
@@ -150,11 +157,11 @@ const FeedbackScreen = () => {
 
       {activeTab === 'requests' && (
         <Pressable 
-          style={[styles.fab, { bottom: insets.bottom + 20 }]}
+          style={[styles.fab, { bottom: insets.bottom + 20, shadowColor: colors.glassShadow }]}
           onPress={() => setIsModalOpen(true)}
         >
           <LinearGradient
-            colors={["#007AFF", "#00C6FF"]}
+            colors={isDark ? ["#007AFF", "#00C6FF"] : [colors.primary, colors.secondary || colors.primary]}
             style={styles.fabGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -176,7 +183,6 @@ const FeedbackScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
   },
   backgroundContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -186,9 +192,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingBottom: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   headerTop: {
     flexDirection: 'row',
@@ -202,14 +206,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFF',
   },
   placeholder: {
     width: 40,
@@ -219,11 +221,9 @@ const styles = StyleSheet.create({
   },
   tabsBackground: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(20, 20, 25, 0.6)',
     borderRadius: 16,
     padding: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   tabWrapper: {
     flex: 1,
@@ -245,10 +245,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
   },
   activeTabLabel: {
-    color: '#4FC3F7',
     textShadowColor: 'rgba(79, 195, 247, 0.3)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
@@ -269,13 +267,11 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   emptyText: {
-    color: 'rgba(255,255,255,0.4)',
     fontSize: 16,
   },
   fab: {
     position: 'absolute',
     right: 20,
-    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 4,

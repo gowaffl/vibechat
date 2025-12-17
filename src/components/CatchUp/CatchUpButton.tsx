@@ -3,7 +3,8 @@ import { Pressable, Text, Animated, View, PanResponder } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { variantColorMap } from "../LiquidGlass/variants";
+import { getVariantColors } from "../LiquidGlass/variants";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface CatchUpButtonProps {
   unreadCount: number;
@@ -18,6 +19,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
   onDismiss,
   isVisible = true,
 }) => {
+  const { colors, isDark } = useTheme();
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const translateX = useRef(new Animated.Value(0)).current;
@@ -110,7 +112,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
     return null;
   }
 
-  const catchupVariant = variantColorMap.catchup;
+  const catchupVariant = getVariantColors("catchup", isDark);
 
   return (
     <Animated.View
@@ -145,7 +147,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
             elevation: 6,
           }}
         >
-          <BlurView intensity={70} tint="dark">
+          <BlurView intensity={70} tint={colors.blurTint}>
             <LinearGradient
               colors={catchupVariant.gradientColors}
               start={{ x: 0, y: 0 }}
@@ -167,7 +169,7 @@ const CatchUpButton: React.FC<CatchUpButtonProps> = ({
                   style={{
                     fontSize: 14,
                     fontWeight: "700",
-                    color: "#FFFFFF",
+                    color: colors.text,
                     letterSpacing: -0.3,
                   }}
                 >

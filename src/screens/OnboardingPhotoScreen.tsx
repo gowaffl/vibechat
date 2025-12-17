@@ -26,6 +26,7 @@ import type { RootStackScreenProps } from "@/navigation/types";
 import { useUser } from "@/contexts/UserContext";
 import { api, BACKEND_URL } from "@/lib/api";
 import type { UploadImageResponse, JoinChatViaInviteResponse, GetInviteInfoResponse } from "@/shared/contracts";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { width, height } = Dimensions.get("window");
 
@@ -34,6 +35,7 @@ const OnboardingPhotoScreen = () => {
   const route = useRoute<RootStackScreenProps<"OnboardingPhoto">["route"]>();
   const { user, updateUser } = useUser();
   const { name, bio } = route.params;
+  const { colors, isDark } = useTheme();
 
   const [image, setImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -254,21 +256,36 @@ const OnboardingPhotoScreen = () => {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Animated Gradient Background */}
       <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
         <LinearGradient
-          colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+          colors={isDark ? [
+            "#000000",
+            "#0A0A0F",
+            "#050508",
+            "#000000",
+          ] : [
+            colors.background,
+            colors.backgroundSecondary,
+            colors.surfaceSecondary,
+            colors.background
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ flex: 1 }}
         />
         <LinearGradient
-          colors={[
+          colors={isDark ? [
             "rgba(79, 195, 247, 0.05)",
             "rgba(0, 122, 255, 0.03)",
             "transparent",
             "rgba(52, 199, 89, 0.03)",
+          ] : [
+            "rgba(79, 195, 247, 0.08)",
+            "rgba(0, 122, 255, 0.06)",
+            "transparent",
+            "rgba(52, 199, 89, 0.06)",
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -297,7 +314,7 @@ const OnboardingPhotoScreen = () => {
                position: "absolute",
                width: 180,
                height: 180,
-               backgroundColor: "rgba(59, 130, 246, 0.15)", // Blue glow
+               backgroundColor: isDark ? "rgba(59, 130, 246, 0.15)" : "rgba(59, 130, 246, 0.1)", // Blue glow
                borderRadius: 90,
                top: "15%",
              }} />
@@ -324,10 +341,10 @@ const OnboardingPhotoScreen = () => {
       >
         {/* Header */}
         <View className="items-center mb-8">
-              <Text style={{ fontSize: 28, fontWeight: "700", color: "#FFFFFF", marginBottom: 12, textAlign: "center" }}>
+              <Text style={{ fontSize: 28, fontWeight: "700", color: colors.text, marginBottom: 12, textAlign: "center" }}>
                 One last thing...
               </Text>
-              <Text style={{ fontSize: 16, color: "rgba(255, 255, 255, 0.6)", textAlign: "center", paddingHorizontal: 16 }}>
+              <Text style={{ fontSize: 16, color: colors.textSecondary, textAlign: "center", paddingHorizontal: 16 }}>
                 Add a profile photo so your friends can recognize you.
           </Text>
         </View>
@@ -339,12 +356,12 @@ const OnboardingPhotoScreen = () => {
                     width: 120, 
                     height: 120, 
                     borderRadius: 60, 
-                    backgroundColor: "rgba(255,255,255,0.1)", 
+                    backgroundColor: colors.surface, 
                     alignItems: "center", 
                     justifyContent: "center", 
                     overflow: "hidden",
                     borderWidth: 2,
-                    borderColor: image ? "#3B82F6" : "rgba(255,255,255,0.2)"
+                    borderColor: image ? colors.primary : colors.border
                 }}
               >
             {image ? (
@@ -354,7 +371,7 @@ const OnboardingPhotoScreen = () => {
                     contentFit="cover"
               />
             ) : (
-                  <ImageIcon size={48} color="rgba(255,255,255,0.3)" />
+                  <ImageIcon size={48} color={colors.textTertiary} />
             )}
           </View>
         </View>
@@ -367,7 +384,7 @@ const OnboardingPhotoScreen = () => {
             style={{ overflow: 'hidden', borderRadius: 16 }}
           >
             <LinearGradient
-                  colors={["rgba(59, 130, 246, 0.2)", "rgba(59, 130, 246, 0.1)"]}
+                  colors={isDark ? ["rgba(59, 130, 246, 0.2)", "rgba(59, 130, 246, 0.1)"] : [colors.primary + "20", colors.primary + "10"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
@@ -376,11 +393,11 @@ const OnboardingPhotoScreen = () => {
                 alignItems: "center",
                 justifyContent: "center",
                     borderWidth: 1,
-                    borderColor: "rgba(59, 130, 246, 0.5)"
+                    borderColor: isDark ? "rgba(59, 130, 246, 0.5)" : colors.primary
               }}
             >
-                  <Camera size={20} color="#3B82F6" />
-              <Text className="text-white text-base font-semibold ml-2">
+                  <Camera size={20} color={colors.primary} />
+              <Text style={{ color: colors.text }} className="text-base font-semibold ml-2">
                 Take Photo
               </Text>
             </LinearGradient>
@@ -392,7 +409,7 @@ const OnboardingPhotoScreen = () => {
             style={{ overflow: 'hidden', borderRadius: 16 }}
           >
             <LinearGradient
-                  colors={["rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.05)"]}
+                  colors={isDark ? ["rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.05)"] : [colors.glassBackground, colors.surface]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
@@ -401,11 +418,11 @@ const OnboardingPhotoScreen = () => {
                 alignItems: "center",
                 justifyContent: "center",
                     borderWidth: 1,
-                    borderColor: "rgba(255, 255, 255, 0.2)"
+                    borderColor: colors.border
               }}
             >
-              <ImageIcon size={20} color="#FFFFFF" />
-              <Text className="text-white text-base font-semibold ml-2">
+              <ImageIcon size={20} color={colors.text} />
+              <Text style={{ color: colors.text }} className="text-base font-semibold ml-2">
                 Choose from Library
               </Text>
             </LinearGradient>
@@ -445,7 +462,7 @@ const OnboardingPhotoScreen = () => {
             disabled={isSubmitting || isUploading}
             className="py-4"
           >
-                <Text style={{ color: "rgba(255, 255, 255, 0.5)", textAlign: "center", fontSize: 16, fontWeight: "500" }}>
+                <Text style={{ color: colors.textSecondary, textAlign: "center", fontSize: 16, fontWeight: "500" }}>
                   {image ? "Cancel" : "Skip for Now"}
             </Text>
           </Pressable>

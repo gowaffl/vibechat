@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface LiquidGlassInputProps extends TextInputProps {
   label?: string;
@@ -39,6 +40,7 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const { colors, isDark } = useTheme();
 
   const handleFocus = (e: any) => {
     setIsFocused(true);
@@ -80,12 +82,12 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
     default: {
       borderColor: borderAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: ["rgba(255, 255, 255, 0.2)", "rgba(0, 122, 255, 0.6)"],
+        outputRange: [colors.glassBorder, isDark ? "rgba(0, 122, 255, 0.6)" : "rgba(0, 122, 255, 0.5)"],
       }),
       shadowColor: "rgba(0, 122, 255, 0.5)",
       gradientColors: [
-        "rgba(255, 255, 255, 0.08)",
-        "rgba(255, 255, 255, 0.05)",
+        colors.glassBackground,
+        colors.glassBackgroundSecondary,
         "rgba(255, 255, 255, 0.03)",
       ] as const,
     },
@@ -125,7 +127,7 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
             {
               fontSize: 14,
               fontWeight: "600",
-              color: "rgba(255, 255, 255, 0.8)",
+              color: colors.textSecondary,
               marginBottom: 8,
             },
             labelStyle,
@@ -157,7 +159,7 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
           elevation: 4,
         }}
       >
-        <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill}>
+        <BlurView intensity={isDark ? 60 : 40} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill}>
           <LinearGradient
             colors={currentVariant.gradientColors}
             start={{ x: 0, y: 0 }}
@@ -182,17 +184,17 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
             {...textInputProps}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            keyboardAppearance="dark"
+            keyboardAppearance={isDark ? "dark" : "light"}
             style={[
               {
                 flex: 1,
                 fontSize: 16,
-                color: "#FFFFFF",
+                color: colors.text,
                 padding: 0,
               },
               textInputProps.style,
             ]}
-            placeholderTextColor="rgba(255, 255, 255, 0.4)"
+            placeholderTextColor={colors.inputPlaceholder}
           />
 
           {icon && iconPosition === "right" && <View style={{ marginLeft: 12 }}>{icon}</View>}
@@ -204,7 +206,7 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
           style={[
             {
               fontSize: 12,
-              color: "#FF3B30",
+              color: colors.error,
               marginTop: 6,
               marginLeft: 4,
             },
@@ -219,4 +221,3 @@ const LiquidGlassInput: React.FC<LiquidGlassInputProps> = ({
 };
 
 export default LiquidGlassInput;
-

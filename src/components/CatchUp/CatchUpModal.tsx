@@ -17,6 +17,7 @@ import { Zap, FileText, Sparkles, Check } from "lucide-react-native";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { ConversationSummary, User } from "@shared/contracts";
 
 interface CatchUpModalProps {
@@ -46,6 +47,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
   onMarkPreferencePromptSeen,
   sinceMessageId,
 }) => {
+  const { colors, isDark } = useTheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [pulseAnim] = useState(new Animated.Value(1));
@@ -271,7 +273,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
           opacity: fadeAnim,
         }}
       >
-        <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={40} tint={colors.blurTint} style={{ flex: 1 }}>
           {/* Backdrop - dismisses modal on tap */}
           <Pressable
             style={{ flex: 1 }}
@@ -308,7 +310,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                   style={{
                     width: 40,
                     height: 5,
-                    backgroundColor: "rgba(255, 255, 255, 0.25)",
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 0, 0, 0.2)",
                     borderRadius: 2.5,
                   }}
                 />
@@ -321,7 +323,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                   overflow: "hidden",
                 }}
               >
-                <BlurView intensity={80} tint="dark">
+                <BlurView intensity={80} tint={colors.blurTint}>
                   <LinearGradient
                     colors={[
                       "rgba(255, 144, 82, 0.15)",
@@ -339,7 +341,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           width: 40,
                           height: 5,
                           borderRadius: 2.5,
-                          backgroundColor: "rgba(255, 255, 255, 0.3)",
+                          backgroundColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.15)",
                         }}
                       />
                     </View>
@@ -373,7 +375,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                             style={{
                               fontSize: 24,
                               fontWeight: "700",
-                              color: "#FFFFFF",
+                              color: colors.text,
                             }}
                           >
                             {getSummaryTypeLabel(summary?.summaryType || "concise")}
@@ -382,7 +384,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                         <Text
                           style={{
                             fontSize: 14,
-                            color: "rgba(255, 255, 255, 0.6)",
+                            color: colors.textSecondary,
                           }}
                         >
                           Here&apos;s what you missed
@@ -426,7 +428,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                             style={{
                               fontSize: 20,
                               fontWeight: "700",
-                              color: "#FFFFFF",
+                              color: colors.text,
                               marginBottom: 8,
                             }}
                           >
@@ -435,7 +437,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           <Text
                             style={{
                               fontSize: 15,
-                              color: "rgba(255, 255, 255, 0.7)",
+                              color: colors.textSecondary,
                               textAlign: "center",
                               lineHeight: 22,
                             }}
@@ -490,7 +492,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                                       flex: 1,
                                       fontSize: 14,
                                       lineHeight: 20,
-                                      color: "rgba(255, 255, 255, 0.9)",
+                                      color: colors.text,
                                     }}
                                   >
                                     {point}
@@ -531,7 +533,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                                       style={{
                                         fontSize: 13,
                                         fontWeight: "600",
-                                        color: "rgba(255, 255, 255, 0.8)",
+                                        color: colors.text,
                                         flex: 1,
                                       }}
                                     >
@@ -551,7 +553,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                                     style={{
                                       fontSize: 14,
                                       lineHeight: 19,
-                                      color: "rgba(255, 255, 255, 0.9)",
+                                      color: colors.text,
                                       marginBottom: 6,
                                     }}
                                     numberOfLines={2}
@@ -651,7 +653,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                   overflow: "hidden",
                 }}
               >
-                <BlurView intensity={90} tint="dark">
+                <BlurView intensity={90} tint={colors.blurTint}>
                   <LinearGradient
                     colors={[
                       "rgba(255, 144, 82, 0.2)",
@@ -669,7 +671,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                       style={{
                         fontSize: 18,
                         fontWeight: "700",
-                        color: "#FFFFFF",
+                        color: colors.text,
                         textAlign: "center",
                         marginBottom: 8,
                       }}
@@ -679,7 +681,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                     <Text
                       style={{
                         fontSize: 14,
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: colors.textSecondary,
                         textAlign: "center",
                         marginBottom: 24,
                         lineHeight: 20,
@@ -706,7 +708,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           style={{
                             fontSize: 15,
                             fontWeight: "600",
-                            color: "rgba(255, 255, 255, 0.7)",
+                            color: colors.textSecondary,
                           }}
                         >
                           Not Now
@@ -729,7 +731,7 @@ const CatchUpModal: React.FC<CatchUpModalProps> = ({
                           style={{
                             fontSize: 15,
                             fontWeight: "600",
-                            color: "#FFFFFF",
+                            color: colors.text,
                           }}
                         >
                           Yes, Save It

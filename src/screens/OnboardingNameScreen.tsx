@@ -19,11 +19,13 @@ import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import type { RootStackScreenProps } from "@/navigation/types";
 import { OnboardingProgress } from "@/components/OnboardingProgress";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const { width, height } = Dimensions.get("window");
 
 const OnboardingNameScreen = () => {
   const navigation = useNavigation<RootStackScreenProps<"OnboardingName">["navigation"]>();
+  const { colors, isDark } = useTheme();
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -105,21 +107,21 @@ const OnboardingNameScreen = () => {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Animated Gradient Background */}
       <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
         <LinearGradient
-          colors={["#000000", "#0A0A0F", "#050508", "#000000"]}
+          colors={isDark ? ["#000000", "#0A0A0F", "#050508", "#000000"] : [colors.gradientStart, colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ flex: 1 }}
         />
         <LinearGradient
           colors={[
-            "rgba(79, 195, 247, 0.05)",
-            "rgba(0, 122, 255, 0.03)",
+            isDark ? "rgba(79, 195, 247, 0.05)" : "rgba(0, 122, 255, 0.05)",
+            isDark ? "rgba(0, 122, 255, 0.03)" : "rgba(0, 122, 255, 0.02)",
             "transparent",
-            "rgba(52, 199, 89, 0.03)",
+            isDark ? "rgba(52, 199, 89, 0.03)" : "rgba(52, 199, 89, 0.02)",
           ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -191,10 +193,10 @@ const OnboardingNameScreen = () => {
             }}
           >
                         <View style={{ alignItems: "center", marginBottom: 32 }}>
-                          <Text style={{ fontSize: 28, fontWeight: "700", color: "#FFFFFF", marginBottom: 12, textAlign: "center" }}>
+                          <Text style={{ fontSize: 28, fontWeight: "700", color: colors.text, marginBottom: 12, textAlign: "center" }}>
                             What should we call you?
               </Text>
-                          <Text style={{ fontSize: 16, color: "rgba(255, 255, 255, 0.6)", textAlign: "center", paddingHorizontal: 16 }}>
+                          <Text style={{ fontSize: 16, color: colors.textSecondary, textAlign: "center", paddingHorizontal: 16 }}>
                             This is how you'll appear to your friends. You can always change it later.
               </Text>
             </View>
@@ -202,18 +204,18 @@ const OnboardingNameScreen = () => {
             {/* Name Input */}
                         <View style={{ marginBottom: 20 }}>
               <View style={{ borderRadius: 16, overflow: "hidden" }}>
-                <BlurView intensity={Platform.OS === "ios" ? 40 : 80} tint="dark" style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.2)" }}>
-                  <LinearGradient colors={["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.05)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <BlurView intensity={isDark ? 40 : 80} tint={isDark ? "dark" : "light"} style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.glassBorder }}>
+                  <LinearGradient colors={isDark ? ["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.05)"] : ["rgba(255, 255, 255, 0.6)", "rgba(255, 255, 255, 0.4)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <TextInput
                       value={name}
                       onChangeText={setName}
                                   placeholder="Your Name"
-                      placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                  style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 18, color: "#FFFFFF", fontWeight: "500" }}
+                      placeholderTextColor={colors.inputPlaceholder}
+                                  style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 18, color: colors.text, fontWeight: "500" }}
                       autoCapitalize="words"
                       maxLength={50}
                       returnKeyType="next"
-                      keyboardAppearance="dark"
+                      keyboardAppearance={isDark ? "dark" : "light"}
                     />
                   </LinearGradient>
                 </BlurView>
@@ -223,19 +225,19 @@ const OnboardingNameScreen = () => {
             {/* Bio Input */}
             <View style={{ marginBottom: 32 }}>
               <View style={{ borderRadius: 16, overflow: "hidden" }}>
-                <BlurView intensity={Platform.OS === "ios" ? 40 : 80} tint="dark" style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.2)" }}>
-                  <LinearGradient colors={["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.05)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <BlurView intensity={isDark ? 40 : 80} tint={isDark ? "dark" : "light"} style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.glassBorder }}>
+                  <LinearGradient colors={isDark ? ["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.05)"] : ["rgba(255, 255, 255, 0.6)", "rgba(255, 255, 255, 0.4)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <TextInput
                       value={bio}
                       onChangeText={setBio}
                                   placeholder="Short bio (optional)"
-                      placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                  style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 16, color: "#FFFFFF", minHeight: 80, textAlignVertical: "top" }}
+                      placeholderTextColor={colors.inputPlaceholder}
+                                  style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 16, color: colors.text, minHeight: 80, textAlignVertical: "top" }}
                       multiline
                                   numberOfLines={3}
                       maxLength={200}
                       returnKeyType="done"
-                      keyboardAppearance="dark"
+                      keyboardAppearance={isDark ? "dark" : "light"}
                     />
                   </LinearGradient>
                 </BlurView>

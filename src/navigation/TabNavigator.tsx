@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Platform } from "react-native";
+import { View, Platform, StyleSheet } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
 import type { TabParamList } from "@/navigation/types";
 import ChatListScreen from "@/screens/ChatListScreen";
@@ -9,14 +9,17 @@ import CommunityScreen from "@/screens/CommunityScreen";
 import { CustomTabBar } from "@/components/CustomTabBar";
 import { forFadeTransition, transitionSpec } from "@/navigation/TransitionConfig";
 import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const TabStack = createStackNavigator<TabParamList>();
 
 export default function TabNavigator() {
   const [activeRouteName, setActiveRouteName] = useState("Chats");
+  const { colors, isDark } = useTheme();
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <TabStack.Navigator
         initialRouteName="Chats"
         screenOptions={({ route }) => ({
@@ -45,14 +48,33 @@ export default function TabNavigator() {
             headerTitle: "Profile",
             headerTransparent: true,
             headerBackground: () => (
-              <LinearGradient
-                colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={{ flex: 1 }}
-              />
+              <BlurView
+                intensity={80}
+                tint={isDark ? "dark" : "light"}
+                style={{
+                  flex: 1,
+                  borderBottomWidth: 0.5,
+                  borderBottomColor: colors.glassBorder,
+                }}
+              >
+                 <View style={{ 
+                    ...StyleSheet.absoluteFillObject, 
+                    backgroundColor: Platform.OS === "ios" 
+                      ? (isDark ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.3)")
+                      : (isDark ? "rgba(0, 0, 0, 0.85)" : "rgba(255, 255, 255, 0.85)")
+                 }} />
+                 <LinearGradient
+                    colors={isDark 
+                      ? ["rgba(79, 195, 247, 0.15)", "rgba(0, 122, 255, 0.1)", "rgba(0, 0, 0, 0)"]
+                      : ["rgba(0, 122, 255, 0.05)", "rgba(79, 195, 247, 0.05)", "rgba(255, 255, 255, 0)"]
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ flex: 1, opacity: 0.5 }}
+                 />
+              </BlurView>
             ),
-            headerTintColor: "#FFFFFF",
+            headerTintColor: colors.text,
           }}
         />
         <TabStack.Screen name="Community" component={CommunityScreen} />

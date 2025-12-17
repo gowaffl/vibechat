@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ViewStyle, TextStyle, Pressable } from "react-n
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { LiquidGlassVariant, variantColorMap } from "./variants";
+import { LiquidGlassVariant, getVariantColors } from "./variants";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface LiquidGlassCardProps {
   children: React.ReactNode;
@@ -24,17 +25,20 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
   subtitle,
   icon,
   onPress,
-  intensity = 70,
+  intensity,
   style,
   titleStyle,
   subtitleStyle,
   variant = "default",
 }) => {
-  const currentVariant = variantColorMap[variant];
+  const { colors, isDark } = useTheme();
+  const currentVariant = getVariantColors(variant, isDark);
+  
+  const finalIntensity = intensity ?? (isDark ? 70 : 60);
 
   const cardContent = (
     <>
-      <BlurView intensity={intensity} tint="dark" style={StyleSheet.absoluteFill}>
+      <BlurView intensity={finalIntensity} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill}>
         <LinearGradient
           colors={currentVariant.gradientColors}
           start={{ x: 0, y: 0 }}
@@ -54,7 +58,7 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
                   {
                     fontSize: 18,
                     fontWeight: "700",
-                    color: "#FFFFFF",
+                    color: currentVariant.textColor,
                     marginBottom: subtitle ? 4 : 0,
                   },
                   titleStyle,
@@ -68,7 +72,7 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
                 style={[
                   {
                     fontSize: 14,
-                    color: "rgba(255, 255, 255, 0.7)",
+                    color: isDark ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.6)",
                   },
                   subtitleStyle,
                 ]}
@@ -136,4 +140,3 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
 };
 
 export default LiquidGlassCard;
-

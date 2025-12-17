@@ -12,13 +12,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  useColorScheme,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { ThreadFilterRules, Thread } from "@shared/contracts";
 
 interface CreateThreadModalProps {
@@ -43,7 +43,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
   isCreating = false,
   editingThread = null,
 }) => {
-  const colorScheme = useColorScheme();
+  const { colors, isDark } = useTheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [showModal, setShowModal] = useState(visible);
@@ -166,7 +166,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
           opacity: fadeAnim,
         }}
       >
-        <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+        <BlurView intensity={40} tint={colors.blurTint} style={{ flex: 1 }}>
           {/* Backdrop */}
           <Pressable style={{ flex: 1 }} onPress={handleClose}>
             <View style={{ flex: 1 }} />
@@ -195,12 +195,16 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                     overflow: "hidden",
                   }}
                 >
-                <BlurView intensity={80} tint="dark">
+                <BlurView intensity={80} tint={colors.blurTint}>
                   <LinearGradient
-                    colors={[
+                    colors={isDark ? [
                       "rgba(20, 184, 166, 0.15)",
                       "rgba(13, 148, 136, 0.08)",
                       "rgba(0, 0, 0, 0.5)",
+                    ] : [
+                      "rgba(20, 184, 166, 0.12)",
+                      "rgba(13, 148, 136, 0.06)",
+                      "rgba(255, 255, 255, 0.95)",
                     ]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
@@ -213,7 +217,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           width: 40,
                           height: 5,
                           borderRadius: 2.5,
-                          backgroundColor: "rgba(255, 255, 255, 0.3)",
+                          backgroundColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.15)",
                         }}
                       />
                     </View>
@@ -233,7 +237,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           style={{
                             fontSize: 24,
                             fontWeight: "700",
-                            color: "#FFFFFF",
+                            color: colors.text,
                             marginBottom: 4,
                           }}
                         >
@@ -242,7 +246,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                         <Text
                           style={{
                             fontSize: 14,
-                            color: "rgba(255, 255, 255, 0.6)",
+                            color: colors.textSecondary,
                           }}
                         >
                           AI filters messages automatically
@@ -256,13 +260,13 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           height: 36,
                           borderRadius: 18,
                           backgroundColor: pressed
-                            ? "rgba(255, 255, 255, 0.15)"
-                            : "rgba(255, 255, 255, 0.1)",
+                            ? (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)")
+                            : (isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"),
                           alignItems: "center",
                           justifyContent: "center",
                         })}
                       >
-                        <Text style={{ fontSize: 20, color: "#FFFFFF" }}>✕</Text>
+                        <Text style={{ fontSize: 20, color: colors.text }}>✕</Text>
                       </Pressable>
                     </View>
 
@@ -290,7 +294,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                         <Text
                           style={{
                             fontSize: 13,
-                            color: "rgba(255, 255, 255, 0.9)",
+                            color: colors.text,
                             lineHeight: 18,
                           }}
                         >
@@ -314,14 +318,14 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           value={name}
                           onChangeText={setName}
                           placeholder="e.g., places, gaming, work..."
-                          placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance="dark"
+                          placeholderTextColor={colors.inputPlaceholder}
+                          keyboardAppearance={isDark ? "dark" : "light"}
                           style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                            backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                             borderRadius: 12,
                             padding: 14,
                             fontSize: 16,
-                            color: "#FFFFFF",
+                            color: colors.text,
                             fontWeight: "600",
                           }}
                           maxLength={50}
@@ -339,14 +343,14 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                           value={keywords}
                           onChangeText={setKeywords}
                           placeholder="e.g., restaurant, vacation, coding"
-                          placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                          keyboardAppearance="dark"
+                          placeholderTextColor={colors.inputPlaceholder}
+                          keyboardAppearance={isDark ? "dark" : "light"}
                           style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                            backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
                             borderRadius: 12,
                             padding: 14,
                             fontSize: 15,
-                            color: "#FFFFFF",
+                            color: colors.text,
                           }}
                           multiline
                         />
@@ -372,7 +376,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                                 style={{
                                   fontSize: 15,
                                   fontWeight: "600",
-                                  color: "#FFFFFF",
+                                  color: colors.text,
                                   marginBottom: 4,
                                 }}
                               >
@@ -381,7 +385,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                               <Text
                                 style={{
                                   fontSize: 13,
-                                  color: "rgba(255, 255, 255, 0.7)",
+                                  color: colors.textSecondary,
                                 }}
                               >
                                 Other members can view this thread
@@ -394,7 +398,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                                 borderRadius: 16,
                                 backgroundColor: isShared
                                   ? "#14B8A6"
-                                  : "rgba(255, 255, 255, 0.2)",
+                                  : (isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)"),
                                 padding: 2,
                                 justifyContent: "center",
                                 alignItems: isShared ? "flex-end" : "flex-start",
@@ -421,7 +425,7 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
                         paddingTop: 16,
                         paddingBottom: 16,
                         borderTopWidth: 1,
-                        borderTopColor: "rgba(255, 255, 255, 0.1)",
+                        borderTopColor: colors.glassBorder,
                       }}
                     >
                       <LiquidGlassButton
@@ -447,4 +451,3 @@ const CreateThreadModal: React.FC<CreateThreadModalProps> = ({
 };
 
 export default CreateThreadModal;
-

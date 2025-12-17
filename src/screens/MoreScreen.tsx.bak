@@ -7,28 +7,28 @@ import { Info, CircleHelp, MessageSquarePlus, Share2, UserPlus } from "lucide-re
 import { useNavigation } from "@react-navigation/native";
 import { GradientIcon } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
-import { useTheme } from "@/contexts/ThemeContext";
+// TEMP: import { useTheme } from "@/contexts/ThemeContext";
 
 const MoreScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const { colors, isDark } = useTheme();
+  // TEMP: const { colors, isDark } = useTheme();
 
   const MenuItem = ({ icon, label, onPress }: { icon: React.ReactNode, label: string, onPress?: () => void }) => (
     <View style={{ marginBottom: 16 }}>
       <BlurView
-        intensity={isDark ? 40 : 80}
-        tint={isDark ? "dark" : "light"}
+        intensity={40}
+        tint={colors.blurTint}
         style={{
           borderRadius: 16,
           overflow: "hidden",
           borderWidth: 1,
-          borderColor: colors.glassBorder,
+          borderColor: colors.border,
         }}
       >
         <Pressable onPress={onPress}>
           <LinearGradient
-            colors={[colors.glassBackground, colors.glassBackgroundSecondary]}
+            colors={[colors.cardGradientStart, colors.cardGradientEnd]}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -39,7 +39,7 @@ const MoreScreen = () => {
               width: 40, 
               height: 40, 
               borderRadius: 20, 
-              backgroundColor: colors.glassBackground,
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
               alignItems: "center",
               justifyContent: "center",
               marginRight: 16
@@ -58,7 +58,9 @@ const MoreScreen = () => {
       {/* Background */}
       <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
         <LinearGradient
-          colors={[colors.gradientStart, colors.gradientEnd]}
+          colors={isDark 
+            ? ["#000000", "#0A0A0F", "#050508", "#000000"]
+            : ["#FAFAFA", "#F4F4F5", "#F9F9F9", "#FAFAFA"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ flex: 1 }}
@@ -71,33 +73,33 @@ const MoreScreen = () => {
         </Text>
 
         <MenuItem 
-          icon={<MessageSquarePlus size={24} color={colors.text} />} 
+          icon={<MessageSquarePlus size={24} color="#FFF" />} 
           label="Feedback/Requests"
           onPress={() => navigation.navigate("Feedback")}
         />
         <MenuItem 
-          icon={<CircleHelp size={24} color={colors.text} />} 
+          icon={<CircleHelp size={24} color="#FFF" />} 
           label="Help & Support"
         />
         <MenuItem 
-          icon={<Info size={24} color={colors.text} />} 
+          icon={<Info size={24} color="#FFF" />} 
           label="About VibeChat"
         />
         <MenuItem 
-          icon={<Share2 size={24} color={colors.text} />} 
+          icon={<Share2 size={24} color="#FFF" />} 
           label="Share VibeChat"
         />
 
         <View style={{ height: 20 }} />
 
         <MenuItem 
-          icon={<UserPlus size={24} color={colors.text} />} 
+          icon={<UserPlus size={24} color="#FFF" />} 
           label="Join Chat (Temporary)"
           onPress={() => navigation.navigate("JoinChat")}
         />
         
         <View style={{ marginTop: 32, alignItems: "center" }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+          <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
             Version 1.0.0
           </Text>
         </View>
@@ -107,3 +109,4 @@ const MoreScreen = () => {
 };
 
 export default MoreScreen;
+

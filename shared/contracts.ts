@@ -22,6 +22,7 @@ export const userSchema = z.object({
   image: z.string().nullable(),
   birthdate: z.string().nullable().optional(), // ISO date string
   hasCompletedOnboarding: z.boolean(),
+  themePreference: z.enum(["light", "dark", "system"]).default("system").optional(),
   summaryPreference: z.enum(["concise", "detailed"]).default("concise"), // AI catch-up summary preference
   hasSeenSummaryPreferencePrompt: z.boolean().default(false), // Whether user has seen the first-time preference prompt
   createdAt: z.string(),
@@ -240,6 +241,7 @@ export const updateUserRequestSchema = z.object({
   image: z.string().optional(),
   birthdate: z.string().optional(),
   hasCompletedOnboarding: z.boolean().optional(),
+  themePreference: z.enum(["light", "dark", "system"]).optional(),
   summaryPreference: z.enum(["concise", "detailed"]).optional(),
   hasSeenSummaryPreferencePrompt: z.boolean().optional(),
 });
