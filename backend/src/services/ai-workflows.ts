@@ -586,6 +586,15 @@ async function executeRemind(
   const delayMinutes = config.delayMinutes || 30;
   const reminderMessage = config.reminderMessage || `Reminder: ${triggerContent}`;
 
+  // Get creator's timezone
+  const { data: creator } = await db
+    .from("user")
+    .select("timezone")
+    .eq("id", workflow.creatorId)
+    .single();
+  
+  const userTimezone = creator?.timezone || "UTC";
+
   // Calculate next run time
   const nextRunAt = new Date(Date.now() + delayMinutes * 60 * 1000);
 
@@ -597,7 +606,7 @@ async function executeRemind(
       creatorId: workflow.creatorId,
       actionType: "reminder",
       schedule: nextRunAt.toISOString(),
-      timezone: "UTC",
+      timezone: userTimezone,
       config: {
         message: reminderMessage,
         originalTrigger: triggerContent,

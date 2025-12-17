@@ -22,6 +22,7 @@ import BirthdateScreen from "@/screens/BirthdateScreen";
 import JoinChatScreen from "@/screens/JoinChatScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import { useUser } from "@/contexts/UserContext";
+import { useTimezoneSync } from "@/hooks/useTimezoneSync";
 
 /**
  * RootStackNavigator
@@ -31,6 +32,9 @@ const RootStack = createStackNavigator<RootStackParamList>();
 
 const RootNavigator = () => {
   const { user, loading, isAuthenticated } = useUser();
+  
+  // Automatically sync user's timezone with their device
+  useTimezoneSync();
 
   if (loading) {
     return null; // Or a loading screen

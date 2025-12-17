@@ -371,12 +371,21 @@ app.post("/scheduled", zValidator("json", createScheduledActionSchema), async (c
       return c.json({ error: "Not a member of this chat" }, 403);
     }
 
+    // Get user's timezone from their profile
+    const { data: user } = await db
+      .from("user")
+      .select("timezone")
+      .eq("id", data.userId)
+      .single();
+    
+    const userTimezone = user?.timezone || data.timezone || "UTC";
+
     const result = await createScheduledAction({
       chatId: data.chatId,
       creatorId: data.userId,
       actionType: data.actionType,
       schedule: data.schedule,
-      timezone: data.timezone,
+      timezone: userTimezone,
       config: data.config,
     });
 

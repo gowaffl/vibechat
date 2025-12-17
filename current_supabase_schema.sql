@@ -51,6 +51,9 @@ $$;
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "themePreference" text DEFAULT 'system'
   CHECK ("themePreference" IN ('light', 'dark', 'system'));
 
+-- Add timezone column to user table (for scheduling workflows)
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/New_York';
+
 -- ==========================================
 -- AI WORKFLOW AUTOMATION (December 2025)
 -- ==========================================

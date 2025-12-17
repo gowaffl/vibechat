@@ -11,6 +11,7 @@
 import { db } from "../db";
 import { openai } from "../env";
 import { executeGPT51Response } from "./gpt-responses";
+import { zonedTimeToUtc, utcToZonedTime, format } from "date-fns-tz";
 
 // ==========================================
 // Types
@@ -42,17 +43,21 @@ const SCHEDULER_INTERVAL_MS = 60 * 1000; // Check every minute
 // ==========================================
 
 /**
- * Parse schedule string and determine next run time
+ * Parse schedule string and determine next run time IN USER'S TIMEZONE
  * Supports:
  * - ISO date strings (one-time)
- * - "daily:HH:MM" format
- * - "weekly:day:HH:MM" format (e.g., "weekly:monday:09:00")
- * - Simple cron expressions (minute hour day month weekday)
+ * - "daily:HH:MM" format (in user's local time)
+ * - "weekly:day:HH:MM" format (e.g., "weekly:monday:09:00" in user's local time)
+ * - Simple cron expressions (minute hour day month weekday) (in user's local time)
+ * 
+ * @param schedule - Schedule string
+ * @param timezone - IANA timezone (e.g., "America/New_York", "Europe/London")
+ * @returns Date in UTC representing the next run time
  */
 function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null {
   const now = new Date();
   
-  // ISO date string (one-time)
+  // ISO date string (one-time) - already in UTC
   if (schedule.match(/^\d{4}-\d{2}-\d{2}/)) {
     try {
       return new Date(schedule);
@@ -61,21 +66,28 @@ function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null 
     }
   }
 
-  // Daily format: "daily:HH:MM"
+  // Get current time in user's timezone
+  const nowInUserTz = utcToZonedTime(now, timezone);
+
+  // Daily format: "daily:HH:MM" (in user's local time)
   const dailyMatch = schedule.match(/^daily:(\d{2}):(\d{2})$/);
   if (dailyMatch) {
     const [, hours, minutes] = dailyMatch;
-    const next = new Date(now);
-    next.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
     
-    // If time has passed today, schedule for tomorrow
-    if (next <= now) {
-      next.setDate(next.getDate() + 1);
+    // Create a date in user's timezone with the specified time
+    const nextInUserTz = new Date(nowInUserTz);
+    nextInUserTz.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    // If time has passed today in user's timezone, schedule for tomorrow
+    if (nextInUserTz <= nowInUserTz) {
+      nextInUserTz.setDate(nextInUserTz.getDate() + 1);
     }
-    return next;
+    
+    // Convert user's local time to UTC
+    return zonedTimeToUtc(nextInUserTz, timezone);
   }
 
-  // Weekly format: "weekly:day:HH:MM"
+  // Weekly format: "weekly:day:HH:MM" (in user's local time)
   const weeklyMatch = schedule.match(/^weekly:(\w+):(\d{2}):(\d{2})$/);
   if (weeklyMatch) {
     const [, day, hours, minutes] = weeklyMatch;
@@ -86,47 +98,51 @@ function parseSchedule(schedule: string, timezone: string = "UTC"): Date | null 
     const targetDay = dayMap[day.toLowerCase()];
     if (targetDay === undefined) return null;
 
-    const next = new Date(now);
-    next.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
+    // Create a date in user's timezone with the specified time
+    const nextInUserTz = new Date(nowInUserTz);
+    nextInUserTz.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
-    const currentDay = next.getUTCDay();
+    const currentDay = nextInUserTz.getDay();
     let daysUntil = targetDay - currentDay;
-    if (daysUntil < 0 || (daysUntil === 0 && next <= now)) {
+    if (daysUntil < 0 || (daysUntil === 0 && nextInUserTz <= nowInUserTz)) {
       daysUntil += 7;
     }
-    next.setDate(next.getDate() + daysUntil);
-    return next;
+    nextInUserTz.setDate(nextInUserTz.getDate() + daysUntil);
+    
+    // Convert user's local time to UTC
+    return zonedTimeToUtc(nextInUserTz, timezone);
   }
 
-  // Simple cron: "minute hour * * weekday" (only minute, hour, weekday supported)
+  // Simple cron: "minute hour * * weekday" (in user's local time)
   const cronMatch = schedule.match(/^(\d+|\*)\s+(\d+|\*)\s+\*\s+\*\s+(\d+|\*)$/);
   if (cronMatch) {
     const [, minute, hour, weekday] = cronMatch;
-    const next = new Date(now);
+    const nextInUserTz = new Date(nowInUserTz);
     
     if (hour !== "*") {
-      next.setUTCHours(parseInt(hour));
+      nextInUserTz.setHours(parseInt(hour));
     }
     if (minute !== "*") {
-      next.setUTCMinutes(parseInt(minute));
+      nextInUserTz.setMinutes(parseInt(minute));
     }
-    next.setUTCSeconds(0, 0);
+    nextInUserTz.setSeconds(0, 0);
 
     // Handle weekday constraint
     if (weekday !== "*") {
       const targetDay = parseInt(weekday);
-      const currentDay = next.getUTCDay();
+      const currentDay = nextInUserTz.getDay();
       let daysUntil = targetDay - currentDay;
-      if (daysUntil < 0 || (daysUntil === 0 && next <= now)) {
+      if (daysUntil < 0 || (daysUntil === 0 && nextInUserTz <= nowInUserTz)) {
         daysUntil += 7;
       }
-      next.setDate(next.getDate() + daysUntil);
-    } else if (next <= now) {
+      nextInUserTz.setDate(nextInUserTz.getDate() + daysUntil);
+    } else if (nextInUserTz <= nowInUserTz) {
       // If no weekday constraint and time passed, go to next day
-      next.setDate(next.getDate() + 1);
+      nextInUserTz.setDate(nextInUserTz.getDate() + 1);
     }
 
-    return next;
+    // Convert user's local time to UTC
+    return zonedTimeToUtc(nextInUserTz, timezone);
   }
 
   return null;

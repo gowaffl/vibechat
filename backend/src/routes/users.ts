@@ -73,7 +73,7 @@ users.post("/", zValidator("json", createUserRequestSchema), async (c) => {
 // PATCH /api/users/:id - Update user
 users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   const id = c.req.param("id");
-  const { name, bio, image, birthdate, hasCompletedOnboarding, themePreference, summaryPreference, hasSeenSummaryPreferencePrompt } = c.req.valid("json");
+  const { name, bio, image, birthdate, hasCompletedOnboarding, themePreference, summaryPreference, hasSeenSummaryPreferencePrompt, timezone } = c.req.valid("json");
   const authHeader = c.req.header("Authorization");
   const token = authHeader?.replace("Bearer ", "");
 
@@ -86,6 +86,7 @@ users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   if (themePreference !== undefined) updateData.themePreference = themePreference;
   if (summaryPreference !== undefined) updateData.summaryPreference = summaryPreference;
   if (hasSeenSummaryPreferencePrompt !== undefined) updateData.hasSeenSummaryPreferencePrompt = hasSeenSummaryPreferencePrompt;
+  if (timezone !== undefined) updateData.timezone = timezone;
 
   // Use user-scoped client if token exists, otherwise fall back to db (admin)
   const client = token ? createUserClient(token) : db;
