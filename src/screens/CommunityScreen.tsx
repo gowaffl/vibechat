@@ -22,7 +22,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   Globe,
   Search,
-  Bot,
   Terminal,
   Trophy,
   Star,
@@ -33,6 +32,8 @@ import {
   TrendingUp,
   Clock,
   ChevronRight,
+  Zap,
+  Award,
 } from "lucide-react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
@@ -209,21 +210,17 @@ const CommunityScreen = () => {
       <TouchableOpacity
         key={tab}
         onPress={() => setActiveTab(tab)}
-        style={[
-          styles.tab,
-          {
-            backgroundColor: isActive
-              ? isDark
-                ? "rgba(79, 195, 247, 0.2)"
-                : "rgba(0, 122, 255, 0.1)"
-              : "transparent",
-            borderColor: isActive
-              ? isDark
-                ? "rgba(79, 195, 247, 0.4)"
-                : "rgba(0, 122, 255, 0.3)"
-              : "transparent",
-          },
-        ]}
+          style={[
+            styles.tab,
+            {
+              backgroundColor: isActive
+                ? `${colors.primary}33`
+                : "transparent",
+              borderColor: isActive
+                ? `${colors.primary}66`
+                : "transparent",
+            },
+          ]}
       >
         {icon}
         <Text
@@ -262,10 +259,10 @@ const CommunityScreen = () => {
         <View
           style={[
             styles.iconContainer,
-            { backgroundColor: isDark ? "rgba(79, 195, 247, 0.2)" : "rgba(0, 122, 255, 0.1)" },
+            { backgroundColor: `${colors.primary}33` },
           ]}
         >
-          <Bot size={24} color={colors.primary} />
+          <Sparkles size={24} color={colors.primary} />
         </View>
         <View style={styles.cardInfo}>
           <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
@@ -273,12 +270,6 @@ const CommunityScreen = () => {
           </Text>
           <Text style={[styles.cardCategory, { color: colors.textSecondary }]}>
             {persona.category || "General"}
-          </Text>
-        </View>
-        <View style={styles.cloneStats}>
-          <Download size={14} color={colors.textSecondary} />
-          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
-            {formatNumber(persona.cloneCount)}
           </Text>
         </View>
       </View>
@@ -300,14 +291,22 @@ const CommunityScreen = () => {
           ))}
         </View>
       )}
-      {persona.creator && (
-        <View style={styles.creatorRow}>
-          <User size={12} color={colors.textTertiary} />
-          <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-            {persona.creator.name}
+      <View style={styles.cardFooter}>
+        {persona.creator && (
+          <View style={styles.creatorRow}>
+            <User size={12} color={colors.textTertiary} />
+            <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
+              {persona.creator.name}
+            </Text>
+          </View>
+        )}
+        <View style={styles.cloneStats}>
+          <Download size={14} color={colors.textSecondary} />
+          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
+            {formatNumber(persona.cloneCount)}
           </Text>
         </View>
-      )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -335,20 +334,14 @@ const CommunityScreen = () => {
             { backgroundColor: isDark ? "rgba(175, 82, 222, 0.2)" : "rgba(175, 82, 222, 0.1)" },
           ]}
         >
-          <Terminal size={24} color="#AF52DE" />
+          <Zap size={24} color="#AF52DE" />
         </View>
         <View style={styles.cardInfo}>
           <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-            /{command.command}
+            {command.command.startsWith('/') ? command.command : `/${command.command}`}
           </Text>
           <Text style={[styles.cardCategory, { color: colors.textSecondary }]}>
             {command.category || "General"}
-          </Text>
-        </View>
-        <View style={styles.cloneStats}>
-          <Download size={14} color={colors.textSecondary} />
-          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
-            {formatNumber(command.cloneCount)}
           </Text>
         </View>
       </View>
@@ -370,14 +363,22 @@ const CommunityScreen = () => {
           ))}
         </View>
       )}
-      {command.creator && (
-        <View style={styles.creatorRow}>
-          <User size={12} color={colors.textTertiary} />
-          <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-            {command.creator.name}
+      <View style={styles.cardFooter}>
+        {command.creator && (
+          <View style={styles.creatorRow}>
+            <User size={12} color={colors.textTertiary} />
+            <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
+              {command.creator.name}
+            </Text>
+          </View>
+        )}
+        <View style={styles.cloneStats}>
+          <Download size={14} color={colors.textSecondary} />
+          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
+            {formatNumber(command.cloneCount)}
           </Text>
         </View>
-      )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -459,18 +460,14 @@ const CommunityScreen = () => {
             style={[
               styles.categoryChip,
               {
-                backgroundColor: isActive
-                  ? isDark
-                    ? "rgba(79, 195, 247, 0.2)"
-                    : colors.primary
-                  : isDark
-                  ? "rgba(255,255,255,0.05)"
-                  : "rgba(0,0,0,0.05)",
-                borderColor: isActive
-                  ? isDark
-                    ? "rgba(79, 195, 247, 0.4)"
-                    : colors.primary
-                  : "transparent",
+              backgroundColor: isActive
+                ? `${colors.primary}33`
+                : isDark
+                ? "rgba(255,255,255,0.05)"
+                : "rgba(0,0,0,0.05)",
+              borderColor: isActive
+                ? `${colors.primary}66`
+                : "transparent",
               },
             ]}
           >
@@ -496,7 +493,7 @@ const CommunityScreen = () => {
         style={[
           styles.sortButton,
           sortBy === "popular" && {
-            backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
+            backgroundColor: `${colors.primary}26`,
           },
         ]}
       >
@@ -518,7 +515,7 @@ const CommunityScreen = () => {
         style={[
           styles.sortButton,
           sortBy === "recent" && {
-            backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
+            backgroundColor: `${colors.primary}26`,
           },
         ]}
       >
@@ -560,7 +557,7 @@ const CommunityScreen = () => {
             <View
               style={[
                 styles.titleIcon,
-                { backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)" },
+                { backgroundColor: `${colors.primary}26` },
               ]}
             >
               <Globe size={24} color={colors.primary} />
@@ -596,9 +593,9 @@ const CommunityScreen = () => {
 
         {/* Tabs */}
         <View style={styles.tabs}>
-          {renderTab("personas", "AI Personas", <Bot size={18} color={activeTab === "personas" ? colors.primary : colors.textSecondary} />)}
-          {renderTab("commands", "Commands", <Terminal size={18} color={activeTab === "commands" ? colors.primary : colors.textSecondary} />)}
-          {renderTab("rankings", "Rankings", <Trophy size={18} color={activeTab === "rankings" ? colors.primary : colors.textSecondary} />)}
+          {renderTab("personas", "AI Personas", <Sparkles size={18} color={activeTab === "personas" ? colors.primary : colors.textSecondary} />)}
+          {renderTab("commands", "Commands", <Zap size={18} color={activeTab === "commands" ? colors.primary : colors.textSecondary} />)}
+          {renderTab("rankings", "Rankings", <Award size={18} color={activeTab === "rankings" ? colors.primary : colors.textSecondary} />)}
         </View>
 
         {/* Category Filter & Sort (only for personas/commands tabs) */}
@@ -621,7 +618,7 @@ const CommunityScreen = () => {
           <View style={styles.listContainer}>
             {personas.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Bot size={48} color={colors.textTertiary} />
+                <Sparkles size={48} color={colors.textTertiary} />
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>No personas found</Text>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   Be the first to share an AI persona!
@@ -635,7 +632,7 @@ const CommunityScreen = () => {
           <View style={styles.listContainer}>
             {commands.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Terminal size={48} color={colors.textTertiary} />
+                <Zap size={48} color={colors.textTertiary} />
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>No commands found</Text>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   Be the first to share a slash command!
@@ -867,6 +864,12 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 12,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
   },
   creatorRow: {
     flexDirection: "row",

@@ -1182,7 +1182,7 @@ const GroupSettingsScreen = () => {
                   {imageUri ? (
                     <View
                       style={{
-                        shadowColor: "#007AFF",
+                        shadowColor: colors.primary,
                         shadowOffset: { width: 0, height: 4 },
                         shadowOpacity: 0.5,
                         shadowRadius: 12,
@@ -1209,7 +1209,7 @@ const GroupSettingsScreen = () => {
                         backgroundColor: colors.primary + "26",
                         borderWidth: 1,
                         borderColor: colors.primary + "4D",
-                        shadowColor: "#007AFF",
+                        shadowColor: colors.primary,
                         shadowOffset: { width: 0, height: 4 },
                         shadowOpacity: 0.5,
                         shadowRadius: 12,
@@ -1883,18 +1883,18 @@ const GroupSettingsScreen = () => {
                   marginTop: 16,
                   padding: 14,
                   borderRadius: 12,
-                  backgroundColor: "rgba(0, 122, 255, 0.1)",
+                  backgroundColor: colors.primary + "1A",
                   borderWidth: 1,
-                  borderColor: "#007AFF",
+                  borderColor: colors.primary,
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <Globe size={16} color="#007AFF" />
+                <Globe size={16} color={colors.primary} />
                 <Text
                   style={{
-                    color: "#007AFF",
+                    color: colors.primary,
                     fontSize: 15,
                     fontWeight: "600",
                     marginLeft: 8,
@@ -2173,7 +2173,7 @@ const GroupSettingsScreen = () => {
                               setShowShareModal(true);
                             }}
                           >
-                            <Globe size={16} color="#007AFF" />
+                            <Globe size={16} color={colors.primary} />
                           </Pressable>
                           {canEdit && (
                             <>

@@ -161,11 +161,11 @@ export const lightColors: ColorPalette = {
   switchThumb: '#FFFFFF',
   
   // Status/Accents (Kept vibrant for brand identity, adjusted slightly for contrast if needed)
-  primary: '#007AFF', // Slightly darker blue for better contrast on light
+  primary: '#4FC3F7', // Brand teal/cyan (same as dark mode)
   success: '#34C759',
   warning: '#FF9500', // Darker orange/yellow
   error: '#FF3B30',
-  info: '#007AFF',
+  info: '#4FC3F7',
   
   // Overlay
   overlay: 'rgba(0, 0, 0, 0.4)'
@@ -205,7 +205,7 @@ export const navThemeDark = {
 export const navThemeLight = {
   dark: false,
   colors: {
-    primary: '#007AFF',
+    primary: '#4FC3F7',
     background: '#FAFAF9',
     card: '#FFFFFF',
     text: '#1A1A1A',

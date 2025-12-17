@@ -152,7 +152,9 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
   if (!item) return null;
 
   const isPersona = itemType === "ai_friend";
-  const itemName = isPersona ? item.name : `/${item.command}`;
+  const itemName = isPersona 
+    ? item.name 
+    : (item.command.startsWith('/') ? item.command : `/${item.command}`);
   const itemDetails = isPersona
     ? item.personality || "Custom AI Personality"
     : item.prompt || "Custom AI Command";
@@ -186,9 +188,7 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
                   style={[
                     styles.iconContainer,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(79, 195, 247, 0.2)"
-                        : "rgba(0, 122, 255, 0.1)",
+                      backgroundColor: `${colors.primary}33`,
                     },
                   ]}
                 >
@@ -307,20 +307,18 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
                         }}
                         style={[
                           styles.categoryChip,
-                          {
-                            backgroundColor: isSelected
-                              ? isDark
-                                ? "rgba(79, 195, 247, 0.2)"
-                                : colors.primary
-                              : isDark
-                              ? "rgba(255,255,255,0.05)"
-                              : "rgba(0,0,0,0.05)",
-                            borderColor: isSelected
-                              ? colors.primary
-                              : isDark
-                              ? colors.glassBorder
-                              : "rgba(0, 0, 0, 0.08)",
-                          },
+                        {
+                          backgroundColor: isSelected
+                            ? `${colors.primary}33`
+                            : isDark
+                            ? "rgba(255,255,255,0.05)"
+                            : "rgba(0,0,0,0.05)",
+                          borderColor: isSelected
+                            ? colors.primary
+                            : isDark
+                            ? colors.glassBorder
+                            : "rgba(0, 0, 0, 0.08)",
+                        },
                         ]}
                       >
                         <Text

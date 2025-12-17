@@ -19,8 +19,8 @@ import {
 import { BlurView } from "expo-blur";
 import {
   X,
-  Bot,
-  Terminal,
+  Sparkles,
+  Zap,
   Download,
   Check,
   MessageCircle,
@@ -160,7 +160,9 @@ const CloneModal: React.FC<CloneModalProps> = ({
   if (!item) return null;
 
   const isPersona = itemType === "ai_friend";
-  const itemName = isPersona ? item.name : `/${item.command}`;
+  const itemName = isPersona 
+    ? item.name 
+    : (item.command.startsWith('/') ? item.command : `/${item.command}`);
   const itemDescription = item.description || item.personality || item.prompt || "No description";
 
   return (
@@ -189,9 +191,7 @@ const CloneModal: React.FC<CloneModalProps> = ({
                   styles.iconContainer,
                   {
                     backgroundColor: isPersona
-                      ? isDark
-                        ? "rgba(79, 195, 247, 0.2)"
-                        : "rgba(0, 122, 255, 0.1)"
+                      ? `${colors.primary}33`
                       : isDark
                       ? "rgba(175, 82, 222, 0.2)"
                       : "rgba(175, 82, 222, 0.1)",
@@ -199,9 +199,9 @@ const CloneModal: React.FC<CloneModalProps> = ({
                 ]}
               >
                 {isPersona ? (
-                  <Bot size={24} color={colors.primary} />
+                  <Sparkles size={24} color={colors.primary} />
                 ) : (
-                  <Terminal size={24} color="#AF52DE" />
+                  <Zap size={24} color="#AF52DE" />
                 )}
               </View>
               <View style={styles.headerInfo}>
@@ -281,9 +281,7 @@ const CloneModal: React.FC<CloneModalProps> = ({
                       styles.chatItem,
                       {
                         backgroundColor: isSelected
-                          ? isDark
-                            ? "rgba(79, 195, 247, 0.15)"
-                            : "rgba(0, 122, 255, 0.08)"
+                          ? `${colors.primary}26`
                           : "transparent",
                         borderColor: isSelected
                           ? colors.primary
