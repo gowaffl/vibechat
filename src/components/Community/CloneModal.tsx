@@ -35,6 +35,17 @@ import { api } from "@/lib/api";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+// Helper function to format creator name as "FirstName L."
+const formatCreatorName = (fullName: string): string => {
+  const parts = fullName.trim().split(' ');
+  if (parts.length === 1) {
+    return parts[0]; // Just return the name if no last name
+  }
+  const firstName = parts[0];
+  const lastInitial = parts[parts.length - 1][0];
+  return `${firstName} ${lastInitial}.`;
+};
+
 interface CommunityItem {
   id: string;
   name?: string;
@@ -163,7 +174,8 @@ const CloneModal: React.FC<CloneModalProps> = ({
   const itemName = isPersona 
     ? item.name 
     : (item.command.startsWith('/') ? item.command : `/${item.command}`);
-  const itemDescription = item.description || item.personality || item.prompt || "No description";
+  const itemInstructions = isPersona ? item.personality : item.prompt;
+  const hasDescription = item.description && item.description.length > 0;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
@@ -218,42 +230,69 @@ const CloneModal: React.FC<CloneModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Item Details */}
-          <View
-            style={[
-              styles.detailsCard,
-              {
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)",
-              },
-            ]}
+          {/* Item Details - Scrollable */}
+          <ScrollView
+            style={styles.detailsScrollView}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={[styles.detailsText, { color: colors.textSecondary }]} numberOfLines={3}>
-              {itemDescription}
-            </Text>
-            {item.category && (
-              <View style={styles.detailsRow}>
-                <Star size={14} color={colors.textTertiary} />
-                <Text style={[styles.detailsLabel, { color: colors.textTertiary }]}>
-                  {item.category}
-                </Text>
+            <View
+              style={[
+                styles.detailsCard,
+                {
+                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                  borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)",
+                },
+              ]}
+            >
+              {/* Description (if provided) */}
+              {hasDescription && (
+                <View style={styles.descriptionSection}>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>Description</Text>
+                  <Text style={[styles.detailsText, { color: colors.textSecondary }]}>
+                    {item.description}
+                  </Text>
+                </View>
+              )}
+
+              {/* Instructions/Prompt */}
+              {itemInstructions && (
+                <View style={[styles.instructionsSection, hasDescription && { marginTop: 12 }]}>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>
+                    {isPersona ? "Personality" : "Prompt"}
+                  </Text>
+                  <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
+                    {itemInstructions}
+                  </Text>
+                </View>
+              )}
+
+              {/* Metadata Row */}
+              <View style={[styles.metadataRow, (hasDescription || itemInstructions) && { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)" }]}>
+                {item.category && (
+                  <View style={styles.detailsRow}>
+                    <Star size={14} color={colors.textTertiary} />
+                    <Text style={[styles.detailsLabel, { color: colors.textTertiary }]}>
+                      {item.category}
+                    </Text>
+                  </View>
+                )}
+                {item.creator && (
+                  <View style={styles.detailsRow}>
+                    <User size={14} color={colors.textTertiary} />
+                    <Text style={[styles.detailsLabel, { color: colors.textTertiary }]}>
+                      Created by {formatCreatorName(item.creator.name)}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.detailsRow}>
+                  <Download size={14} color={colors.textTertiary} />
+                  <Text style={[styles.detailsLabel, { color: colors.textTertiary }]}>
+                    {item.cloneCount || 0} Clones
+                  </Text>
+                </View>
               </View>
-            )}
-            {item.creator && (
-              <View style={styles.detailsRow}>
-                <User size={14} color={colors.textTertiary} />
-                <Text style={[styles.detailsLabel, { color: colors.textTertiary }]}>
-                  Created by {item.creator.name}
-                </Text>
-              </View>
-            )}
-            <View style={styles.detailsRow}>
-              <Download size={14} color={colors.textTertiary} />
-              <Text style={[styles.detailsLabel, { color: colors.textTertiary }]}>
-                {item.cloneCount || 0} clones
-              </Text>
             </View>
-          </View>
+          </ScrollView>
 
           {/* Chat Selection */}
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Select chats to add to:</Text>
@@ -431,16 +470,18 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: -8,
   },
+  detailsScrollView: {
+    maxHeight: 200,
+    marginBottom: 16,
+  },
   detailsCard: {
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 16,
   },
   detailsText: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 10,
   },
   detailsRow: {
     flexDirection: "row",
@@ -451,6 +492,27 @@ const styles = StyleSheet.create({
   detailsLabel: {
     fontSize: 13,
     textTransform: "capitalize",
+  },
+  descriptionSection: {
+    marginBottom: 0,
+  },
+  instructionsSection: {
+    marginBottom: 0,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  instructionsText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  metadataRow: {
+    flexDirection: "column",
+    gap: 6,
   },
   sectionTitle: {
     fontSize: 16,

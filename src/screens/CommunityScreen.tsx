@@ -42,6 +42,17 @@ import CloneModal from "@/components/Community/CloneModal";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+// Helper function to format creator name as "FirstName L."
+const formatCreatorName = (fullName: string): string => {
+  const parts = fullName.trim().split(' ');
+  if (parts.length === 1) {
+    return parts[0]; // Just return the name if no last name
+  }
+  const firstName = parts[0];
+  const lastInitial = parts[parts.length - 1][0];
+  return `${firstName} ${lastInitial}.`;
+};
+
 // Types
 interface CommunityPersona {
   id: string;
@@ -273,9 +284,19 @@ const CommunityScreen = () => {
           </Text>
         </View>
       </View>
-      <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-        {persona.description || persona.personality || "A helpful AI friend"}
-      </Text>
+      {persona.description && (
+        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+          {persona.description}
+        </Text>
+      )}
+      {persona.personality && (
+        <View style={styles.promptSection}>
+          <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>Personality:</Text>
+          <Text style={[styles.promptText, { color: colors.textSecondary }]} numberOfLines={3}>
+            {persona.personality}
+          </Text>
+        </View>
+      )}
       {persona.tags && persona.tags.length > 0 && (
         <View style={styles.tagsContainer}>
           {persona.tags.slice(0, 3).map((tag, i) => (
@@ -296,7 +317,7 @@ const CommunityScreen = () => {
           <View style={styles.creatorRow}>
             <User size={12} color={colors.textTertiary} />
             <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-              {persona.creator.name}
+              {formatCreatorName(persona.creator.name)}
             </Text>
           </View>
         )}
@@ -345,9 +366,19 @@ const CommunityScreen = () => {
           </Text>
         </View>
       </View>
-      <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-        {command.description || command.prompt}
-      </Text>
+      {command.description && (
+        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+          {command.description}
+        </Text>
+      )}
+      {command.prompt && (
+        <View style={styles.promptSection}>
+          <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>Prompt:</Text>
+          <Text style={[styles.promptText, { color: colors.textSecondary }]} numberOfLines={3}>
+            {command.prompt}
+          </Text>
+        </View>
+      )}
       {command.tags && command.tags.length > 0 && (
         <View style={styles.tagsContainer}>
           {command.tags.slice(0, 3).map((tag, i) => (
@@ -368,7 +399,7 @@ const CommunityScreen = () => {
           <View style={styles.creatorRow}>
             <User size={12} color={colors.textTertiary} />
             <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-              {command.creator.name}
+              {formatCreatorName(command.creator.name)}
             </Text>
           </View>
         )}
@@ -850,6 +881,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 10,
+  },
+  promptSection: {
+    marginBottom: 10,
+    paddingTop: 8,
+  },
+  promptLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  promptText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: "italic",
   },
   tagsContainer: {
     flexDirection: "row",
