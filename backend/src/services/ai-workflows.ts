@@ -10,6 +10,7 @@
 import { db } from "../db";
 import { openai } from "../env";
 import { executeGPT51Response } from "./gpt-responses";
+import { decryptMessageContent } from "./message-encryption";
 
 // ==========================================
 // Types
@@ -694,6 +695,31 @@ export async function processMessageForWorkflows(
 ): Promise<void> {
   console.log(`[Workflows] Processing message ${messageId} for workflows in chat ${chatId}`);
 
+  // Fetch the full message to check if it's encrypted
+  const { data: message, error: messageError } = await db
+    .from("message")
+    .select("id, content, is_encrypted")
+    .eq("id", messageId)
+    .single();
+
+  if (messageError || !message) {
+    console.error(`[Workflows] Failed to fetch message ${messageId}:`, messageError);
+    return;
+  }
+
+  // Decrypt the message content if needed
+  let decryptedContent = content;
+  if (message.is_encrypted && message.content) {
+    try {
+      const decryptedMessage = await decryptMessageContent(message);
+      decryptedContent = decryptedMessage.content || content;
+      console.log(`[Workflows] Decrypted message content for workflow processing`);
+    } catch (error) {
+      console.error(`[Workflows] Failed to decrypt message ${messageId}:`, error);
+      // Continue with original content as fallback
+    }
+  }
+
   // Get all enabled workflows for this chat
   const { data: workflows, error } = await db
     .from("ai_workflow")
@@ -707,8 +733,8 @@ export async function processMessageForWorkflows(
 
   for (const workflow of workflows) {
     try {
-      // Check if trigger matches
-      if (!checkTrigger(workflow as Workflow, content, messageId, userId)) {
+      // Check if trigger matches using DECRYPTED content
+      if (!checkTrigger(workflow as Workflow, decryptedContent, messageId, userId)) {
         continue;
       }
 
@@ -728,11 +754,11 @@ export async function processMessageForWorkflows(
         continue;
       }
 
-      // Execute the action
+      // Execute the action with DECRYPTED content
       const result = await executeAction(
         workflow as Workflow,
         messageId,
-        content,
+        decryptedContent,
         userId
       );
 

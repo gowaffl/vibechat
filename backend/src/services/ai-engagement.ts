@@ -24,7 +24,7 @@ import {
   logSafetyEvent,
 } from "./content-safety";
 import { setAITypingStatus } from "../routes/chats";
-import { decryptMessages } from "./message-encryption";
+import { decryptMessages, decryptMessageContent } from "./message-encryption";
 
 // Subscription reference to keep connection alive
 let engagementSubscription: RealtimeChannel | null = null;
@@ -368,7 +368,7 @@ Respond naturally to what's happening in the conversation. Keep it brief and rea
  * Handle a new message event from Realtime
  */
 async function handleNewMessage(payload: any) {
-  const { chatId, id: messageId, content, userId, createdAt } = payload.new || payload;
+  const { chatId, id: messageId, content, userId, createdAt, is_encrypted } = payload.new || payload;
   
   if (!chatId || !content) return;
 
@@ -379,6 +379,23 @@ async function handleNewMessage(payload: any) {
   }
 
   console.log(`[AI Engagement] Processing new message ${messageId} in chat ${chatId}`);
+
+  // Decrypt message content if needed
+  let decryptedContent = content;
+  if (is_encrypted) {
+    try {
+      const decryptedMessage = await decryptMessageContent({
+        id: messageId,
+        content: content,
+        is_encrypted: is_encrypted,
+      });
+      decryptedContent = decryptedMessage.content || content;
+      console.log(`[AI Engagement] Decrypted message content for engagement processing`);
+    } catch (error) {
+      console.error(`[AI Engagement] Failed to decrypt message ${messageId}:`, error);
+      // Continue with original content as fallback
+    }
+  }
 
   // 1. Check Cooldown First
   if (await isInCooldown(chatId)) {
@@ -395,10 +412,10 @@ async function handleNewMessage(payload: any) {
 
   if (!aiFriends || aiFriends.length === 0) return;
 
-  // 3. Check for Mentions (Skip if mentioned, frontend handles it)
+  // 3. Check for Mentions (Skip if mentioned, frontend handles it) - Use DECRYPTED content
   let hasMention = false;
   for (const friend of aiFriends) {
-    if (containsAIMention(content, friend.name)) {
+    if (containsAIMention(decryptedContent, friend.name)) {
       hasMention = true;
       break;
     }
@@ -448,7 +465,7 @@ async function handleNewMessage(payload: any) {
         friend.engagementPercent,
         recentCount || 0,
         timeSinceLastAIResponse,
-        content,
+        decryptedContent,
         timeSinceLastActivity
       );
 
