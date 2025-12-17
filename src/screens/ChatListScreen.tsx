@@ -393,7 +393,7 @@ const ChatListScreen = () => {
     }, [refetch, refetchUnread])
   );
 
-  // Real-time updates for new messages
+  // Real-time updates for new messages - OPTIMISTIC UPDATE for instant UI
   React.useEffect(() => {
     if (!user?.id) return;
 
@@ -407,7 +407,32 @@ const ChatListScreen = () => {
           table: "message",
         },
         (payload: any) => {
-          if (chatIdsRef.current.has(payload.new.chatId)) {
+          const incomingChatId = payload.new.chatId;
+          if (chatIdsRef.current.has(incomingChatId)) {
+            // OPTIMISTIC UPDATE: Immediately move chat to top and update lastMessageAt
+            // This eliminates the 2-second delay waiting for refetch
+            queryClient.setQueryData<GetUserChatsResponse>(
+              ["user-chats", user.id],
+              (oldChats) => {
+                if (!oldChats) return oldChats;
+                
+                const chatIndex = oldChats.findIndex((c) => c.id === incomingChatId);
+                if (chatIndex === -1) return oldChats;
+                
+                // Create updated chat with new lastMessageAt
+                const updatedChat = {
+                  ...oldChats[chatIndex],
+                  lastMessageAt: payload.new.createdAt,
+                };
+                
+                // Move updated chat to top of list
+                const filteredChats = oldChats.filter((_, i) => i !== chatIndex);
+                return [updatedChat, ...filteredChats];
+              }
+            );
+            
+            // Background refetch for complete details (lastMessage content, etc.)
+            // This runs in background while UI is already updated
             refetch();
             refetchUnread();
           }
@@ -418,7 +443,7 @@ const ChatListScreen = () => {
     return () => {
       supabaseClient.removeChannel(channel);
     };
-  }, [user?.id, refetch, refetchUnread]);
+  }, [user?.id, refetch, refetchUnread, queryClient]);
 
   const unreadCountMap = React.useMemo(() => {
     const map = new Map<string, number>();

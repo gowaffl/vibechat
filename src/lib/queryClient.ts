@@ -20,9 +20,9 @@ const getStaleTimeForQuery = (queryKey: QueryKey): number => {
   const key = queryKey[0] as string;
   
   switch (key) {
-    // Messages: Use realtime for updates, keep data fresh forever until invalidated
+    // Messages: 30 seconds staleTime for background refresh, realtime handles live updates
     case 'messages':
-      return Infinity;
+      return 30 * 1000; // 30 seconds
     
     // Chat list: Refresh every 5 minutes, realtime handles new messages
     case 'chats':
@@ -117,10 +117,11 @@ const queryClient = new QueryClient({
 
 // Set query defaults for specific query keys
 queryClient.setQueryDefaults(['messages'], {
-  staleTime: Infinity,
+  staleTime: 30 * 1000, // 30 seconds - allows background refresh for stale data
   gcTime: 60 * 60 * 1000, // 1 hour
-  refetchOnMount: false, // CRITICAL: Never refetch on mount - realtime is source of truth
+  refetchOnMount: true, // Refetch if data is stale (older than 30s)
   refetchOnWindowFocus: false, // Don't refetch on focus - realtime handles it
+  // placeholderData is set per-query in ChatScreen for immediate display
 });
 
 queryClient.setQueryDefaults(['chats'], {
@@ -209,7 +210,7 @@ export const prefetchMessages = async (chatId: string, userId: string, limit = 5
   return queryClient.prefetchQuery({
     queryKey: ['messages', chatId],
     queryFn: () => api.get(`/api/chats/${chatId}/messages?userId=${userId}&limit=${limit}`),
-    staleTime: Infinity,
+    staleTime: 30 * 1000, // 30 seconds
   });
 };
 

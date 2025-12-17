@@ -664,6 +664,286 @@ messages.post("/batch", async (c) => {
   }
 });
 
+// GET /api/messages/:id/context - Get message context (surrounding messages)
+messages.get("/:id/context", async (c) => {
+  const messageId = c.req.param("id");
+  const limit = parseInt(c.req.query("limit") || "50"); // Messages before/after
+  
+  try {
+    // 1. Get the target message first to find its createdAt and chatId
+    const { data: targetMessage, error: targetError } = await db
+      .from("message")
+      .select("id, chatId, createdAt")
+      .eq("id", messageId)
+      .single();
+
+    if (targetError || !targetMessage) {
+      return c.json({ error: "Message not found" }, 404);
+    }
+
+    const { chatId, createdAt } = targetMessage;
+
+    // 2. Fetch messages BEFORE the target (older)
+    const { data: olderMessages, error: olderError } = await db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*),
+          aiFriend:aiFriendId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*),
+          mentionedBy:mentionedByUserId (*)
+        )
+      `)
+      .eq("chatId", chatId)
+      .lt("createdAt", createdAt)
+      .order("createdAt", { ascending: false }) // Newest to oldest
+      .limit(limit);
+
+    if (olderError) {
+      console.error("[Messages] Error fetching older context:", olderError);
+      throw olderError;
+    }
+
+    // 3. Fetch messages AFTER the target (newer)
+    const { data: newerMessages, error: newerError } = await db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*),
+          aiFriend:aiFriendId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*),
+          mentionedBy:mentionedByUserId (*)
+        )
+      `)
+      .eq("chatId", chatId)
+      .gt("createdAt", createdAt)
+      .order("createdAt", { ascending: true }) // Oldest to newest
+      .limit(limit);
+
+    if (newerError) {
+      console.error("[Messages] Error fetching newer context:", newerError);
+      throw newerError;
+    }
+
+    // 4. Fetch the target message with full details
+    const { data: fullTargetMessage, error: fullTargetError } = await db
+      .from("message")
+      .select(`
+        *,
+        user:userId (*),
+        aiFriend:aiFriendId (*),
+        replyTo:replyToId (
+          *,
+          user:userId (*),
+          aiFriend:aiFriendId (*)
+        ),
+        reactions:reaction (
+          *,
+          user:userId (*)
+        ),
+        mentions:mention (
+          *,
+          mentionedUser:mentionedUserId (*),
+          mentionedBy:mentionedByUserId (*)
+        )
+      `)
+      .eq("id", messageId)
+      .single();
+
+    if (fullTargetError) {
+      throw fullTargetError;
+    }
+
+    // Combine all messages: newer (reversed to be newest first) + target + older
+    // The frontend expects descending order (Newest -> Oldest)
+    const newer = (newerMessages || []).reverse(); // Make newest first
+    const older = olderMessages || [];
+    
+    const allRawMessages = [...newer, fullTargetMessage, ...older];
+
+    // Decrypt everything
+    const decryptedMessages = await decryptMessages(allRawMessages);
+
+    // Format messages
+    const formattedMessages = decryptedMessages.map((msg: any) => {
+      // Parse metadata
+      let parsedMetadata = msg.metadata;
+      if (typeof msg.metadata === "string") {
+        try {
+          parsedMetadata = JSON.parse(msg.metadata);
+        } catch {
+          parsedMetadata = null;
+        }
+      }
+
+      return {
+        id: msg.id,
+        content: msg.content,
+        messageType: msg.messageType,
+        imageUrl: msg.imageUrl,
+        imageDescription: msg.imageDescription,
+        voiceUrl: msg.voiceUrl,
+        voiceDuration: msg.voiceDuration,
+        voiceTranscription: msg.voiceTranscription,
+        eventId: msg.eventId,
+        pollId: msg.pollId,
+        userId: msg.userId,
+        chatId: msg.chatId,
+        replyToId: msg.replyToId,
+        vibeType: msg.vibeType || null,
+        metadata: parsedMetadata,
+        aiFriendId: msg.aiFriendId,
+        editedAt: msg.editedAt ? new Date(msg.editedAt).toISOString() : null,
+        isUnsent: msg.isUnsent,
+        editHistory: msg.editHistory,
+        createdAt: new Date(msg.createdAt).toISOString(),
+        linkPreview: msg.linkPreviewUrl ? {
+          url: msg.linkPreviewUrl,
+          title: msg.linkPreviewTitle,
+          description: msg.linkPreviewDescription,
+          image: msg.linkPreviewImage,
+          siteName: msg.linkPreviewSiteName,
+          favicon: msg.linkPreviewFavicon,
+        } : null,
+        user: msg.user ? {
+          id: msg.user.id,
+          name: msg.user.name,
+          phone: msg.user.phone || "",
+          bio: msg.user.bio,
+          image: msg.user.image,
+          hasCompletedOnboarding: msg.user.hasCompletedOnboarding || false,
+          createdAt: new Date(msg.user.createdAt).toISOString(),
+          updatedAt: new Date(msg.user.updatedAt).toISOString(),
+        } : null,
+        aiFriend: msg.aiFriend ? {
+          id: msg.aiFriend.id,
+          name: msg.aiFriend.name,
+          color: msg.aiFriend.color,
+          personality: msg.aiFriend.personality,
+          tone: msg.aiFriend.tone,
+          engagementMode: msg.aiFriend.engagementMode,
+          engagementPercent: msg.aiFriend.engagementPercent,
+          chatId: msg.aiFriend.chatId,
+          sortOrder: msg.aiFriend.sortOrder,
+          createdAt: new Date(msg.aiFriend.createdAt).toISOString(),
+          updatedAt: new Date(msg.aiFriend.updatedAt).toISOString(),
+        } : null,
+        replyTo: msg.replyTo ? {
+          id: msg.replyTo.id,
+          content: msg.replyTo.content,
+          messageType: msg.replyTo.messageType,
+          imageUrl: msg.replyTo.imageUrl,
+          imageDescription: msg.replyTo.imageDescription,
+          userId: msg.replyTo.userId,
+          chatId: msg.replyTo.chatId,
+          replyToId: msg.replyTo.replyToId,
+          aiFriendId: msg.replyTo.aiFriendId,
+          editedAt: msg.replyTo.editedAt ? new Date(msg.replyTo.editedAt).toISOString() : null,
+          isUnsent: msg.replyTo.isUnsent,
+          editHistory: msg.replyTo.editHistory,
+          createdAt: new Date(msg.replyTo.createdAt).toISOString(),
+          user: msg.replyTo.user ? {
+            id: msg.replyTo.user.id,
+            name: msg.replyTo.user.name,
+            phone: msg.replyTo.user.phone || "",
+            bio: msg.replyTo.user.bio,
+            image: msg.replyTo.user.image,
+            hasCompletedOnboarding: msg.replyTo.user.hasCompletedOnboarding || false,
+            createdAt: new Date(msg.replyTo.user.createdAt).toISOString(),
+            updatedAt: new Date(msg.replyTo.user.updatedAt).toISOString(),
+          } : null,
+          aiFriend: msg.replyTo.aiFriend ? {
+            id: msg.replyTo.aiFriend.id,
+            name: msg.replyTo.aiFriend.name,
+            color: msg.replyTo.aiFriend.color,
+          } : null,
+        } : null,
+        reactions: (msg.reactions || []).map((reaction: any) => ({
+          id: reaction.id,
+          emoji: reaction.emoji,
+          userId: reaction.userId,
+          messageId: reaction.messageId,
+          chatId: reaction.chatId,
+          createdAt: new Date(reaction.createdAt).toISOString(),
+          user: reaction.user ? {
+            id: reaction.user.id,
+            name: reaction.user.name,
+            phone: reaction.user.phone || "",
+            bio: reaction.user.bio,
+            image: reaction.user.image,
+            hasCompletedOnboarding: reaction.user.hasCompletedOnboarding || false,
+            createdAt: new Date(reaction.user.createdAt).toISOString(),
+            updatedAt: new Date(reaction.user.updatedAt).toISOString(),
+          } : null,
+        })),
+        mentions: (msg.mentions || []).map((mention: any) => ({
+          id: mention.id,
+          messageId: mention.messageId,
+          mentionedUserId: mention.mentionedUserId,
+          mentionedByUserId: mention.mentionedByUserId,
+          createdAt: new Date(mention.createdAt).toISOString(),
+          mentionedUser: mention.mentionedUser ? {
+            id: mention.mentionedUser.id,
+            name: mention.mentionedUser.name,
+            phone: mention.mentionedUser.phone || "",
+            bio: mention.mentionedUser.bio,
+            image: mention.mentionedUser.image,
+            hasCompletedOnboarding: mention.mentionedUser.hasCompletedOnboarding || false,
+            createdAt: new Date(mention.mentionedUser.createdAt).toISOString(),
+            updatedAt: new Date(mention.mentionedUser.updatedAt).toISOString(),
+          } : null,
+          mentionedBy: mention.mentionedBy ? {
+            id: mention.mentionedBy.id,
+            name: mention.mentionedBy.name,
+            phone: mention.mentionedBy.phone || "",
+            bio: mention.mentionedBy.bio,
+            image: mention.mentionedBy.image,
+            hasCompletedOnboarding: mention.mentionedBy.hasCompletedOnboarding || false,
+            createdAt: new Date(mention.mentionedBy.createdAt).toISOString(),
+            updatedAt: new Date(mention.mentionedBy.updatedAt).toISOString(),
+          } : null,
+        })),
+      };
+    });
+
+    const nextCursor = olderMessages && olderMessages.length > 0 ? olderMessages[olderMessages.length - 1].createdAt : null;
+    const prevCursor = newerMessages && newerMessages.length > 0 ? newerMessages[newerMessages.length - 1].createdAt : null;
+
+    return c.json({
+      messages: formattedMessages,
+      targetMessageId: messageId,
+      nextCursor,
+      prevCursor
+    });
+
+  } catch (error) {
+    console.error("[Messages] Error fetching message context:", error);
+    return c.json({ error: "Failed to fetch message context" }, 500);
+  }
+});
+
 // GET /api/messages/:id - Get a single message details
 messages.get("/:id", async (c) => {
   const messageId = c.req.param("id");

@@ -1599,6 +1599,7 @@ const ChatScreen = () => {
   const chatId = route.params?.chatId || "default-chat";
   const chatName = route.params?.chatName || "VibeChat";
   const messageId = route.params?.messageId;
+  const forceRefresh = route.params?.forceRefresh;
   
   // #region agent log
   // Intercept invalidateQueries for logging
@@ -1930,10 +1931,13 @@ const ChatScreen = () => {
   // HIGH-8: Pagination state for message history
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [prevCursor, setPrevCursor] = useState<string | null>(null); // For scrolling DOWN (newer)
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isLoadingContext, setIsLoadingContext] = useState(false); // For jumping to message context
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const lastMessageTimestampRef = useRef<string | null>(null);
+  const initialScrollDoneRef = useRef(false); // Track if initial scroll to message is done
 
   // Track realtime subscription retries (helps surface errors + auto-retry)
   const [realtimeRetryCount, setRealtimeRetryCount] = useState(0);
@@ -2003,6 +2007,73 @@ const ChatScreen = () => {
     }
   }, [chatId, user?.id, queryClient]);
 
+  // Helper to load context for a specific message
+  const loadMessageContext = useCallback(async (targetMessageId: string) => {
+    if (isLoadingContext) return false;
+    setIsLoadingContext(true);
+    console.log(`[ChatScreen] Loading context for message ${targetMessageId}`);
+    
+    try {
+      const response = await api.get<{
+        messages: Message[],
+        targetMessageId: string,
+        nextCursor: string | null,
+        prevCursor: string | null
+      }>(`/api/messages/${targetMessageId}/context?limit=50`);
+      
+      if (response && response.messages) {
+        console.log(`[ChatScreen] Loaded ${response.messages.length} messages for context`);
+        setAllMessages(response.messages);
+        setNextCursor(response.nextCursor);
+        setPrevCursor(response.prevCursor);
+        return true;
+      }
+    } catch (error) {
+      console.error("[ChatScreen] Failed to load message context:", error);
+      Alert.alert("Error", "Failed to load message context");
+    } finally {
+      setIsLoadingContext(false);
+    }
+    return false;
+  }, [isLoadingContext]);
+
+  // Handle messageId param (deep link or search navigation)
+  const contextFetchAttemptedRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    if (!messageId) return;
+    
+    // Reset if messageId changes
+    if (messageId !== contextFetchAttemptedRef.current && contextFetchAttemptedRef.current !== null) {
+        initialScrollDoneRef.current = false;
+    }
+
+    if (initialScrollDoneRef.current) return;
+
+    // Check if message is in the currently loaded list
+    // Use allMessages to check existence, as activeMessages might filter it out (e.g. threads)
+    // But we need it in activeMessages to scroll. 
+    // If it's in allMessages but not activeMessages, it might be hidden? 
+    // For now, check allMessages to decide whether to fetch.
+    const messageExists = allMessages.some(m => m.id === messageId);
+    
+    if (messageExists) {
+      console.log(`[ChatScreen] Target message ${messageId} found in memory, scrolling...`);
+      // Use setTimeout to allow render cycle to complete if we just updated state
+      setTimeout(() => {
+        scrollToMessage(messageId);
+        initialScrollDoneRef.current = true;
+        // Clear param logic could go here if we had access to navigation.setParams
+      }, 500);
+    } else {
+      if (!isLoadingContext && contextFetchAttemptedRef.current !== messageId) {
+         console.log(`[ChatScreen] Target message ${messageId} not found locally, fetching context...`);
+         contextFetchAttemptedRef.current = messageId;
+         loadMessageContext(messageId);
+      }
+    }
+  }, [messageId, allMessages, isLoadingContext, loadMessageContext, scrollToMessage]);
+
   // Keep lastMessageTimestampRef updated
   useEffect(() => {
     if (allMessages.length > 0) {
@@ -2056,7 +2127,20 @@ const ChatScreen = () => {
     },
     // Realtime subscription is used instead of polling
     enabled: !!user?.id && !!chatId,
+    // CRITICAL: Show cached data immediately while fetching fresh data
+    placeholderData: (previousData) => previousData,
   });
+
+  // Force refresh when navigating from push notification
+  // This ensures we fetch the latest messages including the one that triggered the notification
+  useEffect(() => {
+    if (forceRefresh && chatId) {
+      console.log("[ChatScreen] Force refresh triggered, invalidating messages cache");
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+      // Clear the forceRefresh param to prevent re-triggering on subsequent re-renders
+      navigation.setParams({ forceRefresh: undefined });
+    }
+  }, [forceRefresh, chatId, queryClient, navigation]);
 
   // Ensure Realtime has the current auth token (important when sessions refresh)
   useEffect(() => {
@@ -2351,6 +2435,19 @@ const ChatScreen = () => {
           clearTimeout(subscriptionTimeout);
           subscriptionTimeout = null;
         }
+        
+        // CRITICAL: Gap recovery on subscription success
+        // This ensures we catch any messages that arrived between initial load and subscription
+        // Get the most recent message timestamp from current state
+        const currentMessages = queryClient.getQueryData<{ messages: Message[], hasMore: boolean, nextCursor: string | null }>(["messages", chatId]);
+        const lastMsg = currentMessages?.messages?.[0];
+        if (lastMsg?.createdAt) {
+          console.log('[Realtime] Subscription established, checking for missed messages since:', lastMsg.createdAt);
+          // Small delay to allow subscription to stabilize
+          setTimeout(() => {
+            recoverMissedMessages(lastMsg.createdAt);
+          }, 100);
+        }
       } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
         // Only retry on actual errors, not on CLOSED (which happens during cleanup)
         if (err) {
@@ -2370,7 +2467,7 @@ const ChatScreen = () => {
       chatChannelRef.current = null;
       supabaseClient.removeChannel(channel);
     };
-  }, [chatId, queryClient, realtimeRetryCount, user?.id]);
+  }, [chatId, queryClient, realtimeRetryCount, user?.id, recoverMissedMessages]);
 
   // Update messages state when data changes
   // IMPORTANT: We merge rather than replace to preserve optimistic messages
@@ -2676,6 +2773,25 @@ const ChatScreen = () => {
     return messages;
   }, [currentThreadId, allThreadMessages, messages, threads, filterMessages, isLoadingThreadMessages]);
 
+  // Handle pending scroll after context load
+  const pendingScrollRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    if (pendingScrollRef.current && !isLoadingContext) {
+      const targetId = pendingScrollRef.current;
+      const index = activeMessages.findIndex(m => m.id === targetId);
+      
+      if (index !== -1) {
+        console.log(`[ChatScreen] Pending scroll target ${targetId} now found, scrolling...`);
+        // Clear ref first to prevent loops
+        pendingScrollRef.current = null;
+        setTimeout(() => {
+          scrollToMessage(targetId);
+        }, 300);
+      }
+    }
+  }, [activeMessages, isLoadingContext]);
+
   // Scroll to message handler
   const scrollToMessage = useCallback((messageId: string) => {
     if (!activeMessages) return;
@@ -2684,6 +2800,13 @@ const ChatScreen = () => {
     
     if (originalIndex === -1) {
       console.log(`[ScrollToMessage] Message ${messageId} not found in active messages`);
+      
+      // If not found and not already loading, try to fetch context
+      if (!isLoadingContext) {
+        console.log(`[ScrollToMessage] Triggering context fetch for ${messageId}`);
+        pendingScrollRef.current = messageId;
+        loadMessageContext(messageId);
+      }
       return;
     }
 
@@ -2743,7 +2866,7 @@ const ChatScreen = () => {
         setHighlightedMessageId(null);
       }, 2000);
     }, 300);
-  }, [activeMessages, isAITyping, typingUsers, currentThreadId]);
+  }, [activeMessages, isAITyping, typingUsers, currentThreadId, isLoadingContext, loadMessageContext]);
 
   // Filter messages to get media (images and videos) for gallery (memoized for performance)
   const mediaMessages = useMemo(

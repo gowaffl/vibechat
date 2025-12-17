@@ -39,7 +39,7 @@ const MAX_RETRY_COUNT = 5;
 const INITIAL_RETRY_DELAY = 1000;
 const MAX_RETRY_DELAY = 30000;
 const CONNECTION_TIMEOUT = 10000;
-const GAP_RECOVERY_THRESHOLD = 5000; // 5 seconds - if we were disconnected longer, fetch missed messages
+const GAP_RECOVERY_THRESHOLD = 2000; // 2 seconds - if we were disconnected longer, fetch missed messages (reduced from 5s for faster recovery)
 
 export function useRealtimeChat({
   chatId,

@@ -33,7 +33,7 @@ const AppContent = () => {
   const { navTheme, isDark } = useTheme();
   const navigationRef = useRef<any>(null);
   const pendingInviteToken = useRef<string | null>(null);
-  const pendingNotification = useRef<{ chatId: string; chatName: string } | null>(null);
+  const pendingNotification = useRef<{ chatId: string; chatName: string; forceRefresh: boolean } | null>(null);
 
   useEffect(() => {
     // Handle initial URL when app is opened from a link
@@ -107,21 +107,23 @@ const AppContent = () => {
     const handleNotification = (response: Notifications.NotificationResponse) => {
       try {
         const data = response.notification.request.content.data;
-        const chatId = data?.chatId;
+        const chatIdFromData = data?.chatId;
         // Get chat name from notification title if available, or fallback to "Chat"
         const chatName = response.notification.request.content.title || "Chat";
         
-        if (chatId) {
+        if (chatIdFromData && typeof chatIdFromData === 'string') {
+          const chatId = chatIdFromData; // TypeScript now knows this is string
           if (navigationRef.current) {
-            console.log("[Notifications] 🚀 Navigating to chat:", chatId);
+            console.log("[Notifications] 🚀 Navigating to chat:", chatId, "with forceRefresh: true");
             navigationRef.current.navigate("Chat", { 
               chatId,
-              chatName 
+              chatName,
+              forceRefresh: true, // Force invalidate cache to show latest messages
             });
           } else {
             // Store for later navigation when ready
             console.log("[Notifications] ⚠️ Navigation not ready, storing pending notification for chat:", chatId);
-            pendingNotification.current = { chatId, chatName };
+            pendingNotification.current = { chatId, chatName, forceRefresh: true };
           }
         }
       } catch (error) {
