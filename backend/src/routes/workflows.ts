@@ -98,10 +98,14 @@ const createScheduledActionSchema = z.object({
 // Workflow CRUD Routes
 // ==========================================
 
-// GET /api/workflows/:chatId - Get all workflows for a chat
-app.get("/:chatId", async (c) => {
-  const chatId = c.req.param("chatId");
+// GET /api/workflows - Get all workflows for a chat
+app.get("/", async (c) => {
+  const chatId = c.req.query("chatId");
   const userId = c.req.query("userId");
+
+  if (!chatId) {
+    return c.json({ error: "chatId is required" }, 400);
+  }
 
   if (!userId) {
     return c.json({ error: "userId is required" }, 400);

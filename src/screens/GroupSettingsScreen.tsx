@@ -244,8 +244,8 @@ const GroupSettingsScreen = () => {
   // Fetch workflows for this chat
   const { data: workflows = [], isLoading: isLoadingWorkflows } = useQuery<any[]>({
     queryKey: ["workflows", chatId],
-    queryFn: () => api.get(`/api/workflows?chatId=${chatId}`),
-    enabled: !!chatId,
+    queryFn: () => api.get(`/api/workflows?chatId=${chatId}&userId=${user?.id}`),
+    enabled: !!chatId && !!user?.id,
   });
 
   // Subscribe to AI friend changes
