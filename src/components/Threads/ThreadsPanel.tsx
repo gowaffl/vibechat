@@ -15,6 +15,7 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MessageSquare, Users, Check, X, Sparkles, Lightbulb, Hash } from "lucide-react-native";
 import LiquidGlassCard from "../LiquidGlass/LiquidGlassCard";
 import LiquidGlassButton from "../LiquidGlass/LiquidGlassButton";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -134,10 +135,6 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
     }, 100);
   };
 
-  const getThreadIcon = (icon: string | null) => {
-    return icon || "🧵";
-  };
-
   return (
     <Modal
       visible={visible}
@@ -183,10 +180,14 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
               >
                 <BlurView intensity={80} tint={colors.blurTint} style={{ flex: 1 }}>
                   <LinearGradient
-                    colors={[
+                    colors={isDark ? [
                       "rgba(20, 184, 166, 0.15)",
                       "rgba(13, 148, 136, 0.08)",
                       "rgba(0, 0, 0, 0.5)",
+                    ] : [
+                      "rgba(20, 184, 166, 0.08)",
+                      "rgba(13, 148, 136, 0.04)",
+                      "rgba(255, 255, 255, 0.5)",
                     ]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
@@ -210,14 +211,14 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                         <View style={{ flexDirection: "row", alignItems: "center" }}>
                           <Image
                             source={require("../../../assets/smarth threads icon (1).png")}
-                            style={{ width: 48, height: 48, marginRight: 8 }}
+                            style={{ width: 48, height: 48, marginRight: 8, tintColor: colors.text }}
                             resizeMode="contain"
                           />
                           <Text
                             style={{
                               fontSize: 24,
                               fontWeight: "700",
-                              color: "#FFFFFF",
+                              color: colors.text,
                             }}
                           >
                             Smart Threads
@@ -231,19 +232,19 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                             height: 36,
                             borderRadius: 18,
                             backgroundColor: pressed
-                              ? "rgba(255, 255, 255, 0.15)"
-                              : "rgba(255, 255, 255, 0.1)",
+                              ? (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)")
+                              : (isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"),
                             alignItems: "center",
                             justifyContent: "center",
                           })}
                         >
-                          <Text style={{ fontSize: 20, color: "#FFFFFF" }}>✕</Text>
+                          <X size={20} color={colors.text} />
                         </Pressable>
                       </View>
                       <Text
                         style={{
                           fontSize: 14,
-                          color: "rgba(255, 255, 255, 0.6)",
+                          color: colors.textSecondary,
                         }}
                       >
                         Filter messages by topics, people, or themes
@@ -265,22 +266,20 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                             borderWidth: 2,
                             borderColor:
                               currentThreadId === null
-                                ? "#14B8A6"
-                                : "rgba(255, 255, 255, 0.15)",
+                                ? colors.primary
+                                : isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.05)",
                           }}
                         >
                           <BlurView intensity={50} tint={colors.blurTint}>
                             <LinearGradient
                               colors={
                                 currentThreadId === null
-                                  ? [
-                                      "rgba(20, 184, 166, 0.3)",
-                                      "rgba(13, 148, 136, 0.2)",
-                                    ]
-                                  : [
-                                      "rgba(255, 255, 255, 0.08)",
-                                      "rgba(255, 255, 255, 0.04)",
-                                    ]
+                                  ? isDark 
+                                    ? ["rgba(20, 184, 166, 0.3)", "rgba(13, 148, 136, 0.2)"]
+                                    : ["rgba(20, 184, 166, 0.15)", "rgba(13, 148, 136, 0.1)"]
+                                  : isDark
+                                    ? ["rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.04)"]
+                                    : ["rgba(255, 255, 255, 0.6)", "rgba(255, 255, 255, 0.4)"]
                               }
                               start={{ x: 0, y: 0 }}
                               end={{ x: 1, y: 1 }}
@@ -293,13 +292,13 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                   gap: 12,
                                 }}
                               >
-                                <Text style={{ fontSize: 28 }}>💬</Text>
+                                <MessageSquare size={28} color={colors.text} />
                                 <View style={{ flex: 1 }}>
                                   <Text
                                     style={{
                                       fontSize: 16,
                                       fontWeight: "700",
-                                      color: "#FFFFFF",
+                                      color: colors.text,
                                       marginBottom: 2,
                                     }}
                                   >
@@ -308,14 +307,14 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                   <Text
                                     style={{
                                       fontSize: 12,
-                                      color: "rgba(255, 255, 255, 0.7)",
+                                      color: colors.textSecondary,
                                     }}
                                   >
                                     All messages
                                   </Text>
                                 </View>
                                 {currentThreadId === null && (
-                                  <Text style={{ fontSize: 20 }}>✓</Text>
+                                  <Check size={20} color={colors.primary} />
                                 )}
                               </View>
                             </LinearGradient>
@@ -339,7 +338,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                             style={{
                               fontSize: 13,
                               fontWeight: "600",
-                              color: "rgba(255, 255, 255, 0.6)",
+                              color: colors.textSecondary,
                               marginBottom: 12,
                               textTransform: "uppercase",
                             }}
@@ -409,8 +408,8 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                   style={{
                                     borderWidth: isSelected ? 2 : 1,
                                     borderColor: isSelected
-                                      ? "#14B8A6"
-                                      : "rgba(255, 255, 255, 0.15)",
+                                      ? colors.primary
+                                      : isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.05)",
                                   }}
                                 >
                                   <View
@@ -420,9 +419,11 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                       gap: 12,
                                     }}
                                   >
-                                    <Text style={{ fontSize: 24 }}>
-                                      {getThreadIcon(thread.icon)}
-                                    </Text>
+                                    {thread.icon ? (
+                                      <Text style={{ fontSize: 24 }}>{thread.icon}</Text>
+                                    ) : (
+                                      <Hash size={24} color={colors.text} />
+                                    )}
                                     <View style={{ flex: 1 }}>
                                       <View
                                         style={{
@@ -435,20 +436,20 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                           style={{
                                             fontSize: 15,
                                             fontWeight: "700",
-                                            color: "#FFFFFF",
+                                            color: colors.text,
                                           }}
                                         >
                                           {thread.name}
                                         </Text>
                                         {thread.isShared && (
-                                          <Text style={{ fontSize: 14 }}>👥</Text>
+                                          <Users size={14} color={colors.textSecondary} />
                                         )}
                                       </View>
                                       {/* Filter summary */}
                                       <Text
                                         style={{
                                           fontSize: 11,
-                                          color: "rgba(255, 255, 255, 0.6)",
+                                          color: colors.textSecondary,
                                           marginTop: 2,
                                         }}
                                         numberOfLines={1}
@@ -461,9 +462,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                                       </Text>
                                     </View>
                                     {isSelected && (
-                                      <Text style={{ fontSize: 18, color: "#14B8A6" }}>
-                                        ✓
-                                      </Text>
+                                      <Check size={18} color={colors.primary} />
                                     )}
                                   </View>
                                 </LiquidGlassCard>
@@ -475,14 +474,14 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                         <View style={{ alignItems: "center", paddingVertical: 32 }}>
                           <Image
                             source={require("../../../assets/smarth threads icon (1).png")}
-                            style={{ width: 48, height: 48, marginBottom: 12 }}
+                            style={{ width: 48, height: 48, marginBottom: 12, tintColor: colors.textSecondary }}
                             resizeMode="contain"
                           />
                           <Text
                             style={{
                               fontSize: 15,
                               fontWeight: "600",
-                              color: "rgba(255, 255, 255, 0.9)",
+                              color: colors.text,
                               marginBottom: 6,
                             }}
                           >
@@ -491,7 +490,7 @@ const ThreadsPanel: React.FC<ThreadsPanelProps> = ({
                           <Text
                             style={{
                               fontSize: 13,
-                              color: "rgba(255, 255, 255, 0.6)",
+                              color: colors.textSecondary,
                               textAlign: "center",
                             }}
                           >

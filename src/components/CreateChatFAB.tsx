@@ -146,6 +146,12 @@ export const CreateChatFAB = () => {
     };
   });
   
+  const borderRadiusStyle = useAnimatedStyle(() => {
+    return {
+      borderRadius: interpolate(expansion.value, [0, 0.2, 1], [FAB_SIZE / 2, FAB_SIZE / 1.5, 24]),
+    };
+  });
+  
   const contentOpacityStyle = useAnimatedStyle(() => {
     return {
       opacity: interpolate(expansion.value, [0.5, 1], [0, 1]),
@@ -188,17 +194,21 @@ export const CreateChatFAB = () => {
         style={[
           {
             position: "absolute",
-            overflow: "hidden",
+            // overflow: "hidden", // Removed to allow shadow/glow to be visible
             zIndex: 1000,
-            shadowColor: isDark ? "#4FC3F7" : "#007AFF",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
+            shadowColor: isDark ? "#4FC3F7" : "#0061FF",
+            shadowOffset: { width: 0, height: 0 }, // Center shadow for glow effect
+            shadowOpacity: isDark ? 0.4 : 0.6, // Higher opacity for better visibility
+            shadowRadius: isDark ? 12 : 16, // Larger radius for soft glow
             elevation: 8,
+            borderWidth: 1,
+            borderColor: isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 97, 255, 0.2)", // Subtle border
+            backgroundColor: 'transparent',
           },
           containerStyle
         ]}
       >
+        <Animated.View style={[{ flex: 1, overflow: 'hidden' }, borderRadiusStyle]}>
         <BlurView
           intensity={90}
           tint={colors.blurTint}
@@ -328,6 +338,7 @@ export const CreateChatFAB = () => {
               </Animated.View>
            </LinearGradient>
         </BlurView>
+        </Animated.View>
       </Animated.View>
     </>
   );

@@ -426,7 +426,7 @@ const ChatHeader = ({
                   >
                     <RNImage
                       source={require("../../assets/smarth threads icon (1).png")}
-                      style={{ width: 40, height: 40 }}
+                      style={{ width: 40, height: 40, tintColor: colors.text }}
                       resizeMode="contain"
                     />
                   </View>
