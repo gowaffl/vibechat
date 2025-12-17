@@ -285,7 +285,16 @@ export type DeleteMessageResponse = z.infer<typeof deleteMessageResponseSchema>;
 export const searchMessagesRequestSchema = z.object({
   userId: z.string(),
   query: z.string(),
-  mode: z.enum(["text", "semantic"]).default("text").optional(),
+  mode: z.enum(["text", "semantic", "hybrid"]).default("hybrid").optional(),
+  // Filters
+  chatId: z.string().optional(),
+  fromUserId: z.string().optional(),
+  messageTypes: z.array(z.enum(["text", "image", "voice", "video", "poll", "event"])).optional(),
+  dateFrom: z.string().optional(), // ISO date
+  dateTo: z.string().optional(),
+  // Pagination
+  cursor: z.string().optional(),
+  limit: z.number().min(1).max(100).default(30).optional(),
 });
 export type SearchMessagesRequest = z.infer<typeof searchMessagesRequestSchema>;
 
@@ -296,6 +305,8 @@ export const searchMessageResultSchema = z.object({
     name: z.string(),
     image: z.string().nullable(),
   }),
+  similarity: z.number().optional(), // 0-1 relevance score
+  matchedField: z.enum(["content", "transcription", "description"]).optional(),
 });
 export type SearchMessageResult = z.infer<typeof searchMessageResultSchema>;
 

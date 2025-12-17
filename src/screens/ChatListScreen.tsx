@@ -304,6 +304,9 @@ const ChatItem = React.memo(({
 
 import { useSearchStore } from "@/stores/searchStore";
 import { CreateChatFAB } from "@/components/CreateChatFAB";
+import { SearchFilters } from "@/components/Search/SearchFilters";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { HighlightText } from "@/components/HighlightText";
 
 const ChatListScreen = () => {
   const insets = useSafeAreaInsets();
@@ -312,11 +315,21 @@ const ChatListScreen = () => {
   const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
 
-  const { searchQuery, searchMode } = useSearchStore();
+  const { searchQuery, searchMode, filters } = useSearchStore();
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Check if any filters are active
+  const hasActiveFilters = React.useMemo(() => {
+    return Object.values(filters).some(v => {
+      if (Array.isArray(v)) return v.length > 0;
+      return !!v;
+    });
+  }, [filters]);
+
+  const isSearchActive = debouncedSearchQuery.trim().length > 0 || hasActiveFilters;
 
   // Fetch user's chats
   const { data: chats = [], isLoading, refetch } = useQuery<GetUserChatsResponse>({
@@ -328,16 +341,37 @@ const ChatListScreen = () => {
   // Fetch unread counts for all chats using shared hook
   const { data: unreadCounts = [], refetch: refetchUnread } = useUnreadCounts(user?.id);
 
-  // Search messages query
-  const { data: searchResults = [], isLoading: isSearching } = useQuery<SearchMessagesResponse>({
-    queryKey: ["search-messages", debouncedSearchQuery, searchMode],
-    queryFn: () => api.post("/api/messages/search", { 
-      userId: user!.id, 
-      query: debouncedSearchQuery,
-      mode: searchMode 
-    }),
-    enabled: !!user?.id && debouncedSearchQuery.trim().length > 0,
+  // Search messages query with Infinite Scroll
+  const { 
+    data: searchData, 
+    isLoading: isSearching, 
+    fetchNextPage, 
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery<SearchMessagesResponse>({
+    queryKey: ["search-messages", debouncedSearchQuery, searchMode, filters],
+    queryFn: async ({ pageParam }) => {
+      const response = await api.post("/api/messages/search", { 
+        userId: user!.id, 
+        query: debouncedSearchQuery,
+        mode: searchMode,
+        ...filters,
+        limit: 20,
+        cursor: pageParam as string | undefined
+      });
+      return response;
+    },
+    getNextPageParam: (lastPage) => {
+      if (!lastPage || lastPage.length < 20) return undefined;
+      return lastPage[lastPage.length - 1].message.id;
+    },
+    enabled: !!user?.id && isSearchActive,
+    initialPageParam: undefined,
   });
+
+  const searchResults = React.useMemo(() => {
+    return searchData?.pages.flat() || [];
+  }, [searchData]);
 
   // Ref to track current chat IDs for filtering realtime events
   const chatIdsRef = React.useRef<Set<string>>(new Set());
@@ -610,6 +644,11 @@ const ChatListScreen = () => {
   }, [filteredChats]);
 
   const renderSearchResult = ({ item }: { item: SearchMessageResult }) => {
+    const isSemantic = item.matchedField === "content" && item.similarity;
+    const matchLabel = item.matchedField === "transcription" ? "Voice Match" 
+                     : item.matchedField === "description" ? "Image Match" 
+                     : null;
+
     return (
       <Pressable
         onPress={() => handleSearchResultPress(item)}
@@ -653,10 +692,33 @@ const ChatListScreen = () => {
               </Text>
             </View>
 
+            {/* Match Indicator */}
+            {(isSemantic || matchLabel) && (
+              <View style={{ flexDirection: "row", marginBottom: 6 }}>
+                <View style={{ 
+                  backgroundColor: isSemantic ? colors.primary + '20' : colors.textTertiary + '20', 
+                  paddingHorizontal: 8, 
+                  paddingVertical: 2, 
+                  borderRadius: 8 
+                }}>
+                  <Text style={{ 
+                    fontSize: 10, 
+                    fontWeight: "600", 
+                    color: isSemantic ? colors.primary : colors.textSecondary 
+                  }}>
+                    {matchLabel || `AI Match ${(item.similarity! * 100).toFixed(0)}%`}
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Message Content */}
-            <Text style={{ color: colors.text, fontSize: 15, lineHeight: 20 }} numberOfLines={3}>
-              {item.message.content}
-            </Text>
+            <HighlightText 
+              text={item.message.content || (item.message.voiceTranscription ? `🎤 ${item.message.voiceTranscription}` : (item.message.imageDescription ? `🖼️ ${item.message.imageDescription}` : "Media message"))}
+              term={searchQuery}
+              style={{ color: colors.text, fontSize: 15, lineHeight: 20 }}
+              numberOfLines={3}
+            />
           </View>
         </BlurView>
       </Pressable>
@@ -784,25 +846,30 @@ const ChatListScreen = () => {
       </View>
 
       {/* Chat List or Search Results */}
-      {searchQuery.trim().length > 0 ? (
+      {isSearchActive ? (
         // Search Mode
-        isSearching ? (
+        isSearching && !searchData ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <LuxeLogoLoader size="large" />
           </View>
         ) : searchResults.length === 0 ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
-            <Text style={{ fontSize: 16, fontWeight: "500", color: colors.textSecondary, textAlign: "center" }}>
-              No messages found for "{searchQuery}"
-            </Text>
-            {searchMode === "semantic" && (
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: isDark ? "rgba(79, 195, 247, 0.1)" : "rgba(0, 122, 255, 0.1)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                  <Search size={14} color={colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13, color: colors.primary }}>
-                    Try simpler keywords or switch to text mode
-                  </Text>
-                </View>
-             )}
+          <View style={{ flex: 1, paddingHorizontal: 32 }}>
+            <View style={{ marginBottom: 24, marginTop: insets.top + 80 }}>
+                <SearchFilters />
+            </View>
+            <View style={{ alignItems: "center", justifyContent: "center", flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: colors.textSecondary, textAlign: "center" }}>
+                No messages found {searchQuery ? `for "${searchQuery}"` : "matching filters"}
+              </Text>
+              {searchMode === "semantic" && searchQuery.length > 0 && (
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: isDark ? "rgba(79, 195, 247, 0.1)" : "rgba(0, 122, 255, 0.1)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                    <Search size={14} color={colors.primary} style={{ marginRight: 6 }} />
+                    <Text style={{ fontSize: 13, color: colors.primary }}>
+                      Try simpler keywords or switch to text mode
+                    </Text>
+                  </View>
+              )}
+            </View>
           </View>
         ) : (
           <FlashList
@@ -814,6 +881,25 @@ const ChatListScreen = () => {
               paddingTop: insets.top + 100,
               paddingBottom: insets.bottom + 100,
             }}
+            ListHeaderComponent={
+              <View style={{ marginBottom: 12 }}>
+                <SearchFilters />
+                <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16, marginTop: 8 }} />
+              </View>
+            }
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) {
+                fetchNextPage();
+              }
+            }}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <View style={{ padding: 20 }}>
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              ) : null
+            }
           />
         )
       ) : (

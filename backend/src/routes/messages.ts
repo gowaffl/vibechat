@@ -30,95 +30,149 @@ const messages = new Hono<AppType>();
 // POST /api/messages/search - Search messages globally
 messages.post("/search", zValidator("json", searchMessagesRequestSchema), async (c) => {
   try {
-    const { userId, query: rawQuery, mode = "text" } = c.req.valid("json");
+    const { 
+      userId, 
+      query: rawQuery, 
+      mode = "hybrid", 
+      chatId, 
+      fromUserId, 
+      messageTypes, 
+      dateFrom, 
+      dateTo,
+      limit = 30,
+      cursor
+    } = c.req.valid("json");
     
     // Ensure query is trimmed
     const query = rawQuery?.trim() || "";
+    if (query.length === 0) return c.json([]);
 
-    if (query.length === 0) {
-      return c.json([]);
+    // 1. Resolve Chat IDs scope
+    let targetChatIds: string[] = [];
+    
+    if (chatId) {
+      // Verify membership for specific chat
+      const { data: member } = await db
+        .from("chat_member")
+        .select("id")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+        
+      if (!member) {
+        return c.json({ error: "Not a member of this chat" }, 403);
+      }
+      targetChatIds = [chatId];
+    } else {
+      // Get all chats user is member of
+      const { data: userChats, error: chatError } = await db
+        .from("chat_member")
+        .select("chatId")
+        .eq("userId", userId);
+
+      if (chatError || !userChats || userChats.length === 0) {
+        return c.json([]);
+      }
+      targetChatIds = userChats.map((c) => c.chatId);
     }
 
-    // 1. Find all chats the user is a member of
-    const { data: userChats, error: chatError } = await db
-      .from("chat_member")
-      .select("chatId")
-      .eq("userId", userId);
+    // Prepare to collect results
+    // We'll store results as a Map to deduplicate by ID, value will be { id, score, matchedField }
+    const matchMap = new Map<string, { id: string, score: number, matchedField: "content" | "transcription" | "description", similarity?: number }>();
+    
+    // Helper to add matches
+    const addMatch = (id: string, score: number, field: "content" | "transcription" | "description", similarity?: number) => {
+      const existing = matchMap.get(id);
+      if (existing) {
+        // If already exists, boost score (hybrid match) and keep higher similarity
+        existing.score += score; 
+        if (similarity && (!existing.similarity || similarity > existing.similarity)) {
+          existing.similarity = similarity;
+        }
+      } else {
+        matchMap.set(id, { id, score, matchedField: field, similarity });
+      }
+    };
 
-    if (chatError || !userChats || userChats.length === 0) {
-      return c.json([]);
-    }
+    const runSemanticSearch = ["semantic", "hybrid"].includes(mode);
+    const runTextSearch = ["text", "hybrid"].includes(mode);
 
-    const chatIds = userChats.map((c) => c.chatId);
-    let matchedMessageIds: string[] = [];
-
-    if (mode === "semantic") {
+    // 2. Run Semantic Search
+    if (runSemanticSearch) {
       console.log(`🧠 [Messages] Semantic search for: "${query}"`);
       try {
         const queryEmbedding = await generateEmbedding(query);
+        
+        // RPC filters: filter_user_id, filter_chat_ids
+        // We can pass fromUserId if set, otherwise null
         const { data: matches, error: matchError } = await db.rpc("match_messages", {
           query_embedding: queryEmbedding,
-          match_threshold: 0.3, // Lower threshold for better recall
-          match_count: 50,
-          filter_user_id: null,
-          filter_chat_ids: chatIds,
+          match_threshold: 0.3, // Lower threshold for recall
+          match_count: limit * 2, // Fetch more than limit to allow for post-filtering
+          filter_user_id: fromUserId || null,
+          filter_chat_ids: targetChatIds,
         });
 
         if (matchError) {
           console.error("[Messages] Semantic match error:", matchError);
-          // Fallback to text search if semantic fails? Or just return error?
-          // Let's fallback for resilience
         } else if (matches) {
-          matchedMessageIds = matches.map((m: any) => m.id);
+          // Process matches
+          for (const m of matches) {
+            addMatch(m.id, m.similarity * 10, "content", m.similarity); // Base score for semantic is similarity * 10
+          }
         }
       } catch (embError) {
         console.error("[Messages] Embedding generation error:", embError);
       }
-    } 
-    
-    // If text mode OR semantic search yielded no results (fallback), run text search
-    if (mode === "text" || (mode === "semantic" && matchedMessageIds.length === 0)) {
-      // 2. Find users matching the query (to search by sender name)
-      const { data: matchedUsers } = await db
-        .from("user")
-        .select("id")
-        .ilike("name", `%${query}%`)
-        .limit(20);
+    }
+
+    // 3. Run Text Search
+    if (runTextSearch) {
+      console.log(`🔍 [Messages] Text search for: "${query}"`);
       
-      const matchedUserIds = matchedUsers?.map(u => u.id) || [];
-
-      // 3. Search messages in those chats (content match OR sender match)
-      let messageQuery = db
+      let textQuery = db
         .from("message")
-        .select("id")
-        .in("chatId", chatIds);
-
-      if (matchedUserIds.length > 0) {
-        const sanitizedQuery = query.replace(/,/g, " ");
-        messageQuery = messageQuery.or(`content.ilike.%${sanitizedQuery}%,userId.in.(${matchedUserIds.join(',')})`);
-      } else {
-        messageQuery = messageQuery.ilike("content", `%${query}%`);
+        .select("id, content, voiceTranscription, imageDescription")
+        .in("chatId", targetChatIds);
+        
+      // Apply filters
+      if (fromUserId) textQuery = textQuery.eq("userId", fromUserId);
+      if (dateFrom) textQuery = textQuery.gte("createdAt", dateFrom);
+      if (dateTo) textQuery = textQuery.lte("createdAt", dateTo);
+      if (messageTypes && messageTypes.length > 0) {
+        textQuery = textQuery.in("messageType", messageTypes);
       }
 
-      const { data: textMatches, error: searchError } = await messageQuery
+      // OR logic for fields: content, voiceTranscription, imageDescription
+      const sanitizedQuery = query.replace(/[^\w\s]/g, "").trim(); 
+      if (sanitizedQuery) {
+        textQuery = textQuery.or(`content.ilike.%${sanitizedQuery}%,voiceTranscription.ilike.%${sanitizedQuery}%,imageDescription.ilike.%${sanitizedQuery}%`);
+      }
+
+      const { data: textMatches, error: searchError } = await textQuery
         .order("createdAt", { ascending: false })
-        .limit(50);
+        .limit(limit * 2);
 
       if (searchError) {
         console.error("[Messages] Text search error:", searchError);
-        return c.json({ error: "Search failed" }, 500);
-      }
-      
-      if (textMatches) {
-        matchedMessageIds = textMatches.map((m) => m.id);
+      } else if (textMatches) {
+        for (const m of textMatches) {
+          let field: "content" | "transcription" | "description" = "content";
+          if (m.voiceTranscription?.toLowerCase().includes(query.toLowerCase())) field = "transcription";
+          if (m.imageDescription?.toLowerCase().includes(query.toLowerCase())) field = "description";
+          
+          addMatch(m.id, 20, field); // Text match gets high base score (20)
+        }
       }
     }
 
-    if (matchedMessageIds.length === 0) {
+    // 4. Fetch Full Messages & Post-Filter
+    const allMatchIds = Array.from(matchMap.keys());
+    
+    if (allMatchIds.length === 0) {
       return c.json([]);
     }
 
-    // Fetch full message details for matched IDs
     const { data: messages, error: fetchError } = await db
       .from("message")
       .select(`
@@ -139,42 +193,57 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
           mentionedUser:mentionedUserId (*)
         )
       `)
-      .in("id", matchedMessageIds)
-      .limit(50);
+      .in("id", allMatchIds);
 
     if (fetchError) {
       console.error("[Messages] Error fetching matched messages:", fetchError);
       return c.json({ error: "Failed to fetch messages" }, 500);
     }
 
-    // 3. Decrypt and Format
+    // 5. Apply filters & decrypt
     const decryptedMessages = await decryptMessages(messages || []);
+    
+    let validResults = decryptedMessages.filter((msg: any) => {
+      if (messageTypes && messageTypes.length > 0) {
+        if (!messageTypes.includes(msg.messageType)) return false;
+      }
+      if (dateFrom && new Date(msg.createdAt) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(msg.createdAt) > new Date(dateTo)) return false;
+      if (fromUserId && msg.userId !== fromUserId) return false;
+      if (!msg.user) return false;
+      return true;
+    });
 
-    // Decrypt nested replyTo messages if they exist
-    const replyToMessages = decryptedMessages
-      .filter((m: any) => m.replyTo)
-      .map((m: any) => m.replyTo);
+    // 6. Rank Results
+    const rankedResults = validResults.map((msg: any) => {
+      const matchData = matchMap.get(msg.id)!;
+      return { ...matchData, message: msg };
+    }).sort((a: any, b: any) => b.score - a.score);
+
+    // 7. Pagination (Offset based on cursor as index)
+    const offset = cursor ? parseInt(cursor) : 0;
+    const paginatedResults = rankedResults.slice(offset, offset + limit);
+
+    // 8. Format Response
+    const replyToMessages = paginatedResults
+      .filter((r: any) => r.message.replyTo)
+      .map((r: any) => r.message.replyTo);
 
     if (replyToMessages.length > 0) {
       const decryptedReplyTos = await decryptMessages(replyToMessages);
       const replyToMap = new Map(decryptedReplyTos.map((m: any) => [m.id, m]));
-      
-      decryptedMessages.forEach((msg: any) => {
-        if (msg.replyTo && replyToMap.has(msg.replyTo.id)) {
-          msg.replyTo = replyToMap.get(msg.replyTo.id);
+      paginatedResults.forEach((r: any) => {
+        if (r.message.replyTo && replyToMap.has(r.message.replyTo.id)) {
+          r.message.replyTo = replyToMap.get(r.message.replyTo.id);
         }
       });
     }
 
-    const results = decryptedMessages.map((msg: any) => {
-      // Parse metadata
+    const formattedResults = paginatedResults.map((r: any) => {
+      const msg = r.message;
       let parsedMetadata = msg.metadata;
       if (typeof msg.metadata === "string") {
-        try {
-          parsedMetadata = JSON.parse(msg.metadata);
-        } catch {
-          parsedMetadata = null;
-        }
+        try { parsedMetadata = JSON.parse(msg.metadata); } catch { parsedMetadata = null; }
       }
 
       const formattedMessage = {
@@ -288,30 +357,12 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
       return {
         message: formattedMessage,
         chat: msg.chat,
+        similarity: r.similarity,
+        matchedField: r.matchedField
       };
     });
 
-    // Filter out messages where user is null (required by schema)
-    // Also, match in-chat search logic: content match OR sender name match
-    // The initial SQL query handles the content/sender matching, but we should double check here
-    // especially for AI messages which might have null userId but we still want them if they match query
-    const validResults = results.filter((r: any) => {
-      // 1. Must have a valid message object
-      if (!r.message) return false;
-      
-      // 2. Schema requires 'user' to be non-null. 
-      // If it's an AI message (userId is null), we need to ensure we don't break the schema.
-      // However, the current schema implementation (searchMessageResultSchema -> messageSchema) 
-      // DOES require 'user' to be present.
-      // If it's an AI message, we might need to synthesize a "user" object or the schema needs to allow null.
-      // Based on messageSchema in contracts.ts, user is REQUIRED (user: User).
-      // So filtering out null users is correct for SCHEMA VALIDATION, but might hide AI messages.
-      // If AI messages are desired, we would need to mock a user object for them or update schema.
-      // For now, adhering to strict schema validation as requested.
-      return r.message.user !== null;
-    });
-
-    return c.json(searchMessagesResponseSchema.parse(validResults));
+    return c.json(searchMessagesResponseSchema.parse(formattedResults));
   } catch (error) {
     console.error("[Messages] Search error:", error);
     return c.json({ error: "Search failed" }, 500);
