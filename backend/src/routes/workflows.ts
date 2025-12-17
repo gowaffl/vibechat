@@ -183,6 +183,51 @@ app.post("/", zValidator("json", createWorkflowSchema), async (c) => {
       return c.json({ error: "Failed to create workflow" }, 500);
     }
 
+    // If this is a scheduled workflow, create a scheduled action
+    if (data.triggerType === "scheduled" && workflow) {
+      // Get user's timezone
+      const { data: user } = await db
+        .from("user")
+        .select("timezone")
+        .eq("id", data.userId)
+        .single();
+      
+      const userTimezone = user?.timezone || "UTC";
+      const triggerConfig = data.triggerConfig as TriggerConfig;
+      
+      // Build schedule string
+      let schedule = "";
+      if (triggerConfig.time) {
+        schedule = `daily:${triggerConfig.time}`;
+      } else if (triggerConfig.cron) {
+        schedule = triggerConfig.cron;
+      }
+      
+      if (schedule) {
+        // Map actionType to actionType for scheduled action
+        let scheduledActionType: "daily_summary" | "weekly_recap" | "reminder" | "custom" = "custom";
+        if (data.actionType === "summarize") {
+          scheduledActionType = "daily_summary";
+        }
+        
+        await createScheduledAction({
+          chatId: data.chatId,
+          creatorId: data.userId,
+          actionType: scheduledActionType,
+          schedule,
+          timezone: userTimezone,
+          config: {
+            workflowId: workflow.id,
+            workflowName: data.name,
+            actionType: data.actionType,
+            actionConfig: data.actionConfig,
+          },
+        });
+        
+        console.log(`[Workflows] ✅ Created scheduled action for workflow "${data.name}" at ${schedule} (${userTimezone})`);
+      }
+    }
+
     return c.json(workflow, 201);
   } catch (error) {
     console.error("[Workflows] Error:", error);
@@ -226,6 +271,24 @@ app.patch("/:id", zValidator("json", updateWorkflowSchema), async (c) => {
       .eq("id", workflowId)
       .select()
       .single();
+    
+    // If this is a scheduled workflow and isEnabled was toggled, update the scheduled action
+    if (updated && workflow.triggerType === "scheduled" && data.isEnabled !== undefined) {
+      const { data: scheduledActions } = await db
+        .from("ai_scheduled_action")
+        .select("id")
+        .eq("chatId", workflow.chatId)
+        .contains("config", { workflowId: workflowId });
+      
+      if (scheduledActions && scheduledActions.length > 0) {
+        await db
+          .from("ai_scheduled_action")
+          .update({ isEnabled: data.isEnabled })
+          .eq("id", scheduledActions[0].id);
+        
+        console.log(`[Workflows] ${data.isEnabled ? 'Enabled' : 'Disabled'} scheduled action for workflow "${workflow.name}"`);
+      }
+    }
 
     if (updateError) {
       console.error("[Workflows] Error updating workflow:", updateError);
@@ -252,7 +315,7 @@ app.delete("/:id", async (c) => {
     // Get workflow and verify ownership
     const { data: workflow, error: fetchError } = await db
       .from("ai_workflow")
-      .select("creatorId")
+      .select("*")
       .eq("id", workflowId)
       .single();
 
@@ -262,6 +325,24 @@ app.delete("/:id", async (c) => {
 
     if (workflow.creatorId !== userId) {
       return c.json({ error: "Not authorized to delete this workflow" }, 403);
+    }
+
+    // If this is a scheduled workflow, delete associated scheduled actions
+    if (workflow.triggerType === "scheduled") {
+      const { data: scheduledActions } = await db
+        .from("ai_scheduled_action")
+        .select("id")
+        .eq("chatId", workflow.chatId)
+        .contains("config", { workflowId: workflowId });
+      
+      if (scheduledActions && scheduledActions.length > 0) {
+        await db
+          .from("ai_scheduled_action")
+          .delete()
+          .eq("id", scheduledActions[0].id);
+        
+        console.log(`[Workflows] Deleted scheduled action for workflow "${workflow.name}"`);
+      }
     }
 
     const { error } = await db.from("ai_workflow").delete().eq("id", workflowId);

@@ -1141,25 +1141,6 @@ const GroupSettingsScreen = () => {
     setNewPrompt("");
   };
 
-  // Fetch all users for member list
-  const { data: allMessages } = useQuery({
-    queryKey: ["messages"],
-    queryFn: () => api.get<any[]>("/api/messages"),
-  });
-
-  // Extract unique users from messages
-  const uniqueUsers = React.useMemo(() => {
-    if (!allMessages) return [];
-    const userMap = new Map();
-    allMessages.forEach((msg) => {
-      // Filter out AI messages (userId is null for AI messages)
-      if (msg.user && msg.userId !== null) {
-        userMap.set(msg.userId, msg.user);
-      }
-    });
-    return Array.from(userMap.values());
-  }, [allMessages]);
-
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: "center", alignItems: "center" }}>
