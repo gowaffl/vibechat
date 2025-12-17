@@ -65,28 +65,24 @@ const TRIGGER_TYPES = [
     label: "Keyword Trigger",
     description: 'When someone says specific words (e.g., "meeting")',
     icon: Hash,
-    color: "#FF9F0A",
   },
   {
     id: "ai_mention",
     label: "@AI Mention",
     description: "When someone mentions @AI with a command",
     icon: AtSign,
-    color: "#007AFF",
   },
   {
     id: "scheduled",
     label: "Scheduled",
     description: "Run at specific times (daily, weekly)",
     icon: Clock,
-    color: "#AF52DE",
   },
   {
     id: "message_pattern",
     label: "Message Pattern",
     description: "Match messages with regex patterns",
     icon: MessageSquare,
-    color: "#34C759",
   },
 ];
 
@@ -96,35 +92,30 @@ const ACTION_TYPES = [
     label: "Create Event",
     description: "Automatically create a calendar event",
     icon: Calendar,
-    color: "#FF453A",
   },
   {
     id: "create_poll",
     label: "Create Poll",
     description: "Start a poll based on the message",
     icon: ListTodo,
-    color: "#FFD60A",
   },
   {
     id: "send_message",
     label: "Send Message",
     description: "Send an automated response",
     icon: Send,
-    color: "#34C759",
   },
   {
     id: "ai_response",
     label: "AI Response",
     description: "Let AI respond with custom prompt",
     icon: Zap,
-    color: "#007AFF",
   },
   {
     id: "summarize",
     label: "Summarize Chat",
     description: "Generate a summary of recent messages",
     icon: MessageSquare,
-    color: "#AF52DE",
   },
 ];
 
@@ -293,17 +284,17 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                 {
                   backgroundColor: isSelected
                     ? isDark
-                      ? `${trigger.color}20`
-                      : `${trigger.color}10`
+                      ? `${colors.primary}26`
+                      : `${colors.primary}1A`
                     : isDark
                     ? "rgba(255,255,255,0.05)"
                     : "rgba(0,0,0,0.03)",
-                  borderColor: isSelected ? trigger.color : "transparent",
+                  borderColor: isSelected ? colors.primary : "transparent",
                 },
               ]}
             >
-              <View style={[styles.optionIcon, { backgroundColor: `${trigger.color}20` }]}>
-                <Icon size={22} color={trigger.color} />
+              <View style={[styles.optionIcon, { backgroundColor: `${colors.primary}${isDark ? '26' : '1A'}` }]}>
+                <Icon size={22} color={colors.primary} />
               </View>
               <View style={styles.optionInfo}>
                 <Text style={[styles.optionLabel, { color: colors.text }]}>{trigger.label}</Text>
@@ -312,7 +303,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                 </Text>
               </View>
               {isSelected && (
-                <View style={[styles.checkmark, { backgroundColor: trigger.color }]}>
+                <View style={[styles.checkmark, { backgroundColor: colors.primary }]}>
                   <Check size={14} color="#fff" />
                 </View>
               )}
@@ -350,17 +341,17 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                 {
                   backgroundColor: isSelected
                     ? isDark
-                      ? `${action.color}20`
-                      : `${action.color}10`
+                      ? `${colors.primary}26`
+                      : `${colors.primary}1A`
                     : isDark
                     ? "rgba(255,255,255,0.05)"
                     : "rgba(0,0,0,0.03)",
-                  borderColor: isSelected ? action.color : "transparent",
+                  borderColor: isSelected ? colors.primary : "transparent",
                 },
               ]}
             >
-              <View style={[styles.optionIcon, { backgroundColor: `${action.color}20` }]}>
-                <Icon size={22} color={action.color} />
+              <View style={[styles.optionIcon, { backgroundColor: `${colors.primary}${isDark ? '26' : '1A'}` }]}>
+                <Icon size={22} color={colors.primary} />
               </View>
               <View style={styles.optionInfo}>
                 <Text style={[styles.optionLabel, { color: colors.text }]}>{action.label}</Text>
@@ -369,7 +360,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                 </Text>
               </View>
               {isSelected && (
-                <View style={[styles.checkmark, { backgroundColor: action.color }]}>
+                <View style={[styles.checkmark, { backgroundColor: colors.primary }]}>
                   <Check size={14} color="#fff" />
                 </View>
               )}
@@ -603,10 +594,10 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                 <View
                   style={[
                     styles.iconContainer,
-                    { backgroundColor: isDark ? "rgba(255, 159, 10, 0.2)" : "rgba(255, 159, 10, 0.1)" },
+                    { backgroundColor: `${colors.primary}${isDark ? '33' : '1A'}` },
                   ]}
                 >
-                  <Zap size={24} color="#FF9F0A" />
+                  <Zap size={24} color={colors.primary} />
                 </View>
                 <View style={styles.headerInfo}>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>
@@ -630,7 +621,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                   style={[
                     styles.progressDot,
                     {
-                      backgroundColor: s <= step ? "#FF9F0A" : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+                      backgroundColor: s <= step ? colors.primary : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
                     },
                   ]}
                 />
@@ -672,7 +663,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
                 style={[
                   styles.nextButton,
                   {
-                    backgroundColor: canProceed() && !saving ? "#FF9F0A" : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+                    backgroundColor: canProceed() && !saving ? colors.primary : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
                     flex: step === 1 ? 1 : undefined,
                   },
                 ]}

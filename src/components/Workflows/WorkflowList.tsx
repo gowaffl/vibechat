@@ -49,20 +49,20 @@ interface WorkflowListProps {
 }
 
 const TRIGGER_ICONS: Record<string, any> = {
-  keyword: { icon: Hash, color: "#FF9F0A" },
-  ai_mention: { icon: AtSign, color: "#007AFF" },
-  scheduled: { icon: Clock, color: "#AF52DE" },
-  message_pattern: { icon: MessageSquare, color: "#34C759" },
-  time_based: { icon: Clock, color: "#64D2FF" },
+  keyword: { icon: Hash },
+  ai_mention: { icon: AtSign },
+  scheduled: { icon: Clock },
+  message_pattern: { icon: MessageSquare },
+  time_based: { icon: Clock },
 };
 
 const ACTION_ICONS: Record<string, any> = {
-  create_event: { icon: Calendar, color: "#FF453A" },
-  create_poll: { icon: ListTodo, color: "#FFD60A" },
-  send_message: { icon: Send, color: "#34C759" },
-  ai_response: { icon: Zap, color: "#007AFF" },
-  summarize: { icon: MessageSquare, color: "#AF52DE" },
-  remind: { icon: Clock, color: "#FF9F0A" },
+  create_event: { icon: Calendar },
+  create_poll: { icon: ListTodo },
+  send_message: { icon: Send },
+  ai_response: { icon: Zap },
+  summarize: { icon: MessageSquare },
+  remind: { icon: Clock },
 };
 
 const WorkflowList: React.FC<WorkflowListProps> = ({
@@ -76,11 +76,11 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   const { colors, isDark } = useTheme();
 
   const getTriggerInfo = (type: string) => {
-    return TRIGGER_ICONS[type] || { icon: Zap, color: "#888" };
+    return TRIGGER_ICONS[type] || { icon: Zap };
   };
 
   const getActionInfo = (type: string) => {
-    return ACTION_ICONS[type] || { icon: Zap, color: "#888" };
+    return ACTION_ICONS[type] || { icon: Zap };
   };
 
   if (loading) {
@@ -100,10 +100,10 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
         <View
           style={[
             styles.emptyIcon,
-            { backgroundColor: isDark ? "rgba(255, 159, 10, 0.15)" : "rgba(255, 159, 10, 0.1)" },
+            { backgroundColor: `${colors.primary}${isDark ? '26' : '1A'}` },
           ]}
         >
-          <Zap size={32} color="#FF9F0A" />
+          <Zap size={32} color={colors.primary} />
         </View>
         <Text style={[styles.emptyTitle, { color: colors.text }]}>No Workflows Yet</Text>
         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -111,7 +111,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
         </Text>
         <TouchableOpacity
           onPress={onCreateNew}
-          style={[styles.createButton, { backgroundColor: "#FF9F0A" }]}
+          style={[styles.createButton, { backgroundColor: colors.primary }]}
         >
           <Zap size={18} color="#fff" />
           <Text style={styles.createButtonText}>Create Workflow</Text>
@@ -136,30 +136,26 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
             style={[
               styles.workflowCard,
               {
-                backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+                backgroundColor: colors.glassBackground,
                 borderColor: workflow.isEnabled
-                  ? isDark
-                    ? "rgba(255, 159, 10, 0.3)"
-                    : "rgba(255, 159, 10, 0.2)"
-                  : isDark
-                  ? colors.glassBorder
-                  : "rgba(0, 0, 0, 0.06)",
+                  ? `${colors.primary}${isDark ? '4D' : '33'}`
+                  : colors.glassBorder,
                 opacity: workflow.isEnabled ? 1 : 0.7,
               },
             ]}
           >
             <View style={styles.workflowHeader}>
               {/* Trigger Icon */}
-              <View style={[styles.iconBadge, { backgroundColor: `${triggerInfo.color}20` }]}>
-                <TriggerIcon size={18} color={triggerInfo.color} />
+              <View style={[styles.iconBadge, { backgroundColor: `${colors.primary}${isDark ? '26' : '1A'}` }]}>
+                <TriggerIcon size={18} color={colors.primary} />
               </View>
 
               {/* Arrow */}
               <ChevronRight size={16} color={colors.textTertiary} />
 
               {/* Action Icon */}
-              <View style={[styles.iconBadge, { backgroundColor: `${actionInfo.color}20` }]}>
-                <ActionIcon size={18} color={actionInfo.color} />
+              <View style={[styles.iconBadge, { backgroundColor: `${colors.primary}${isDark ? '33' : '26'}` }]}>
+                <ActionIcon size={18} color={colors.primary} />
               </View>
 
               {/* Name & Toggle */}
@@ -189,19 +185,20 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
                 }}
                 trackColor={{
                   false: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-                  true: "#FF9F0A50",
+                  true: `${colors.primary}80`,
                 }}
-                thumbColor={workflow.isEnabled ? "#FF9F0A" : isDark ? "#888" : "#ccc"}
+                thumbColor={workflow.isEnabled ? colors.primary : isDark ? "#888" : "#ccc"}
+                ios_backgroundColor={isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}
               />
             </View>
 
             {/* Actions */}
-            <View style={styles.workflowActions}>
+            <View style={[styles.workflowActions, { borderTopColor: colors.glassBorder }]}>
               <TouchableOpacity
                 onPress={() => onEdit(workflow)}
                 style={[
                   styles.actionButton,
-                  { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" },
+                  { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
                 ]}
               >
                 <Edit2 size={14} color={colors.textSecondary} />
@@ -215,11 +212,11 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
                 }}
                 style={[
                   styles.actionButton,
-                  { backgroundColor: "rgba(239, 68, 68, 0.1)" },
+                  { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
                 ]}
               >
-                <Trash2 size={14} color="#EF4444" />
-                <Text style={[styles.actionText, { color: "#EF4444" }]}>Delete</Text>
+                <Trash2 size={14} color={colors.textSecondary} />
+                <Text style={[styles.actionText, { color: colors.textSecondary }]}>Delete</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -232,12 +229,12 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
         style={[
           styles.addButton,
           {
-            backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-            borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)",
+            backgroundColor: colors.glassBackground,
+            borderColor: `${colors.primary}${isDark ? '4D' : '33'}`,
           },
         ]}
       >
-        <Zap size={18} color="#FF9F0A" />
+        <Zap size={18} color={colors.primary} />
         <Text style={[styles.addButtonText, { color: colors.text }]}>Add Workflow</Text>
       </TouchableOpacity>
     </View>
@@ -328,7 +325,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
   },
   actionButton: {
     flexDirection: "row",

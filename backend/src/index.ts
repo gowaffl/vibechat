@@ -75,6 +75,7 @@ import { startAvatarCron } from "./services/avatar-cron";
 import { startAIEngagementService } from "./services/ai-engagement";
 // AI Workflow Automation
 import workflowsRouter from "./routes/workflows";
+import { startWorkflowService } from "./services/ai-workflows";
 import { startWorkflowScheduler } from "./services/workflow-scheduler";
 // Community Marketplace
 import communityRouter from "./routes/community";
@@ -228,6 +229,9 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
   // Start AI engagement polling service
   startAIEngagementService();
   
-  // Start AI Workflow Scheduler
+  // Start AI Workflow Services
+  console.log("🔄 Starting AI Workflow trigger service...");
+  startWorkflowService();
+  console.log("⏰ Starting AI Workflow scheduler service...");
   startWorkflowScheduler();
 });

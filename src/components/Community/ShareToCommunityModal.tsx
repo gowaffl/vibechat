@@ -21,8 +21,8 @@ import {
 import { BlurView } from "expo-blur";
 import {
   X,
-  Bot,
-  Terminal,
+  Sparkles,
+  Zap,
   Globe,
   Tag,
   FileText,
@@ -96,8 +96,8 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
 
       const endpoint =
         itemType === "ai_friend"
-          ? "/api/community/ai-friends/share"
-          : "/api/community/commands/share";
+          ? "/api/community/personas"
+          : "/api/community/commands";
 
       const payload =
         itemType === "ai_friend"
@@ -239,9 +239,9 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
                     ]}
                   >
                     {isPersona ? (
-                      <Bot size={20} color="#34C759" />
+                      <Sparkles size={20} color="#34C759" />
                     ) : (
-                      <Terminal size={20} color="#AF52DE" />
+                      <Zap size={20} color="#AF52DE" />
                     )}
                   </View>
                   <View style={styles.previewInfo}>

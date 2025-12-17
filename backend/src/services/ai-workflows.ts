@@ -793,3 +793,51 @@ export async function getWorkflowExecutions(
   return data || [];
 }
 
+// ==========================================
+// Workflow Service Initialization
+// ==========================================
+
+/**
+ * Start the workflow service that listens to new messages
+ * and triggers workflows based on their trigger conditions
+ */
+export function startWorkflowService() {
+  console.log("[AI Workflows] 🚀 Starting workflow service...");
+  
+  // Subscribe to new messages via Supabase Realtime
+  const channel = db.channel("workflow-triggers")
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "message",
+      },
+      async (payload) => {
+        const message = payload.new as any;
+        
+        console.log(`[AI Workflows] 📩 New message detected: "${message.content?.substring(0, 50)}..." in chat ${message.chatId}`);
+        
+        try {
+          await processMessageForWorkflows(
+            message.chatId,
+            message.id,
+            message.content || "",
+            message.userId
+          );
+        } catch (error) {
+          console.error("[AI Workflows] ❌ Error processing message for workflows:", error);
+        }
+      }
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        console.log("[AI Workflows] ✅ Successfully subscribed to message events");
+      } else if (status === "CHANNEL_ERROR") {
+        console.error("[AI Workflows] ❌ Failed to subscribe to message events");
+      }
+    });
+  
+  console.log("[AI Workflows] 🎯 Workflow service initialized and listening for messages");
+}
+

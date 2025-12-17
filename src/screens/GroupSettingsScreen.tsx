@@ -67,7 +67,8 @@ import type {
 const DraggableSlider: React.FC<{
   value: number;
   onValueChange: (value: number) => void;
-}> = ({ value, onValueChange }) => {
+  colors: any;
+}> = ({ value, onValueChange, colors }) => {
   const [isDragging, setIsDragging] = React.useState(false);
   const sliderRef = React.useRef<View>(null);
   // Cache layout measurements during drag
@@ -687,24 +688,48 @@ const GroupSettingsScreen = () => {
     },
   });
 
-  // Toggle workflow mutation
+  // Toggle workflow mutation with optimistic updates
   const toggleWorkflowMutation = useMutation({
     mutationFn: ({ id, isEnabled }: { id: string; isEnabled: boolean }) =>
-      api.patch(`/api/workflows/${id}`, { isEnabled }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      api.patch(`/api/workflows/${id}`, { isEnabled, userId: user?.id }),
+    onMutate: async ({ id, isEnabled }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["workflows", chatId] });
+
+      // Snapshot the previous value
+      const previousWorkflows = queryClient.getQueryData(["workflows", chatId]);
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(["workflows", chatId], (old: any[] = []) =>
+        old.map((workflow) =>
+          workflow.id === id ? { ...workflow, isEnabled } : workflow
+        )
+      );
+
+      // Return context with the snapshot
+      return { previousWorkflows };
     },
-    onError: (error: any) => {
+    onError: (error: any, variables, context) => {
+      // Rollback to the previous value on error
+      if (context?.previousWorkflows) {
+        queryClient.setQueryData(["workflows", chatId], context.previousWorkflows);
+      }
       console.error("[Workflows] Failed to toggle workflow:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", "Failed to update workflow");
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure sync
+      queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
     },
   });
 
   // Delete workflow mutation
   const deleteWorkflowMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/workflows/${id}`),
+    mutationFn: (id: string) => api.delete(`/api/workflows/${id}?userId=${user?.id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1860,6 +1885,7 @@ const GroupSettingsScreen = () => {
                     <DraggableSlider
                       value={aiEngagementPercent}
                       onValueChange={handleUpdateEngagementPercent}
+                      colors={colors}
                     />
 
                     {/* Percentage buttons */}
@@ -1986,10 +2012,10 @@ const GroupSettingsScreen = () => {
             <View
               className="rounded-2xl p-5 mb-4"
               style={{
-                backgroundColor: colors.info + "1A",
+                backgroundColor: colors.primary + "1A",
                 borderWidth: 1,
-                borderColor: colors.info + "4D",
-                shadowColor: colors.info,
+                borderColor: colors.primary + "4D",
+                shadowColor: colors.primary,
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.3,
                 shadowRadius: 8,
@@ -1998,8 +2024,8 @@ const GroupSettingsScreen = () => {
             >
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center">
-                  <Wand2 size={18} color={colors.info} />
-                  <Text className="text-sm font-semibold ml-2" style={{ color: colors.info }}>
+                  <Wand2 size={18} color={colors.primary} />
+                  <Text className="text-sm font-semibold ml-2" style={{ color: colors.primary }}>
                     AI WORKFLOWS
                   </Text>
                 </View>
@@ -2013,14 +2039,14 @@ const GroupSettingsScreen = () => {
                   >
                     <View
                       style={{
-                        backgroundColor: `${colors.info}26`,
+                        backgroundColor: `${colors.primary}26`,
                         padding: 8,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: colors.info + "4D",
+                        borderColor: colors.primary + "4D",
                       }}
                     >
-                      <Plus size={16} color={colors.info} />
+                      <Plus size={16} color={colors.primary} />
                     </View>
                   </Pressable>
                 )}
@@ -3505,7 +3531,7 @@ const GroupSettingsScreen = () => {
             setEditingWorkflowId(null);
           }}
           chatId={chatId}
-          workflowId={editingWorkflowId}
+          workflow={editingWorkflowId ? workflows.find((w) => w.id === editingWorkflowId) : null}
           onSuccess={() => {
             setShowWorkflowBuilder(false);
             setEditingWorkflowId(null);
