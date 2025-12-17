@@ -289,7 +289,7 @@ export const searchMessagesRequestSchema = z.object({
   // Filters
   chatId: z.string().optional(),
   fromUserId: z.string().optional(),
-  messageTypes: z.array(z.enum(["text", "image", "voice", "video", "poll", "event"])).optional(),
+  messageTypes: z.array(z.enum(["text", "image", "voice", "video", "poll", "event", "link"])).optional(),
   dateFrom: z.string().optional(), // ISO date
   dateTo: z.string().optional(),
   // Pagination

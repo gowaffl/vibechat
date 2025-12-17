@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, Bell, BellOff } from "lucide-react-native";
+import { Camera, Upload, Users, X, Trash2, Sparkles, Wand2, Plus, Edit2, Zap, UserPlus, Link2, Copy, Share2, Check, Images, ExternalLink, Bell, BellOff, Globe } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -41,6 +41,7 @@ import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
 import { FullscreenVideoModal } from "@/components/FullscreenVideoModal";
+import { ShareToCommunityModal } from "@/components/Community";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type {
   Chat,
@@ -211,6 +212,10 @@ const GroupSettingsScreen = () => {
   const [aiName, setAiName] = useState("");
   const [aiEngagementMode, setAiEngagementMode] = useState<"on-call" | "percentage" | "off">("on-call");
   const [aiEngagementPercent, setAiEngagementPercent] = useState<number>(50);
+
+  // Share to Community state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [itemToShare, setItemToShare] = useState<{ type: "ai_friend" | "command"; data: any } | null>(null);
 
   // Available tone chips
   const toneOptions = [
@@ -1864,6 +1869,41 @@ const GroupSettingsScreen = () => {
                 </View>
               )}
 
+              {/* Share to Community Button */}
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  const selectedFriend = aiFriends.find(f => f.id === selectedAiFriendId);
+                  if (selectedFriend) {
+                    setItemToShare({ type: "ai_friend", data: selectedFriend });
+                    setShowShareModal(true);
+                  }
+                }}
+                style={{
+                  marginTop: 16,
+                  padding: 14,
+                  borderRadius: 12,
+                  backgroundColor: "rgba(0, 122, 255, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "#007AFF",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Globe size={16} color="#007AFF" />
+                <Text
+                  style={{
+                    color: "#007AFF",
+                    fontSize: 15,
+                    fontWeight: "600",
+                    marginLeft: 8,
+                  }}
+                >
+                  Share to Community
+                </Text>
+              </Pressable>
+
               {/* Delete AI Friend Button - Only show if 2+ friends */}
               {aiFriends.length > 1 && (
                 <Pressable
@@ -1872,7 +1912,7 @@ const GroupSettingsScreen = () => {
                     handleDeleteAIFriend(selectedAiFriendId);
                   }}
                   style={{
-                    marginTop: 16,
+                    marginTop: 8,
                     padding: 14,
                     borderRadius: 12,
                     backgroundColor: "rgba(255, 69, 58, 0.1)",
@@ -2126,6 +2166,15 @@ const GroupSettingsScreen = () => {
                           {cmd.command}
                         </Text>
                         <View className="flex-row gap-2">
+                          <Pressable
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setItemToShare({ type: "command", data: cmd });
+                              setShowShareModal(true);
+                            }}
+                          >
+                            <Globe size={16} color="#007AFF" />
+                          </Pressable>
                           {canEdit && (
                             <>
                               <Pressable
@@ -3301,6 +3350,27 @@ const GroupSettingsScreen = () => {
               setTimeout(() => {
                 setShowPhotoGallery(true);
               }, 100);
+            }}
+          />
+        )}
+
+        {/* Share to Community Modal */}
+        {itemToShare && (
+          <ShareToCommunityModal
+            visible={showShareModal}
+            onClose={() => {
+              setShowShareModal(false);
+              setItemToShare(null);
+            }}
+            item={itemToShare.data}
+            itemType={itemToShare.type}
+            onSuccess={() => {
+              Alert.alert(
+                "Success",
+                `Your ${itemToShare.type === "ai_friend" ? "AI Friend" : "custom command"} has been shared to the community!`
+              );
+              setShowShareModal(false);
+              setItemToShare(null);
             }}
           />
         )}

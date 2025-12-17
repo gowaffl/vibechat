@@ -103,14 +103,16 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
       try {
         const queryEmbedding = await generateEmbedding(query);
         
-        // RPC filters: filter_user_id, filter_chat_ids
-        // We can pass fromUserId if set, otherwise null
+        // RPC filters: filter_user_id, filter_chat_ids, filter_message_types, filter_date_from, filter_date_to
         const { data: matches, error: matchError } = await db.rpc("match_messages", {
           query_embedding: queryEmbedding,
-          match_threshold: 0.3, // Lower threshold for recall
-          match_count: limit * 2, // Fetch more than limit to allow for post-filtering
+          match_threshold: 0.3,
+          match_count: limit * 2,
           filter_user_id: fromUserId || null,
           filter_chat_ids: targetChatIds,
+          filter_message_types: messageTypes || null,
+          filter_date_from: dateFrom || null,
+          filter_date_to: dateTo || null,
         });
 
         if (matchError) {
@@ -139,14 +141,37 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
       if (fromUserId) textQuery = textQuery.eq("userId", fromUserId);
       if (dateFrom) textQuery = textQuery.gte("createdAt", dateFrom);
       if (dateTo) textQuery = textQuery.lte("createdAt", dateTo);
+
+      // Message Type Filter (Enhanced for "link")
       if (messageTypes && messageTypes.length > 0) {
-        textQuery = textQuery.in("messageType", messageTypes);
+        const dbTypes = messageTypes.filter(t => t !== "link");
+        const hasLink = messageTypes.includes("link");
+
+        if (hasLink) {
+          if (dbTypes.length > 0) {
+             // (messageType IN types) OR (linkPreviewUrl IS NOT NULL)
+             textQuery = textQuery.or(`messageType.in.(${dbTypes.join(',')}),linkPreviewUrl.not.is.null`);
+          } else {
+             // Only links
+             textQuery = textQuery.not("linkPreviewUrl", "is", null);
+          }
+        } else if (dbTypes.length > 0) {
+           // Standard types only
+           textQuery = textQuery.in("messageType", dbTypes);
+        }
       }
 
       // OR logic for fields: content, voiceTranscription, imageDescription
-      const sanitizedQuery = query.replace(/[^\w\s]/g, "").trim(); 
-      if (sanitizedQuery) {
-        textQuery = textQuery.or(`content.ilike.%${sanitizedQuery}%,voiceTranscription.ilike.%${sanitizedQuery}%,imageDescription.ilike.%${sanitizedQuery}%`);
+      // We use the raw query for ilike to match exact phrases if possible, but sanitize for safety
+      if (query.length > 0) {
+        // Use the raw query but escape special chars if needed?
+        // Actually, Supabase handle param binding, but for .or() string we need to be careful.
+        // Let's strip special chars that break the .or() syntax (comma, parens)
+        // But we want to allow spaces.
+        const safeQuery = query.replace(/[,()]/g, ""); 
+        if (safeQuery) {
+           textQuery = textQuery.or(`content.ilike.%${safeQuery}%,voiceTranscription.ilike.%${safeQuery}%,imageDescription.ilike.%${safeQuery}%`);
+        }
       }
 
       const { data: textMatches, error: searchError } = await textQuery
@@ -204,9 +229,23 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
     const decryptedMessages = await decryptMessages(messages || []);
     
     let validResults = decryptedMessages.filter((msg: any) => {
+      // Re-apply filters in memory to be safe (especially for complex OR logic vs semantic results)
       if (messageTypes && messageTypes.length > 0) {
-        if (!messageTypes.includes(msg.messageType)) return false;
+         const hasLink = messageTypes.includes("link");
+         const dbTypes = messageTypes.filter(t => t !== "link");
+         
+         const isLink = !!msg.linkPreviewUrl;
+         const isTypeMatch = dbTypes.includes(msg.messageType);
+         
+         if (hasLink && dbTypes.length > 0) {
+            if (!isLink && !isTypeMatch) return false;
+         } else if (hasLink) {
+            if (!isLink) return false;
+         } else if (dbTypes.length > 0) {
+            if (!isTypeMatch) return false;
+         }
       }
+
       if (dateFrom && new Date(msg.createdAt) < new Date(dateFrom)) return false;
       if (dateTo && new Date(msg.createdAt) > new Date(dateTo)) return false;
       if (fromUserId && msg.userId !== fromUserId) return false;
@@ -2117,6 +2156,65 @@ messages.delete("/:id", async (c) => {
   } catch (error) {
     console.error("Error deleting message:", error);
     return c.json({ error: "Failed to delete message" }, 500);
+  }
+});
+
+// POST /api/messages/backfill-embeddings - Backfill missing embeddings
+messages.post("/backfill-embeddings", async (c) => {
+  try {
+    const limit = 50; // Process in small batches
+    
+    // Find messages without embeddings
+    const { data: messages, error } = await db
+      .from("message")
+      .select("id, content")
+      .is("embedding", null)
+      .eq("messageType", "text") // Only text messages need embeddings for now
+      .neq("content", "") // Skip empty messages
+      .limit(limit);
+
+    if (error) {
+      console.error("[Messages] Error finding messages for backfill:", error);
+      return c.json({ error: "Database error" }, 500);
+    }
+
+    if (!messages || messages.length === 0) {
+      return c.json({ message: "No messages need backfilling", count: 0 });
+    }
+
+    console.log(`🧠 [Backfill] Processing ${messages.length} messages...`);
+    
+    let successCount = 0;
+    
+    // Decrypt and process
+    const decryptedMessages = await decryptMessages(messages);
+    
+    for (const msg of decryptedMessages) {
+      try {
+        if (!msg.content || msg.content.trim().length === 0) continue;
+        
+        const embedding = await generateEmbedding(msg.content);
+        
+        await db
+          .from("message")
+          .update({ embedding })
+          .eq("id", msg.id);
+          
+        successCount++;
+      } catch (err) {
+        console.error(`❌ [Backfill] Failed for message ${msg.id}:`, err);
+      }
+    }
+
+    return c.json({ 
+      message: `Successfully processed ${successCount} messages`, 
+      count: successCount,
+      remaining: messages.length === limit // Likely more if we hit limit
+    });
+    
+  } catch (error) {
+    console.error("[Messages] Backfill error:", error);
+    return c.json({ error: "Internal server error" }, 500);
   }
 });
 

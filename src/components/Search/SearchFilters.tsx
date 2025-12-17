@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -6,6 +6,7 @@ import { useSearchStore, SearchMode } from '@/stores/searchStore';
 import { Calendar, User, FileText, X, Check, Brain, Search as SearchIcon } from 'lucide-react-native';
 import clsx from 'clsx';
 import * as Haptics from 'expo-haptics';
+import { SearchFilterSheet } from './SearchFilterSheet';
 
 export const SearchFilters = () => {
   const { colors, isDark } = useTheme();
@@ -16,6 +17,8 @@ export const SearchFilters = () => {
     setSearchMode, 
     clearFilters 
   } = useSearchStore();
+
+  const [activeSheet, setActiveSheet] = useState<'date' | 'type' | 'user' | null>(null);
 
   const activeFiltersCount = Object.keys(filters).length;
 
@@ -29,7 +32,7 @@ export const SearchFilters = () => {
   const ModeIcon = useMemo(() => {
     switch (searchMode) {
       case 'hybrid': return Brain;
-      case 'semantic': return Brain; // Maybe a different icon?
+      case 'semantic': return Brain;
       case 'text': return SearchIcon;
     }
   }, [searchMode]);
@@ -41,6 +44,10 @@ export const SearchFilters = () => {
       case 'text': return 'Text Only';
     }
   }, [searchMode]);
+
+  const handleApplyFilter = (data: any) => {
+    setFilters(data);
+  };
 
   return (
     <View style={styles.container}>
@@ -82,7 +89,7 @@ export const SearchFilters = () => {
           ]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            // TODO: Open Date Picker Sheet
+            setActiveSheet('date');
           }}
         >
           <Calendar size={14} color={(filters.dateFrom || filters.dateTo) ? '#FFF' : colors.text} />
@@ -113,7 +120,7 @@ export const SearchFilters = () => {
           ]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            // TODO: Open Type Picker Sheet
+            setActiveSheet('type');
           }}
         >
           <FileText size={14} color={filters.messageTypes?.length ? '#FFF' : colors.text} />
@@ -144,7 +151,7 @@ export const SearchFilters = () => {
           ]}
            onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            // TODO: Open User Picker Sheet
+            setActiveSheet('user');
           }}
         >
           <User size={14} color={filters.fromUserId ? '#FFF' : colors.text} />
@@ -178,6 +185,15 @@ export const SearchFilters = () => {
         )}
 
       </ScrollView>
+
+      {/* Filter Sheet */}
+      <SearchFilterSheet
+        visible={!!activeSheet}
+        type={activeSheet}
+        onClose={() => setActiveSheet(null)}
+        onApply={handleApplyFilter}
+        initialValue={filters}
+      />
     </View>
   );
 };

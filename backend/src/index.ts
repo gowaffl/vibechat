@@ -73,6 +73,13 @@ import webhooksRouter from "./routes/webhooks";
 import authRouter from "./routes/auth";
 import { startAvatarCron } from "./services/avatar-cron";
 import { startAIEngagementService } from "./services/ai-engagement";
+// AI Workflow Automation
+import workflowsRouter from "./routes/workflows";
+import { startWorkflowScheduler } from "./services/workflow-scheduler";
+// Community Marketplace
+import communityRouter from "./routes/community";
+// AI-Native Communication
+import aiNativeRouter from "./routes/ai-native";
 
 const app = new Hono();
 
@@ -153,6 +160,18 @@ app.route("/api/voice-rooms", voiceRoomsRouter);
 console.log("🔔 Mounting webhooks routes at /api/webhooks");
 app.route("/api/webhooks", webhooksRouter);
 
+// AI Workflow Automation
+console.log("🔄 Mounting workflows routes at /api/workflows");
+app.route("/api/workflows", workflowsRouter);
+
+// Community Marketplace
+console.log("🌐 Mounting community routes at /api/community");
+app.route("/api/community", communityRouter);
+
+// AI-Native Communication
+console.log("🌍 Mounting AI-native routes at /api/ai-native");
+app.route("/api/ai-native", aiNativeRouter);
+
 // console.log("🔔 Mounting notifications routes at /api");
 // app.route("/api", notificationsRouter); // Moved to chats router
 
@@ -195,6 +214,10 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
   console.log("  📊 Polls:    GET/POST/PATCH/DELETE /api/polls");
   console.log("  🎙️  Vibe Call: GET/POST /api/voice-rooms");
   console.log("  🔔 Webhooks: POST /api/webhooks/livekit");
+  console.log("\n  🤖 AI Mega Features:");
+  console.log("  🔄 Workflows: GET/POST/PATCH/DELETE /api/workflows");
+  console.log("  🌐 Community: GET/POST /api/community");
+  console.log("  🌍 AI-Native: POST /api/ai-native/translate|adjust-tone|context-card");
   console.log("\n  💚 Health:   GET /health");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
@@ -204,4 +227,7 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
 
   // Start AI engagement polling service
   startAIEngagementService();
+  
+  // Start AI Workflow Scheduler
+  startWorkflowScheduler();
 });

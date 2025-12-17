@@ -10,6 +10,7 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -846,6 +847,10 @@ const ChatListScreen = () => {
       </View>
 
       {/* Chat List or Search Results */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       {isSearchActive ? (
         // Search Mode
         isSearching && !searchData ? (
@@ -877,6 +882,8 @@ const ChatListScreen = () => {
             keyExtractor={(item) => item.message.id}
             estimatedItemSize={100}
             renderItem={renderSearchResult}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
               paddingTop: insets.top + 100,
               paddingBottom: insets.bottom + 100,
@@ -931,6 +938,8 @@ const ChatListScreen = () => {
             keyExtractor={(item) => item.id}
             estimatedItemSize={100}
             drawDistance={300}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <ChatItem 
                 item={item} 
@@ -978,8 +987,9 @@ const ChatListScreen = () => {
             }
           />
       )
-    )
+      )
       }
+      </KeyboardAvoidingView>
 
       {/* FAB */}
       <CreateChatFAB />
