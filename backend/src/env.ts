@@ -42,6 +42,13 @@ const envSchema = z.object({
   LIVEKIT_API_KEY: z.string().optional().default("devkey"),
   LIVEKIT_API_SECRET: z.string().optional().default("secret"),
   LIVEKIT_URL: z.string().optional().default("ws://localhost:7880"),
+  LIVEKIT_WEBHOOK_SECRET: z.string().optional(), // For verifying webhook signatures
+  
+  // Supabase S3 Configuration (for LiveKit Egress recordings)
+  SUPABASE_S3_ENDPOINT: z.string().optional(), // e.g., https://<project-ref>.supabase.co/storage/v1/s3
+  SUPABASE_S3_ACCESS_KEY: z.string().optional(),
+  SUPABASE_S3_SECRET_KEY: z.string().optional(),
+  SUPABASE_S3_BUCKET: z.string().optional().default("vibe-call-recordings"),
 });
 
 /**

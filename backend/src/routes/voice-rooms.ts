@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db";
 import { env } from "../env";
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, EgressClient, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
 import {
   joinVoiceRoomRequestSchema,
   leaveVoiceRoomRequestSchema,
@@ -13,6 +13,93 @@ import {
 import type { AppType } from "../index";
 
 const app = new Hono<AppType>();
+
+// Initialize Egress client for recording control
+let egressClient: EgressClient | null = null;
+
+function getEgressClient(): EgressClient | null {
+  if (!egressClient && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET && env.LIVEKIT_URL) {
+    // Convert ws:// to https:// for API calls
+    const httpUrl = env.LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://");
+    egressClient = new EgressClient(httpUrl, env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+  }
+  return egressClient;
+}
+
+/**
+ * Start recording a room using LiveKit Egress
+ * Records audio-only to save bandwidth and storage
+ */
+async function startRoomRecording(roomName: string): Promise<string | null> {
+  const client = getEgressClient();
+  
+  if (!client) {
+    console.log("[VoiceRooms] Egress client not available - recording disabled");
+    return null;
+  }
+  
+  // Check if S3 credentials are configured
+  if (!env.SUPABASE_S3_ENDPOINT || !env.SUPABASE_S3_ACCESS_KEY || !env.SUPABASE_S3_SECRET_KEY) {
+    console.log("[VoiceRooms] S3 credentials not configured - recording disabled");
+    return null;
+  }
+  
+  try {
+    console.log(`[VoiceRooms] Starting recording for room: ${roomName}`);
+    
+    // Configure S3 output (Supabase Storage)
+    const s3Config = new S3Upload({
+      accessKey: env.SUPABASE_S3_ACCESS_KEY,
+      secret: env.SUPABASE_S3_SECRET_KEY,
+      bucket: env.SUPABASE_S3_BUCKET || "vibe-call-recordings",
+      endpoint: env.SUPABASE_S3_ENDPOINT,
+      forcePathStyle: true, // Required for Supabase S3
+    });
+    
+    const fileOutput = new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
+      filepath: `${roomName}/{time}.mp4`,
+      output: {
+        case: "s3",
+        value: s3Config,
+      },
+    });
+    
+    // Start room composite egress (audio only)
+    // Using the new RoomCompositeOptions API
+    const egress = await client.startRoomCompositeEgress(
+      roomName,
+      { file: fileOutput },
+      { audioOnly: true }
+    );
+    
+    console.log(`[VoiceRooms] Recording started, egress ID: ${egress.egressId}`);
+    return egress.egressId;
+    
+  } catch (error) {
+    console.error("[VoiceRooms] Failed to start recording:", error);
+    return null;
+  }
+}
+
+/**
+ * Stop recording a room
+ */
+async function stopRoomRecording(egressId: string): Promise<void> {
+  const client = getEgressClient();
+  
+  if (!client || !egressId) {
+    return;
+  }
+  
+  try {
+    console.log(`[VoiceRooms] Stopping recording, egress ID: ${egressId}`);
+    await client.stopEgress(egressId);
+    console.log(`[VoiceRooms] Recording stopped`);
+  } catch (error) {
+    console.error("[VoiceRooms] Failed to stop recording:", error);
+  }
+}
 
 // GET /api/voice-rooms/:chatId/active - Get active Vibe Call for a chat
 app.get("/:chatId/active", async (c) => {
@@ -125,6 +212,21 @@ app.post("/join", async (c) => {
         return c.json({ error: "Failed to create Vibe Call" }, 500);
       }
       activeRoom = newRoom;
+      
+      // Start recording for the new room (async, don't block)
+      startRoomRecording(newRoom.id).then((egressId) => {
+        if (egressId) {
+          // Store egress ID in room metadata for later reference
+          db.from("voice_room")
+            .update({ liveKitRoomId: egressId }) // Reuse liveKitRoomId to store egress ID
+            .eq("id", newRoom.id)
+            .then(() => {
+              console.log(`✅ [VoiceRooms] Egress ID stored for room ${newRoom.id}`);
+            });
+        }
+      }).catch((err) => {
+        console.error("[VoiceRooms] Failed to start recording:", err);
+      });
     }
 
     // Add user as participant (if not already)
@@ -229,8 +331,22 @@ app.post("/leave", async (c) => {
       .eq("voiceRoomId", voiceRoomId)
       .is("leftAt", null);
 
-    // If empty, close the room
+    // If empty, close the room and stop recording
     if (count === 0) {
+      // Get the room to check for egress ID
+      const { data: room } = await db
+        .from("voice_room")
+        .select("liveKitRoomId")
+        .eq("id", voiceRoomId)
+        .single();
+      
+      // Stop recording if active
+      if (room?.liveKitRoomId) {
+        stopRoomRecording(room.liveKitRoomId).catch((err) => {
+          console.error("[VoiceRooms] Error stopping recording:", err);
+        });
+      }
+      
       await db
         .from("voice_room")
         .update({ 

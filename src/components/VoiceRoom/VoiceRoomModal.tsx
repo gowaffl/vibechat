@@ -22,7 +22,7 @@ import {
   useTracks,
   useRoomContext,
 } from "@livekit/react-native";
-import { Track } from "livekit-client";
+import { Track, ParticipantEvent } from "livekit-client";
 import { Mic, MicOff, PhoneOff, Volume2, Maximize2, Minimize2, X, ChevronDown } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
@@ -551,19 +551,12 @@ const RoomContent = ({
                                     }
                                     
                                     return (
-                                      <View 
+                                      <DockedParticipantAvatar 
                                         key={p.identity} 
-                                        className="w-10 h-10 rounded-full bg-gray-600 border-2 border-white items-center justify-center -ml-4 overflow-hidden"
-                                        style={{ zIndex: 40 - i }}
-                                      >
-                                           {imageUrl ? (
-                                              <ExpoImage source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                                           ) : (
-                                              <Text className="text-white font-bold text-xs">
-                                                  {p.name?.substring(0, 1).toUpperCase()}
-                                              </Text>
-                                           )}
-                                      </View>
+                                        participant={p}
+                                        imageUrl={imageUrl}
+                                        index={i}
+                                      />
                                     );
                                 })}
                                 
@@ -615,6 +608,33 @@ const RoomContent = ({
   );
 };
 
+// Hook to track participant audio state
+const useParticipantAudio = (participant: any) => {
+  const [isSpeaking, setIsSpeaking] = useState(participant.isSpeaking);
+  const [audioLevel, setAudioLevel] = useState(participant.audioLevel || 0);
+
+  useEffect(() => {
+    if (!participant) return;
+
+    const onSpeakingChanged = (speaking: boolean) => setIsSpeaking(speaking);
+    const onAudioLevelChanged = (level: number) => setAudioLevel(level);
+
+    participant.on(ParticipantEvent.IsSpeakingChanged, onSpeakingChanged);
+    participant.on(ParticipantEvent.AudioLevelChanged, onAudioLevelChanged);
+
+    // Initial state
+    setIsSpeaking(participant.isSpeaking);
+    setAudioLevel(participant.audioLevel);
+
+    return () => {
+      participant.off(ParticipantEvent.IsSpeakingChanged, onSpeakingChanged);
+      participant.off(ParticipantEvent.AudioLevelChanged, onAudioLevelChanged);
+    };
+  }, [participant]);
+
+  return { isSpeaking, audioLevel };
+};
+
 const ParticipantAvatar = ({
   participant,
   isLocal,
@@ -624,37 +644,34 @@ const ParticipantAvatar = ({
   isLocal: boolean;
   imageUrl?: string | null;
 }) => {
-  const isSpeaking = participant.isSpeaking;
+  const { isSpeaking, audioLevel } = useParticipantAudio(participant);
   const isMuted = !participant.isMicrophoneEnabled;
   
-  // Pulse animation for speaking
+  // Pulse animation for speaking driven by audio level
   const pulseAnim = useSharedValue(1);
   
   useEffect(() => {
       if (isSpeaking) {
-          pulseAnim.value = withRepeat(
-              withSequence(
-                  withTiming(1.15, { duration: 600 }),
-                  withTiming(1, { duration: 600 })
-              ),
-              -1,
-              true
-          );
+          // Map audio level (0-1) to scale (1.05-1.4)
+          // Use a minimum scale of 1.05 to show *some* activity even if level is low but speaking is true
+          const targetScale = 1.05 + (audioLevel * 0.4);
+          pulseAnim.value = withTiming(targetScale, { duration: 100 });
       } else {
-          pulseAnim.value = withTiming(1);
+          pulseAnim.value = withTiming(1, { duration: 200 });
       }
-  }, [isSpeaking]);
+  }, [isSpeaking, audioLevel]);
   
   const animatedStyle = useAnimatedStyle(() => ({
       transform: [{ scale: pulseAnim.value }],
+      opacity: interpolate(pulseAnim.value, [1, 1.4], [0.6, 0.2]), // Fade out as it expands
       borderColor: isSpeaking ? '#10B981' : 'transparent',
-      borderWidth: isSpeaking ? 3 : 0,
+      borderWidth: isSpeaking ? 2 : 0,
   }));
 
   return (
     <View className="items-center mx-3 mb-6">
       <View className="w-24 h-24 items-center justify-center relative">
-          {/* Pulse Ring */}
+          {/* Dynamic Pulse Ring */}
           <Animated.View 
             style={[
                 {
@@ -662,7 +679,7 @@ const ParticipantAvatar = ({
                     height: 88, 
                     borderRadius: 44, 
                     position: 'absolute',
-                    backgroundColor: isSpeaking ? 'rgba(16, 185, 129, 0.2)' : 'transparent'
+                    backgroundColor: isSpeaking ? 'rgba(16, 185, 129, 0.4)' : 'transparent'
                 },
                 animatedStyle
             ]} 
@@ -703,6 +720,35 @@ const ParticipantAvatar = ({
       <Text className="text-white font-semibold text-sm mt-2 shadow-black shadow-sm">
         {isLocal ? "You" : participant.name || "Unknown"}
       </Text>
+    </View>
+  );
+};
+
+const DockedParticipantAvatar = ({
+  participant,
+  imageUrl,
+  index
+}: {
+  participant: any;
+  imageUrl?: string | null;
+  index: number;
+}) => {
+  const { isSpeaking } = useParticipantAudio(participant);
+  
+  return (
+    <View 
+      className={`w-10 h-10 rounded-full bg-gray-600 border-2 items-center justify-center -ml-4 overflow-hidden ${
+        isSpeaking ? 'border-green-500' : 'border-white'
+      }`}
+      style={{ zIndex: 40 - index }}
+    >
+         {imageUrl ? (
+            <ExpoImage source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+         ) : (
+            <Text className="text-white font-bold text-xs">
+                {participant.name?.substring(0, 1).toUpperCase()}
+            </Text>
+         )}
     </View>
   );
 };

@@ -68,6 +68,7 @@ import reactorRouter from "./routes/reactor";
 import catchupRouter from "./routes/catchup";
 import pollsRouter from "./routes/polls";
 import voiceRoomsRouter from "./routes/voice-rooms";
+import webhooksRouter from "./routes/webhooks";
 // import notificationsRouter from "./routes/notifications"; // Moved to chats router
 import authRouter from "./routes/auth";
 import { startAvatarCron } from "./services/avatar-cron";
@@ -149,6 +150,9 @@ app.route("/api/polls", pollsRouter);
 console.log("🎙️ Mounting voice rooms routes at /api/voice-rooms");
 app.route("/api/voice-rooms", voiceRoomsRouter);
 
+console.log("🔔 Mounting webhooks routes at /api/webhooks");
+app.route("/api/webhooks", webhooksRouter);
+
 // console.log("🔔 Mounting notifications routes at /api");
 // app.route("/api", notificationsRouter); // Moved to chats router
 
@@ -189,6 +193,8 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
   console.log("  🎨 Reactor:  POST /api/reactor/*");
   console.log("  ⚡ Catch-Up: GET/POST /api/catchup");
   console.log("  📊 Polls:    GET/POST/PATCH/DELETE /api/polls");
+  console.log("  🎙️  Vibe Call: GET/POST /api/voice-rooms");
+  console.log("  🔔 Webhooks: POST /api/webhooks/livekit");
   console.log("\n  💚 Health:   GET /health");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
