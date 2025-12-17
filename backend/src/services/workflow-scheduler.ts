@@ -512,6 +512,48 @@ async function checkScheduledActions(): Promise<void> {
 // ==========================================
 
 /**
+ * Initialize any scheduled actions with null nextRunAt
+ */
+async function initializeScheduledActions(): Promise<void> {
+  console.log("[Scheduler] Initializing scheduled actions with null nextRunAt...");
+  
+  const { data: actions, error } = await db
+    .from("ai_scheduled_action")
+    .select("*")
+    .eq("isEnabled", true)
+    .is("nextRunAt", null);
+
+  if (error) {
+    console.error("[Scheduler] Error fetching uninitialized actions:", error);
+    return;
+  }
+
+  if (!actions || actions.length === 0) {
+    console.log("[Scheduler] All scheduled actions are initialized");
+    return;
+  }
+
+  console.log(`[Scheduler] Found ${actions.length} uninitialized action(s), calculating nextRunAt...`);
+
+  for (const action of actions) {
+    try {
+      const nextRun = calculateNextRunTime(action as ScheduledAction);
+      if (nextRun) {
+        await db
+          .from("ai_scheduled_action")
+          .update({ nextRunAt: nextRun.toISOString() })
+          .eq("id", action.id);
+        console.log(`[Scheduler] Initialized action ${action.id}: next run at ${nextRun.toISOString()}`);
+      } else {
+        console.warn(`[Scheduler] Could not calculate next run for action ${action.id} (schedule: ${action.schedule})`);
+      }
+    } catch (error) {
+      console.error(`[Scheduler] Error initializing action ${action.id}:`, error);
+    }
+  }
+}
+
+/**
  * Start the workflow scheduler
  */
 export function startWorkflowScheduler(): void {
@@ -522,8 +564,13 @@ export function startWorkflowScheduler(): void {
 
   console.log("[Scheduler] Starting workflow scheduler...");
   
-  // Run immediately on start
-  checkScheduledActions().catch(console.error);
+  // Initialize any actions with null nextRunAt
+  initializeScheduledActions()
+    .then(() => {
+      // Then check for due actions
+      return checkScheduledActions();
+    })
+    .catch(console.error);
   
   // Then run every minute
   schedulerInterval = setInterval(() => {
