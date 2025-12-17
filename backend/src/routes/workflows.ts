@@ -272,21 +272,49 @@ app.patch("/:id", zValidator("json", updateWorkflowSchema), async (c) => {
       .select()
       .single();
     
-    // If this is a scheduled workflow and isEnabled was toggled, update the scheduled action
-    if (updated && workflow.triggerType === "scheduled" && data.isEnabled !== undefined) {
+    // If this is a scheduled workflow, update the scheduled action
+    if (updated && workflow.triggerType === "scheduled") {
       const { data: scheduledActions } = await db
         .from("ai_scheduled_action")
-        .select("id")
+        .select("*")
         .eq("chatId", workflow.chatId)
         .contains("config", { workflowId: workflowId });
       
       if (scheduledActions && scheduledActions.length > 0) {
-        await db
-          .from("ai_scheduled_action")
-          .update({ isEnabled: data.isEnabled })
-          .eq("id", scheduledActions[0].id);
+        const scheduledAction = scheduledActions[0];
+        const scheduledUpdates: any = {};
         
-        console.log(`[Workflows] ${data.isEnabled ? 'Enabled' : 'Disabled'} scheduled action for workflow "${workflow.name}"`);
+        // Update isEnabled if changed
+        if (data.isEnabled !== undefined) {
+          scheduledUpdates.isEnabled = data.isEnabled;
+          console.log(`[Workflows] ${data.isEnabled ? 'Enabled' : 'Disabled'} scheduled action for workflow "${workflow.name}"`);
+        }
+        
+        // Update schedule if triggerConfig changed
+        if (data.triggerConfig !== undefined) {
+          const triggerConfig = data.triggerConfig as TriggerConfig;
+          let newSchedule = "";
+          
+          if (triggerConfig.time) {
+            newSchedule = `daily:${triggerConfig.time}`;
+          } else if (triggerConfig.cron) {
+            newSchedule = triggerConfig.cron;
+          }
+          
+          if (newSchedule && newSchedule !== scheduledAction.schedule) {
+            scheduledUpdates.schedule = newSchedule;
+            scheduledUpdates.nextRunAt = null; // Will be recalculated by scheduler
+            console.log(`[Workflows] Updated schedule for workflow "${workflow.name}" to ${newSchedule}`);
+          }
+        }
+        
+        // Apply updates if any
+        if (Object.keys(scheduledUpdates).length > 0) {
+          await db
+            .from("ai_scheduled_action")
+            .update(scheduledUpdates)
+            .eq("id", scheduledAction.id);
+        }
       }
     }
 
