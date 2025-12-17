@@ -1,15 +1,19 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
+import { supabaseClient } from "@/lib/authClient";
 import type {
   GetActiveVoiceRoomResponse,
   JoinVoiceRoomResponse,
   VoiceRoom,
 } from "@/shared/contracts";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useFocusEffect } from "@react-navigation/native";
 
 export const useVoiceRoom = (chatId: string) => {
   const { user } = useUser();
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  
   const [roomState, setRoomState] = useState<{
     token: string | null;
     serverUrl: string | null;
@@ -45,16 +49,100 @@ export const useVoiceRoom = (chatId: string) => {
     }
   }, [chatId, user]);
 
-  // Poll for active room status every 30 seconds or on focus
+  // Fetch on focus (initial load and when returning to screen)
   useFocusEffect(
     useCallback(() => {
       console.log('[useVoiceRoom] Focus effect triggering fetchActiveRoom');
       fetchActiveRoom();
-      // Disable polling for now to debug state issues
-      // const interval = setInterval(fetchActiveRoom, 30000);
-      // return () => clearInterval(interval);
     }, [fetchActiveRoom])
   );
+
+  // Subscribe to realtime updates for voice rooms
+  useEffect(() => {
+    if (!chatId || !user) return;
+
+    console.log(`[useVoiceRoom] Setting up realtime subscription for chat: ${chatId}`);
+
+    // Clean up existing channel
+    if (channelRef.current) {
+      supabaseClient.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    const channel = supabaseClient.channel(`voice-room:${chatId}`);
+
+    // Listen for voice room INSERT (new call started)
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'voice_room',
+        filter: `chatId=eq.${chatId}`,
+      },
+      (payload: any) => {
+        console.log('[useVoiceRoom] New voice room created:', payload.new.id);
+        fetchActiveRoom();
+      }
+    );
+
+    // Listen for voice room UPDATE (room status changed)
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'voice_room',
+        filter: `chatId=eq.${chatId}`,
+      },
+      (payload: any) => {
+        console.log('[useVoiceRoom] Voice room updated:', payload.new.id, 'isActive:', payload.new.isActive);
+        // If room became inactive, clear local state
+        if (payload.new.isActive === false && activeRoom?.id === payload.new.id) {
+          setRoomState(prev => ({ ...prev, activeRoom: null }));
+          setParticipants(0);
+        } else {
+          fetchActiveRoom();
+        }
+      }
+    );
+
+    // Listen for voice participant changes (join/leave)
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*', // INSERT, UPDATE, DELETE
+        schema: 'public',
+        table: 'voice_participant',
+      },
+      (payload: any) => {
+        console.log('[useVoiceRoom] Participant change:', payload.eventType);
+        // Only refresh if we have an active room
+        if (activeRoom) {
+          fetchActiveRoom();
+        }
+      }
+    );
+
+    channel.subscribe((status) => {
+      console.log(`[useVoiceRoom] Subscription status for chat ${chatId}:`, status);
+      if (status === 'SUBSCRIBED') {
+        // Fetch initial state after successful subscription
+        fetchActiveRoom();
+      }
+    });
+
+    channelRef.current = channel;
+
+    // Cleanup on unmount or chatId change
+    return () => {
+      console.log(`[useVoiceRoom] Cleaning up realtime subscription for chat: ${chatId}`);
+      if (channelRef.current) {
+        supabaseClient.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [chatId, user, fetchActiveRoom, activeRoom]);
 
   const createRoom = async (name?: string) => {
     if (!user) return;

@@ -247,7 +247,7 @@ ${summary}`;
       chatId: voiceRoom.chatId,
       userId: voiceRoom.createdBy, // Use the creator as the sender
       content: summaryMessage,
-      type: "system",
+      messageType: "system", // ✅ Fixed: was "type", should be "messageType"
       metadata: {
         vibeCallSummary: true,
         voiceRoomId: voiceRoomId,

@@ -181,3 +181,111 @@ CREATE TABLE IF NOT EXISTS context_card (
     "expiresAt" TIMESTAMP,
     "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ==========================================
+-- VOICE ROOMS (VIBE CALLS) (December 2025)
+-- ==========================================
+
+-- Voice Rooms Table
+CREATE TABLE IF NOT EXISTS public.voice_room (
+    "id" text NOT NULL DEFAULT extensions.uuid_generate_v4(),
+    "chatId" text NOT NULL,
+    "name" text,
+    "createdBy" text NOT NULL,
+    "isActive" boolean DEFAULT true,
+    "startedAt" timestamp without time zone DEFAULT now(),
+    "endedAt" timestamp without time zone,
+    "liveKitRoomId" text,
+    "recordingUrl" text,
+    "transcription" text,
+    "summary" text,
+    "createdAt" timestamp without time zone DEFAULT now(),
+    "updatedAt" timestamp without time zone DEFAULT now(),
+    PRIMARY KEY ("id"),
+    FOREIGN KEY ("chatId") REFERENCES public.chat("id") ON DELETE CASCADE,
+    FOREIGN KEY ("createdBy") REFERENCES public.user("id")
+);
+
+-- Voice Participants Table
+CREATE TABLE IF NOT EXISTS public.voice_participant (
+    "id" text NOT NULL DEFAULT extensions.uuid_generate_v4(),
+    "voiceRoomId" text NOT NULL,
+    "userId" text NOT NULL,
+    "joinedAt" timestamp without time zone DEFAULT now(),
+    "leftAt" timestamp without time zone,
+    "role" text DEFAULT 'speaker',
+    "isMuted" boolean DEFAULT false,
+    "createdAt" timestamp without time zone DEFAULT now(),
+    PRIMARY KEY ("id"),
+    FOREIGN KEY ("voiceRoomId") REFERENCES public.voice_room("id") ON DELETE CASCADE,
+    FOREIGN KEY ("userId") REFERENCES public.user("id")
+);
+
+-- Index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_voice_room_chatId ON public.voice_room("chatId");
+CREATE INDEX IF NOT EXISTS idx_voice_room_isActive ON public.voice_room("isActive");
+CREATE INDEX IF NOT EXISTS idx_voice_participant_voiceRoomId ON public.voice_participant("voiceRoomId");
+CREATE INDEX IF NOT EXISTS idx_voice_participant_userId ON public.voice_participant("userId");
+
+-- Enable RLS
+ALTER TABLE public.voice_room ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.voice_participant ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for voice_room
+CREATE POLICY IF NOT EXISTS "Users can view voice rooms in their chats"
+ON public.voice_room FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.chat_member
+    WHERE chat_member."chatId" = voice_room."chatId"
+    AND chat_member."userId" = auth.uid()
+  )
+);
+
+CREATE POLICY IF NOT EXISTS "Users can create voice rooms in their chats"
+ON public.voice_room FOR INSERT
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.chat_member
+    WHERE chat_member."chatId" = voice_room."chatId"
+    AND chat_member."userId" = auth.uid()
+  )
+);
+
+CREATE POLICY IF NOT EXISTS "Users can update voice rooms they created"
+ON public.voice_room FOR UPDATE
+USING ("createdBy" = auth.uid());
+
+-- RLS Policies for voice_participant
+CREATE POLICY IF NOT EXISTS "Users can view participants in accessible voice rooms"
+ON public.voice_participant FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.voice_room
+    INNER JOIN public.chat_member 
+      ON chat_member."chatId" = voice_room."chatId"
+    WHERE voice_room.id = voice_participant."voiceRoomId"
+    AND chat_member."userId" = auth.uid()
+  )
+);
+
+CREATE POLICY IF NOT EXISTS "Users can join voice rooms as participants"
+ON public.voice_participant FOR INSERT
+WITH CHECK (
+  "userId" = auth.uid()
+  AND EXISTS (
+    SELECT 1 FROM public.voice_room
+    INNER JOIN public.chat_member 
+      ON chat_member."chatId" = voice_room."chatId"
+    WHERE voice_room.id = voice_participant."voiceRoomId"
+    AND chat_member."userId" = auth.uid()
+  )
+);
+
+CREATE POLICY IF NOT EXISTS "Users can update their own participation"
+ON public.voice_participant FOR UPDATE
+USING ("userId" = auth.uid());
+
+CREATE POLICY IF NOT EXISTS "Users can leave voice rooms"
+ON public.voice_participant FOR DELETE
+USING ("userId" = auth.uid());

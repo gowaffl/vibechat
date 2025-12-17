@@ -97,7 +97,7 @@ import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ShimmeringText } from "@/components/ShimmeringText";
 import { format, isSameDay, isToday, isYesterday } from "date-fns";
-import { VoiceRoomModal } from "@/components/VoiceRoom/VoiceRoomModal";
+import { VoiceRoomModal, VoiceRoomBanner } from "@/components/VoiceRoom";
 import { useVoiceRoom } from "@/hooks/useVoiceRoom";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
@@ -7366,6 +7366,25 @@ const ChatScreen = () => {
         </View>
       )}
 
+      {/* Voice Room Banner - Shows when there's an active call */}
+      {activeRoom && !voiceModalVisible && (
+        <View
+          style={{
+            position: "absolute",
+            top: insets.top + 85 + (threads ? 56 : 0),
+            left: 0,
+            right: 0,
+            zIndex: 98,
+          }}
+        >
+          <VoiceRoomBanner
+            participantCount={participants}
+            onJoinPress={handleJoinRoom}
+            isUserInCall={!!voiceToken}
+          />
+        </View>
+      )}
+
       {/* Messages FlatList - Wrapped in Reanimated View for keyboard animation */}
       <Reanimated.View 
         key={currentThreadId || 'main'}
@@ -7390,8 +7409,8 @@ const ChatScreen = () => {
           scrollEventThrottle={16}
           contentContainerStyle={{
             // Inverted: Padding Bottom is visually at Top, Padding Top is visually at Bottom
-            // Padding bottom creates space for header/threads
-            paddingBottom: insets.top + 68 + (threads ? 56 : 0) + 20, // Reduced base to 63 (header height is 68)
+            // Padding bottom creates space for header/threads/voice banner
+            paddingBottom: insets.top + 68 + (threads ? 56 : 0) + (activeRoom && !voiceModalVisible ? 56 : 0) + 20, // Add 56px for banner when visible
             paddingHorizontal: 16,
             // Visual bottom - small padding to push recent messages up slightly
             paddingTop: 13, 
