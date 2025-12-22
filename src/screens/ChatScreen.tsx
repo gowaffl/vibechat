@@ -1941,7 +1941,7 @@ const ChatScreen = () => {
     
     try {
       // Call batch translation endpoint
-      const response = await api.post<{ translations: Array<{ messageId: string; translatedText: string }> }>(
+      const response = await api.post<{ translations: Record<string, string> }>(
         "/api/ai-native/translate-batch",
         {
           userId: user?.id,
@@ -1950,10 +1950,11 @@ const ChatScreen = () => {
         }
       );
       
-      if (response.data.translations) {
+      if (response.data?.translations) {
         const newTranslations = new Map(translatedMessages);
-        response.data.translations.forEach((t: { messageId: string; translatedText: string }) => {
-          newTranslations.set(t.messageId, t.translatedText);
+        // Backend returns { translations: { "messageId1": "text1", "messageId2": "text2" } }
+        Object.entries(response.data.translations).forEach(([messageId, translatedText]) => {
+          newTranslations.set(messageId, translatedText);
         });
         setTranslatedMessages(newTranslations);
       }
