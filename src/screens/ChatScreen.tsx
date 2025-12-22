@@ -1883,6 +1883,7 @@ const ChatScreen = () => {
     // Update user preference on backend
     try {
       await api.post("/ai-native/translation-preference", {
+        userId: user?.id,
         enabled,
         language: translationLanguage,
       });
@@ -1912,21 +1913,10 @@ const ChatScreen = () => {
   const handleLanguageSelect = async (language: string) => {
     setTranslationLanguage(language);
     
-    // Update user preference on backend
+    // Save chat-specific language override to AsyncStorage
+    // This overrides the user's default preferred language for this specific chat
     try {
-      await api.post("/ai-native/translation-preference", {
-        enabled: translationEnabled,
-        language,
-      });
-      
-      // Update user context
-      if (updateUser) {
-        updateUser({
-          ...user,
-          translationPreference: translationEnabled ? "enabled" : "disabled",
-          preferredLanguage: language,
-        });
-      }
+      await AsyncStorage.setItem(`chat_language_${chatId}`, language);
       
       // Clear existing translations and re-translate with new language
       setTranslatedMessages(new Map());
@@ -1934,7 +1924,7 @@ const ChatScreen = () => {
         await translateVisibleMessages(messages);
       }
     } catch (error) {
-      console.error("[Translation] Failed to update language:", error);
+      console.error("[Translation] Failed to save chat language override:", error);
       Alert.alert("Error", "Failed to update translation language");
     }
   };
@@ -2114,6 +2104,27 @@ const ChatScreen = () => {
   const [translationEnabled, setTranslationEnabled] = useState(user?.translationPreference === "enabled");
   const [translationLanguage, setTranslationLanguage] = useState(user?.preferredLanguage || "en");
   const [translatedMessages, setTranslatedMessages] = useState<Map<string, string>>(new Map());
+
+  // Load chat-specific language override from AsyncStorage
+  useEffect(() => {
+    const loadChatLanguageOverride = async () => {
+      try {
+        const override = await AsyncStorage.getItem(`chat_language_${chatId}`);
+        if (override) {
+          setTranslationLanguage(override);
+        } else {
+          // No override, use user's preferred language
+          setTranslationLanguage(user?.preferredLanguage || "en");
+        }
+      } catch (error) {
+        console.error("[ChatScreen] Failed to load chat language override:", error);
+      }
+    };
+    
+    if (chatId) {
+      loadChatLanguageOverride();
+    }
+  }, [chatId, user?.preferredLanguage]);
 
   // In-Chat Search Query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);

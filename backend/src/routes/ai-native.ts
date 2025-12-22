@@ -290,6 +290,46 @@ app.patch("/translation-preference", zValidator("json", updateTranslationPrefere
   }
 });
 
+// POST /api/ai-native/translation-preference - Alternative endpoint for frontend compatibility
+const simpleTranslationPreferenceSchema = z.object({
+  userId: z.string().optional(), // Optional - will try to extract from token if not provided
+  enabled: z.boolean(),
+  language: z.string(),
+});
+
+app.post("/translation-preference", zValidator("json", simpleTranslationPreferenceSchema), async (c) => {
+  const data = c.req.valid("json");
+  
+  // Get userId from body, query, or header (in that order of preference)
+  const userId = data.userId || c.req.query("userId") || c.req.header("x-user-id");
+  
+  if (!userId) {
+    return c.json({ error: "userId is required (in body, query, or header)" }, 400);
+  }
+
+  try {
+    const updateData = {
+      translationPreference: data.enabled ? "enabled" : "disabled",
+      preferredLanguage: data.language,
+    };
+
+    const { error } = await db
+      .from("user")
+      .update(updateData)
+      .eq("id", userId);
+
+    if (error) {
+      console.error("[AI-Native] Error updating preference:", error);
+      return c.json({ error: "Failed to update preference" }, 500);
+    }
+
+    return c.json({ success: true, ...updateData });
+  } catch (error) {
+    console.error("[AI-Native] Error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // ==========================================
 // Tone Adjustment
 // ==========================================

@@ -28,7 +28,10 @@ import {
   FileText,
   Moon,
   Sun,
-  Smartphone
+  Smartphone,
+  Languages,
+  Check,
+  X
 } from "lucide-react-native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import * as ImagePicker from "expo-image-picker";
@@ -40,6 +43,30 @@ import { BACKEND_URL, api } from "@/lib/api";
 import type { UploadImageResponse } from "@/shared/contracts";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+
+const LANGUAGES = [
+  { code: "en", name: "English", flag: "🇺🇸" },
+  { code: "es", name: "Spanish", flag: "🇪🇸" },
+  { code: "fr", name: "French", flag: "🇫🇷" },
+  { code: "de", name: "German", flag: "🇩🇪" },
+  { code: "it", name: "Italian", flag: "🇮🇹" },
+  { code: "pt", name: "Portuguese", flag: "🇵🇹" },
+  { code: "ja", name: "Japanese", flag: "🇯🇵" },
+  { code: "ko", name: "Korean", flag: "🇰🇷" },
+  { code: "zh", name: "Chinese (Simplified)", flag: "🇨🇳" },
+  { code: "zh-TW", name: "Chinese (Traditional)", flag: "🇹🇼" },
+  { code: "ar", name: "Arabic", flag: "🇸🇦" },
+  { code: "hi", name: "Hindi", flag: "🇮🇳" },
+  { code: "ru", name: "Russian", flag: "🇷🇺" },
+  { code: "nl", name: "Dutch", flag: "🇳🇱" },
+  { code: "sv", name: "Swedish", flag: "🇸🇪" },
+  { code: "pl", name: "Polish", flag: "🇵🇱" },
+  { code: "tr", name: "Turkish", flag: "🇹🇷" },
+  { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
+  { code: "th", name: "Thai", flag: "🇹🇭" },
+  { code: "id", name: "Indonesian", flag: "🇮🇩" },
+  { code: "tl", name: "Tagalog", flag: "🇵🇭" },
+];
 
 const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
@@ -60,6 +87,9 @@ const ProfileScreen = () => {
   const [summaryPreference, setSummaryPreference] = useState<"concise" | "detailed">(user?.summaryPreference || "concise");
   const [isUpdatingSummaryPreference, setIsUpdatingSummaryPreference] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [preferredLanguage, setPreferredLanguage] = useState(user?.preferredLanguage || "en");
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false);
 
   // Reset image error state when user image changes
   React.useEffect(() => {
@@ -182,6 +212,26 @@ const ProfileScreen = () => {
       Alert.alert("Error", "Failed to update summary preference");
     } finally {
       setIsUpdatingSummaryPreference(false);
+    }
+  };
+
+  const handleLanguageSelect = async (languageCode: string) => {
+    if (!user?.id || isUpdatingLanguage) return;
+
+    const previousLanguage = preferredLanguage;
+    setPreferredLanguage(languageCode);
+    setShowLanguagePicker(false);
+    setIsUpdatingLanguage(true);
+
+    try {
+      await api.patch(`/api/users/${user.id}`, { preferredLanguage: languageCode });
+      await updateUser({ preferredLanguage: languageCode });
+    } catch (error) {
+      console.error("Failed to update preferred language:", error);
+      setPreferredLanguage(previousLanguage);
+      Alert.alert("Error", "Failed to update preferred language");
+    } finally {
+      setIsUpdatingLanguage(false);
     }
   };
 
@@ -681,6 +731,53 @@ const ProfileScreen = () => {
               </View>
             </View>
 
+            {/* Preferred Language */}
+            <View className="mb-6">
+              <Text className="text-sm font-semibold mb-3 ml-1" style={{ color: colors.textSecondary }}>
+                PREFERRED LANGUAGE
+              </Text>
+              <Pressable
+                onPress={() => setShowLanguagePicker(true)}
+                disabled={isUpdatingLanguage}
+                style={({ pressed }) => ({
+                  opacity: pressed || isUpdatingLanguage ? 0.7 : 1,
+                })}
+              >
+                <View
+                  className="rounded-2xl px-5 py-4"
+                  style={{
+                    backgroundColor: colors.inputBackground,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                      <Languages size={20} color={colors.primary} />
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
+                          Default Translation Language
+                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
+                          <Text style={{ fontSize: 16, marginRight: 6 }}>
+                            {LANGUAGES.find(l => l.code === preferredLanguage)?.flag || "🌐"}
+                          </Text>
+                          <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                            {LANGUAGES.find(l => l.code === preferredLanguage)?.name || "English"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    {isUpdatingLanguage ? (
+                      <LuxeLogoLoader size="small" />
+                    ) : (
+                      <ChevronRight size={20} color={colors.textSecondary} />
+                    )}
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+
             {/* Save Button */}
             <Pressable
               onPress={handleSave}
@@ -1007,6 +1104,134 @@ const ProfileScreen = () => {
                     </Text>
                   </Pressable>
                 </View>
+              </View>
+            </BlurView>
+          </View>
+        </Modal>
+
+        {/* Language Picker Modal */}
+        <Modal
+          visible={showLanguagePicker}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowLanguagePicker(false)}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: isDark ? "rgba(0, 0, 0, 0.85)" : "rgba(0, 0, 0, 0.4)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 20,
+            }}
+          >
+            <BlurView
+              intensity={100}
+              tint={isDark ? "dark" : "light"}
+              style={{
+                width: "100%",
+                maxWidth: 400,
+                borderRadius: 24,
+                overflow: "hidden",
+                maxHeight: "80%",
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: isDark ? "rgba(28, 28, 30, 0.95)" : "rgba(255, 255, 255, 0.95)",
+                  borderRadius: 24,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: 20,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Languages size={24} color={colors.primary} />
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: "700",
+                        color: colors.text,
+                      }}
+                    >
+                      Select Language
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setShowLanguagePicker(false)}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.5 : 1,
+                    })}
+                  >
+                    <X size={24} color={colors.textSecondary} />
+                  </Pressable>
+                </View>
+
+                {/* Language List */}
+                <ScrollView
+                  style={{ maxHeight: 500 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {LANGUAGES.map((lang) => {
+                    const isSelected = lang.code === preferredLanguage;
+                    return (
+                      <Pressable
+                        key={lang.code}
+                        onPress={() => handleLanguageSelect(lang.code)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.7 : 1,
+                          paddingVertical: 14,
+                          paddingHorizontal: 20,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          backgroundColor: isSelected
+                            ? isDark
+                              ? "rgba(0, 122, 255, 0.15)"
+                              : "rgba(0, 122, 255, 0.08)"
+                            : "transparent",
+                        })}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                          <Text style={{ fontSize: 24 }}>{lang.flag}</Text>
+                          <Text
+                            style={{
+                              fontSize: 16,
+                              fontWeight: isSelected ? "600" : "400",
+                              color: isSelected ? colors.primary : colors.text,
+                            }}
+                          >
+                            {lang.name}
+                          </Text>
+                        </View>
+                        {isSelected && (
+                          <View
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 12,
+                              backgroundColor: colors.primary,
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Check size={14} color="#FFFFFF" />
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
             </BlurView>
           </View>
