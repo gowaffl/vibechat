@@ -183,3 +183,4 @@ const handleDockToggle = useCallback((shouldDock: boolean) => {
 - Compatible with keyboard accessories/external keyboards
 - No performance impact (native Keyboard API)
 
+

@@ -77,3 +77,4 @@ async function backfillEmbeddings() {
 
 backfillEmbeddings().catch(console.error);
 
+
