@@ -135,7 +135,8 @@ const ChatHeader = ({
   onThreadsPress,
   onEventsPress,
   onInvitePress,
-  onJoinVoiceRoom, // Added
+  onJoinVoiceRoom,
+  onTranslatePress,
 }: { 
   chatName: string; 
   chatImage: string | null; 
@@ -146,7 +147,8 @@ const ChatHeader = ({
   onThreadsPress: () => void;
   onEventsPress: () => void;
   onInvitePress: () => void;
-  onJoinVoiceRoom: () => void; // Added
+  onJoinVoiceRoom: () => void;
+  onTranslatePress: () => void;
 }) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -539,7 +541,12 @@ const ChatHeader = ({
                 </Pressable>
 
                 {/* Translation Option */}
-                <View
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowOptionsMenu(false);
+                    onTranslatePress();
+                  }}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
@@ -561,18 +568,10 @@ const ChatHeader = ({
                   >
                     <Languages size={18} color={colors.text} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500", marginBottom: 4 }}>
-                      Live Translation
-                    </Text>
-                    <TranslationToggle
-                      enabled={translationEnabled}
-                      selectedLanguage={translationLanguage}
-                      onToggle={handleTranslationToggle}
-                      onLanguageSelect={handleLanguageSelect}
-                    />
-                  </View>
-                </View>
+                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>
+                    Translate
+                  </Text>
+                </Pressable>
 
                 <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 8 }} />
 
@@ -2034,6 +2033,7 @@ const ChatScreen = () => {
   const [showBookmarksModal, setShowBookmarksModal] = useState(false);
   const bookmarksModalDragY = useRef(new Animated.Value(0)).current;
   const eventsModalDragY = useRef(new Animated.Value(0)).current;
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
   
   // AI Super Features state
   const [showCatchUpModal, setShowCatchUpModal] = useState(false);
@@ -3282,21 +3282,11 @@ const ChatScreen = () => {
         }
         return false;
       }
-    ),
-    [messages]
-  );
+  ),
+  [messages]
+);
 
-  // Search filtered messages (memoized for performance)
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const query = searchQuery.toLowerCase();
-    return messages.filter(msg => 
-      msg.content?.toLowerCase().includes(query) ||
-      msg.user?.name?.toLowerCase().includes(query)
-    );
-  }, [messages, searchQuery]);
-
-  // Bookmark handlers
+// Bookmark handlers
   const toggleBookmarkMutation = useMutation({
     mutationFn: async (messageId: string) => {
       return api.post<ToggleBookmarkResponse>("/api/bookmarks/toggle", {
@@ -7759,7 +7749,8 @@ const ChatScreen = () => {
           onThreadsPress={() => setShowThreadsPanel(true)}
           onEventsPress={() => setShowEventsTab(true)}
           onInvitePress={handleShareInvite}
-          onJoinVoiceRoom={handleJoinRoom} // Added
+          onJoinVoiceRoom={handleJoinRoom}
+          onTranslatePress={() => setShowTranslationModal(true)}
         />
       )}
 
@@ -10137,6 +10128,86 @@ const ChatScreen = () => {
           isConnecting={isJoiningVoice}
           chatInputHeight={chatInputHeight}
         />
+
+        {/* Translation Settings Modal */}
+        <Modal
+          visible={showTranslationModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowTranslationModal(false)}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: colors.overlay,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+            onPress={() => setShowTranslationModal(false)}
+          >
+            <Pressable onPress={(e) => e.stopPropagation()}>
+              <BlurView
+                intensity={80}
+                tint={colors.blurTint}
+                style={{
+                  borderRadius: 24,
+                  overflow: "hidden",
+                  minWidth: 320,
+                  maxWidth: 400,
+                  backgroundColor: colors.glassBackgroundSecondary,
+                  borderWidth: 1,
+                  borderColor: colors.glassBorder,
+                }}
+              >
+                <LinearGradient
+                  colors={isDark ? [
+                    "rgba(255, 255, 255, 0.15)",
+                    "rgba(255, 255, 255, 0.10)",
+                    "rgba(255, 255, 255, 0.05)",
+                  ] : [
+                    "rgba(255, 255, 255, 0.8)",
+                    "rgba(255, 255, 255, 0.6)",
+                    "rgba(255, 255, 255, 0.4)",
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ padding: 24 }}
+                >
+                  {/* Header */}
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
+                    <View style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.primary + '20',
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 12,
+                    }}>
+                      <Languages size={20} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 20, fontWeight: "700" }}>
+                        Translation Settings
+                      </Text>
+                    </View>
+                    <Pressable onPress={() => setShowTranslationModal(false)}>
+                      <X size={24} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+
+                  {/* Translation Toggle */}
+                  <TranslationToggle
+                    enabled={translationEnabled}
+                    selectedLanguage={translationLanguage}
+                    onToggle={handleTranslationToggle}
+                    onLanguageSelect={handleLanguageSelect}
+                  />
+                </LinearGradient>
+              </BlurView>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
     );
 };
