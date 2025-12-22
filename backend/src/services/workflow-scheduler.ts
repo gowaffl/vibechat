@@ -12,6 +12,7 @@ import { db } from "../db";
 import { openai } from "../env";
 import { executeGPT51Response } from "./gpt-responses";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { decryptMessages } from "./message-encryption";
 
 // ==========================================
 // Types
@@ -207,7 +208,10 @@ async function executeDailySummary(action: ScheduledAction): Promise<{ success: 
     return { success: true }; // Not an error, just nothing to summarize
   }
 
-  const messagesText = messages
+  // Decrypt messages before summarizing
+  const decryptedMessages = await decryptMessages(messages);
+
+  const messagesText = decryptedMessages
     .map((m: any) => `${m.user?.name || "Unknown"}: ${m.content}`)
     .join("\n");
 
@@ -276,6 +280,9 @@ async function executeWeeklyRecap(action: ScheduledAction): Promise<{ success: b
     return { success: true };
   }
 
+  // Decrypt messages before generating recap
+  const decryptedMessages = await decryptMessages(messages);
+
   // Get poll results from the week
   const { data: polls } = await db
     .from("poll")
@@ -290,7 +297,7 @@ async function executeWeeklyRecap(action: ScheduledAction): Promise<{ success: b
     .eq("chatId", action.chatId)
     .gte("createdAt", lastWeek.toISOString());
 
-  const messagesText = messages
+  const messagesText = decryptedMessages
     .map((m: any) => `${m.user?.name || "Unknown"}: ${m.content}`)
     .join("\n");
 

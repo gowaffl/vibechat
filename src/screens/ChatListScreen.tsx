@@ -35,8 +35,40 @@ import { GradientText } from "@/components/GradientText";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { CustomRefreshControl } from "@/components/CustomRefreshControl";
 import { useDebounce } from "@/hooks/useDebounce";
-import { SearchMessagesResponse, SearchMessageResult } from "@/shared/contracts";
+import { SearchMessagesResponse, SearchMessageResult, GlobalSearchResponse } from "@/shared/contracts";
 import { ColorPalette } from "@/constants/theme";
+
+// Section Header Component
+const SectionHeader = ({ title, count, onSeeAll }: { title: string, count: number, onSeeAll?: () => void }) => {
+  const { colors, isDark } = useTheme();
+  return (
+    <View style={{ 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      paddingHorizontal: 16, 
+      marginTop: 24, 
+      marginBottom: 12 
+    }}>
+      <Text style={{ 
+        fontSize: 15, 
+        fontWeight: '700', 
+        color: colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5
+      }}>
+        {title}
+      </Text>
+      {onSeeAll && (
+        <Pressable onPress={onSeeAll}>
+          <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>
+            See All
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+};
 
 // Separated component for performance optimization with memoization
 const ChatItem = React.memo(({ 
@@ -342,38 +374,25 @@ const ChatListScreen = () => {
   // Fetch unread counts for all chats using shared hook
   const { data: unreadCounts = [], refetch: refetchUnread } = useUnreadCounts(user?.id);
 
-  // Search messages query with Infinite Scroll
+  // Global Search Query
   const { 
     data: searchData, 
     isLoading: isSearching, 
-    fetchNextPage, 
-    hasNextPage,
-    isFetchingNextPage
-  } = useInfiniteQuery<SearchMessagesResponse>({
-    queryKey: ["search-messages", debouncedSearchQuery, searchMode, filters],
-    queryFn: async ({ pageParam }) => {
-      const response = await api.post("/api/messages/search", { 
-        userId: user!.id, 
-        query: debouncedSearchQuery,
-        mode: searchMode,
-        ...filters,
-        limit: 20,
-        cursor: pageParam as string | undefined
-      });
-      return response;
-    },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage || lastPage.length < 20) return undefined;
-      return lastPage[lastPage.length - 1].message.id;
-    },
-    enabled: !!user?.id && (debouncedSearchQuery.trim().length > 0 || hasActiveFilters),
-    initialPageParam: undefined,
+  } = useQuery<GlobalSearchResponse>({
+    queryKey: ["global-search", debouncedSearchQuery, searchMode, filters],
+    queryFn: () => api.post("/api/search/global", { 
+      userId: user!.id, 
+      query: debouncedSearchQuery,
+      limit: 20
+    }),
+    enabled: !!user?.id && (debouncedSearchQuery.trim().length > 0),
     placeholderData: keepPreviousData,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60, // 1 minute
   });
 
   const searchResults = React.useMemo(() => {
-    return searchData?.pages.flat() || [];
+    if (!searchData) return { chats: [], users: [], messages: [] };
+    return searchData;
   }, [searchData]);
 
   // Ref to track current chat IDs for filtering realtime events
@@ -862,57 +881,110 @@ const ChatListScreen = () => {
               {isDebouncing ? "Typing..." : "Searching messages..."}
             </Text>
           </View>
-        ) : searchResults.length === 0 ? (
+        ) : (searchResults.chats.length === 0 && searchResults.users.length === 0 && searchResults.messages.length === 0) ? (
           <View style={{ flex: 1, paddingHorizontal: 32 }}>
             <View style={{ marginBottom: 24, marginTop: insets.top + 80 }}>
                 <SearchFilters />
             </View>
             <View style={{ alignItems: "center", justifyContent: "center", flex: 1 }}>
               <Text style={{ fontSize: 16, fontWeight: "500", color: colors.textSecondary, textAlign: "center" }}>
-                No messages found {searchQuery ? `for "${searchQuery}"` : "matching filters"}
+                No results found {searchQuery ? `for "${searchQuery}"` : ""}
               </Text>
-              {searchMode === "semantic" && searchQuery.length > 0 && (
-                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: isDark ? "rgba(79, 195, 247, 0.1)" : "rgba(0, 122, 255, 0.1)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                    <Search size={14} color={colors.primary} style={{ marginRight: 6 }} />
-                    <Text style={{ fontSize: 13, color: colors.primary }}>
-                      Try simpler keywords or switch to text mode
-                    </Text>
-                  </View>
-              )}
             </View>
           </View>
         ) : (
-          <FlashList
-            data={searchResults}
-            keyExtractor={(item) => item.message.id}
-            estimatedItemSize={100}
-            renderItem={renderSearchResult}
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
+          <ScrollView
             contentContainerStyle={{
               paddingTop: insets.top + 100,
               paddingBottom: insets.bottom + 100,
             }}
-            ListHeaderComponent={
-              <View style={{ marginBottom: 12 }}>
-                <SearchFilters />
-                <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16, marginTop: 8 }} />
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={{ marginBottom: 12 }}>
+              <SearchFilters />
+              <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16, marginTop: 8 }} />
+            </View>
+
+            {/* Chats Section */}
+            {searchResults.chats.length > 0 && (
+              <View>
+                <SectionHeader title="Chats" count={searchResults.chats.length} />
+                {searchResults.chats.map((chat) => (
+                  <ChatItem
+                    key={chat.id}
+                    item={chat}
+                    unreadCount={0}
+                    onPress={handleChatPress}
+                    onLongPress={handleLongPress}
+                    colors={colors}
+                    isDark={isDark}
+                  />
+                ))}
               </View>
-            }
-            onEndReached={() => {
-              if (hasNextPage && !isFetchingNextPage) {
-                fetchNextPage();
-              }
-            }}
-            onEndReachedThreshold={0.5}
-            ListFooterComponent={
-              isFetchingNextPage ? (
-                <View style={{ padding: 20 }}>
-                  <ActivityIndicator color={colors.primary} />
-                </View>
-              ) : null
-            }
-          />
+            )}
+
+            {/* People Section */}
+            {searchResults.users.length > 0 && (
+              <View>
+                <SectionHeader title="People" count={searchResults.users.length} />
+                {searchResults.users.map((u) => (
+                  <Pressable
+                    key={u.id}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                      paddingHorizontal: 16,
+                      marginBottom: 12
+                    })}
+                    onPress={() => {
+                        // Navigate to chat with this user (create or open)
+                    }}
+                  >
+                    <BlurView
+                        intensity={Platform.OS === "ios" ? (isDark ? 20 : 60) : 40}
+                        tint={isDark ? "dark" : "light"}
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 12,
+                            borderRadius: 16,
+                            overflow: 'hidden',
+                            borderWidth: 1,
+                            borderColor: colors.glassBorder
+                        }}
+                    >
+                        {u.image ? (
+                          <Image 
+                              source={{ uri: getFullImageUrl(u.image) }}
+                              style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }}
+                          />
+                        ) : (
+                          <View style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
+                            <Users size={20} color={colors.textSecondary} />
+                          </View>
+                        )}
+                        <View>
+                            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{u.name}</Text>
+                            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{u.bio || "No bio"}</Text>
+                        </View>
+                    </BlurView>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {/* Messages Section */}
+            {searchResults.messages.length > 0 && (
+              <View>
+                <SectionHeader title="Messages" count={searchResults.messages.length} />
+                {searchResults.messages.map((item) => (
+                    <View key={item.message.id}>
+                        {renderSearchResult({ item })}
+                    </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
         )
       ) : (
         // Chat List Mode

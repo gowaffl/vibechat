@@ -10,7 +10,7 @@
 import { db } from "../db";
 import { openai } from "../env";
 import { executeGPT51Response } from "./gpt-responses";
-import { decryptMessageContent } from "./message-encryption";
+import { decryptMessageContent, decryptMessages } from "./message-encryption";
 
 // ==========================================
 // Types
@@ -453,7 +453,10 @@ async function executeAIResponse(
     .order("createdAt", { ascending: false })
     .limit(10);
 
-  const context = (recentMessages || [])
+  // Decrypt messages before using their content
+  const decryptedMessages = await decryptMessages(recentMessages || []);
+
+  const context = decryptedMessages
     .reverse()
     .map((m: any) => `${m.user?.name || "Unknown"}: ${m.content}`)
     .join("\n");
@@ -516,7 +519,10 @@ async function executeSummarize(
     return { success: false, error: "No messages to summarize" };
   }
 
-  const messagesText = messages
+  // Decrypt messages before summarizing
+  const decryptedMessages = await decryptMessages(messages);
+
+  const messagesText = decryptedMessages
     .reverse()
     .map((m: any) => `${m.user?.name || "Unknown"}: ${m.content}`)
     .join("\n");

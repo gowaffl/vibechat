@@ -14,6 +14,7 @@ import { db } from "../db";
 import { executeGPT51Response } from "../services/gpt-responses";
 import { env } from "../env";
 import type { AppType } from "../index";
+import { decryptMessageContent, decryptMessages } from "../services/message-encryption";
 
 const app = new Hono<AppType>();
 
@@ -89,7 +90,7 @@ app.post("/translate", zValidator("json", translateMessageSchema), async (c) => 
     if (!sourceText) {
       const { data: message, error } = await db
         .from("message")
-        .select("content, chatId")
+        .select("content, chatId, is_encrypted")
         .eq("id", data.messageId)
         .single();
 
@@ -109,7 +110,9 @@ app.post("/translate", zValidator("json", translateMessageSchema), async (c) => 
         return c.json({ error: "Not authorized to translate this message" }, 403);
       }
 
-      sourceText = message.content;
+      // Decrypt the message content before translating
+      const decryptedMessage = await decryptMessageContent(message);
+      sourceText = decryptedMessage.content;
     }
 
     // Check cache first
@@ -195,13 +198,16 @@ app.post("/translate-batch", async (c) => {
     if (uncachedIds.length > 0) {
       const { data: messages } = await db
         .from("message")
-        .select("id, content, chatId")
+        .select("id, content, chatId, is_encrypted")
         .in("id", uncachedIds);
+
+      // Decrypt all messages first
+      const decryptedMessages = await decryptMessages(messages || []);
 
       const targetLanguageName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
 
       // Translate each message (could be optimized with batch API calls)
-      for (const message of messages || []) {
+      for (const message of decryptedMessages) {
         try {
           const response = await executeGPT51Response({
             systemPrompt: `Translate to ${targetLanguageName}. Only output translated text.`,
@@ -419,12 +425,15 @@ app.post("/context-card", zValidator("json", generateContextCardSchema), async (
     // Get recent chat context for better card generation
     const { data: recentMessages } = await db
       .from("message")
-      .select("content, userId, createdAt")
+      .select("content, userId, createdAt, is_encrypted")
       .eq("chatId", data.chatId)
       .order("createdAt", { ascending: false })
       .limit(10);
 
-    const chatContext = recentMessages
+    // Decrypt messages before using them as context
+    const decryptedRecentMessages = await decryptMessages(recentMessages || []);
+
+    const chatContext = decryptedRecentMessages
       ?.map((m: any) => m.content)
       .reverse()
       .join("\n") || "";

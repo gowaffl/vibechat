@@ -28,12 +28,12 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy } from "lucide-react-native";
+import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy, Languages } from "lucide-react-native";
 import { BlurView } from "expo-blur";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -86,6 +86,7 @@ import { SwipeableMessage, MessageBubbleMeasurer } from "@/components/SwipeableM
 import { TruncatedText } from "@/components/TruncatedText";
 import { VibeSelector, VIBE_CONFIG, VibeSelectorStatic } from "@/components/VibeSelector";
 import { VibeAnimatedBubble } from "@/components/VibeAnimatedBubble";
+import TranslationToggle from "@/components/AINative/TranslationToggle";
 import type { VibeType } from "@shared/contracts";
 import { useCatchUp } from "@/hooks/useCatchUp";
 import { useEvents } from "@/hooks/useEvents";
@@ -99,6 +100,9 @@ import { ShimmeringText } from "@/components/ShimmeringText";
 import { format, isSameDay, isToday, isYesterday } from "date-fns";
 import { VoiceRoomModal, VoiceRoomBanner } from "@/components/VoiceRoom";
 import { useVoiceRoom } from "@/hooks/useVoiceRoom";
+import { useDebounce } from "@/hooks/useDebounce";
+import { GlobalSearchResponse, SearchMessageResult } from "@/shared/contracts";
+import { HighlightText } from "@/components/HighlightText";
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
@@ -533,6 +537,42 @@ const ChatHeader = ({
                     Search
                   </Text>
                 </Pressable>
+
+                {/* Translation Option */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    padding: 12,
+                    borderRadius: 12,
+                    marginBottom: 4,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: colors.inputBackground,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 12,
+                    }}
+                  >
+                    <Languages size={18} color={colors.text} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500", marginBottom: 4 }}>
+                      Live Translation
+                    </Text>
+                    <TranslationToggle
+                      enabled={translationEnabled}
+                      selectedLanguage={translationLanguage}
+                      onToggle={handleTranslationToggle}
+                      onLanguageSelect={handleLanguageSelect}
+                    />
+                  </View>
+                </View>
 
                 <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 8 }} />
 
@@ -1512,6 +1552,190 @@ const ReactionDetailsModal = ({
 const MIN_INPUT_HEIGHT = 38;
 const MAX_INPUT_HEIGHT = 110;
 
+// Search Header Component
+const SearchHeader = ({
+  searchQuery,
+  onSearchQueryChange,
+  onClose,
+  insets,
+  colors,
+  isDark
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (text: string) => void;
+  onClose: () => void;
+  insets: any;
+  colors: any;
+  isDark: boolean;
+}) => {
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 70 + insets.top,
+        zIndex: 100,
+      }}
+    >
+      <BlurView
+        intensity={80}
+        tint={isDark ? "dark" : "light"}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: Platform.OS === "ios" 
+            ? (isDark ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.3)")
+            : (isDark ? "rgba(0, 0, 0, 0.85)" : "rgba(255, 255, 255, 0.85)"),
+          borderBottomWidth: 0.5,
+          borderBottomColor: colors.glassBorder,
+        }}
+      >
+        <LinearGradient
+          colors={isDark 
+            ? ["rgba(79, 195, 247, 0.15)", "rgba(0, 122, 255, 0.1)", "rgba(0, 0, 0, 0)"]
+            : ["rgba(0, 122, 255, 0.05)", "rgba(79, 195, 247, 0.05)", "rgba(255, 255, 255, 0)"]
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ flex: 1, opacity: 0.5 }}
+        />
+      </BlurView>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingTop: insets.top + 10,
+          paddingHorizontal: 14,
+          paddingBottom: 10,
+        }}
+      >
+        <Pressable onPress={onClose} style={{ padding: 8 }}>
+          <ChevronLeft size={24} color={colors.text} />
+        </Pressable>
+
+        <View
+          style={{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: colors.inputBackground,
+            borderRadius: 20,
+            paddingHorizontal: 12,
+            height: 40,
+            marginHorizontal: 8,
+          }}
+        >
+          <Search size={18} color={colors.textTertiary} style={{ marginRight: 8 }} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={onSearchQueryChange}
+            placeholder="Search in chat..."
+            placeholderTextColor={colors.textTertiary}
+            style={{
+              flex: 1,
+              color: colors.text,
+              fontSize: 16,
+              padding: 0,
+            }}
+            autoFocus
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => onSearchQueryChange("")}>
+              <View style={{ backgroundColor: colors.textTertiary, borderRadius: 10, padding: 2 }}>
+                <X size={12} color={colors.background} />
+              </View>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const SearchResultItem = ({ item, onPress, searchQuery, colors, isDark }: { item: SearchMessageResult, onPress: (item: SearchMessageResult) => void, searchQuery: string, colors: any, isDark: boolean }) => {
+    const isSemantic = item.matchedField === "content" && item.similarity;
+    const matchLabel = item.matchedField === "transcription" ? "Voice Match" 
+                     : item.matchedField === "description" ? "Image Match" 
+                     : null;
+
+    const formatTime = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    return (
+      <Pressable
+        onPress={() => onPress(item)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.7 : 1,
+          marginHorizontal: 16,
+          marginBottom: 12,
+          shadowColor: isDark ? colors.glassShadow : "rgba(0, 0, 0, 0.15)",
+          shadowOffset: { width: 0, height: isDark ? 4 : 2 },
+          shadowOpacity: isDark ? 0.2 : 0.12,
+          shadowRadius: isDark ? 8 : 10,
+          elevation: isDark ? 4 : 3,
+        })}
+      >
+        <BlurView
+          intensity={Platform.OS === "ios" ? (isDark ? 20 : 60) : 40}
+          tint={isDark ? "dark" : "light"}
+          style={{
+            borderRadius: 16,
+            overflow: "hidden",
+            borderWidth: isDark ? 1 : 1.5,
+            borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)",
+            backgroundColor: isDark ? "transparent" : "rgba(255, 255, 255, 0.85)"
+          }}
+        >
+          <View style={{ padding: 16 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "700" }}>
+                {item.message.user?.name || "Unknown"}
+              </Text>
+              <Text style={{ color: colors.textTertiary, fontSize: 11 }}>
+                {formatTime(item.message.createdAt)}
+              </Text>
+            </View>
+
+            {(isSemantic || matchLabel) && (
+              <View style={{ flexDirection: "row", marginBottom: 6 }}>
+                <View style={{ 
+                  backgroundColor: isSemantic ? colors.primary + '20' : colors.textTertiary + '20', 
+                  paddingHorizontal: 8, 
+                  paddingVertical: 2, 
+                  borderRadius: 8 
+                }}>
+                  <Text style={{ 
+                    fontSize: 10, 
+                    fontWeight: "600", 
+                    color: isSemantic ? colors.primary : colors.textSecondary 
+                  }}>
+                    {matchLabel || `AI Match ${(item.similarity! * 100).toFixed(0)}%`}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <HighlightText 
+              text={item.message.content || (item.message.voiceTranscription ? `🎤 ${item.message.voiceTranscription}` : (item.message.imageDescription ? `🖼️ ${item.message.imageDescription}` : "Media message"))}
+              term={searchQuery}
+              style={{ color: colors.text, fontSize: 15, lineHeight: 20 }}
+              numberOfLines={3}
+            />
+          </View>
+        </BlurView>
+      </Pressable>
+    );
+};
+
 const ChatScreen = () => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -1593,6 +1817,123 @@ const ChatScreen = () => {
     } catch (error) {
       console.error("Failed to leave Vibe Call", error);
       Alert.alert("Error", "Failed to leave Vibe Call");
+    }
+  };
+
+  // Translation handlers
+  const handleTranslationToggle = async (enabled: boolean) => {
+    setTranslationEnabled(enabled);
+    
+    // Update user preference on backend
+    try {
+      await api.post("/ai-native/translation-preference", {
+        enabled,
+        language: translationLanguage,
+      });
+      
+      // Update user context
+      if (updateUser) {
+        updateUser({
+          ...user,
+          translationPreference: enabled ? "enabled" : "disabled",
+          preferredLanguage: translationLanguage,
+        });
+      }
+      
+      // If enabling, translate all visible messages
+      if (enabled && messages && messages.length > 0) {
+        await translateVisibleMessages(messages);
+      } else {
+        // If disabling, clear translations
+        setTranslatedMessages(new Map());
+      }
+    } catch (error) {
+      console.error("[Translation] Failed to update preference:", error);
+      Alert.alert("Error", "Failed to update translation preference");
+    }
+  };
+
+  const handleLanguageSelect = async (language: string) => {
+    setTranslationLanguage(language);
+    
+    // Update user preference on backend
+    try {
+      await api.post("/ai-native/translation-preference", {
+        enabled: translationEnabled,
+        language,
+      });
+      
+      // Update user context
+      if (updateUser) {
+        updateUser({
+          ...user,
+          translationPreference: translationEnabled ? "enabled" : "disabled",
+          preferredLanguage: language,
+        });
+      }
+      
+      // Clear existing translations and re-translate with new language
+      setTranslatedMessages(new Map());
+      if (translationEnabled && messages && messages.length > 0) {
+        await translateVisibleMessages(messages);
+      }
+    } catch (error) {
+      console.error("[Translation] Failed to update language:", error);
+      Alert.alert("Error", "Failed to update translation language");
+    }
+  };
+
+  const translateVisibleMessages = async (messagesToTranslate: Message[]) => {
+    if (!messagesToTranslate || messagesToTranslate.length === 0) return;
+    
+    // Filter only text messages that haven't been translated yet
+    const textMessages = messagesToTranslate.filter(
+      (m) => m.content && m.content.trim() !== "" && !translatedMessages.has(m.id)
+    );
+    
+    if (textMessages.length === 0) return;
+    
+    try {
+      // Call batch translation endpoint
+      const response = await api.post<{ translations: Array<{ messageId: string; translatedText: string }> }>(
+        "/ai-native/translate-batch",
+        {
+          messageIds: textMessages.map((m) => m.id),
+          targetLanguage: translationLanguage,
+        }
+      );
+      
+      if (response.data.translations) {
+        const newTranslations = new Map(translatedMessages);
+        response.data.translations.forEach((t: { messageId: string; translatedText: string }) => {
+          newTranslations.set(t.messageId, t.translatedText);
+        });
+        setTranslatedMessages(newTranslations);
+      }
+    } catch (error) {
+      console.error("[Translation] Failed to translate messages:", error);
+    }
+  };
+
+  const translateSingleMessage = async (messageToTranslate: Message) => {
+    if (!messageToTranslate.content || translatedMessages.has(messageToTranslate.id)) return;
+    
+    try {
+      const response = await api.post<{ translatedText: string }>(
+        "/ai-native/translate",
+        {
+          messageId: messageToTranslate.id,
+          targetLanguage: translationLanguage,
+        }
+      );
+      
+      if (response.data.translatedText) {
+        const newTranslations = new Map(translatedMessages);
+        newTranslations.set(messageToTranslate.id, response.data.translatedText);
+        setTranslatedMessages(newTranslations);
+      }
+    } catch (error) {
+      console.error("[Translation] Failed to translate message:", error);
     }
   };
 
@@ -1711,6 +2052,33 @@ const ChatScreen = () => {
   const [catchUpDismissed, setCatchUpDismissed] = useState(false);
   const [showCreateCustomCommand, setShowCreateCustomCommand] = useState(false);
   const [showCreateAIFriend, setShowCreateAIFriend] = useState(false);
+  
+  // Translation state
+  const [translationEnabled, setTranslationEnabled] = useState(user?.translationPreference === "enabled");
+  const [translationLanguage, setTranslationLanguage] = useState(user?.preferredLanguage || "en");
+  const [translatedMessages, setTranslatedMessages] = useState<Map<string, string>>(new Map());
+
+  // In-Chat Search Query
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const { data: searchResults, isLoading: isSearchingBackend } = useQuery<GlobalSearchResponse>({
+    queryKey: ["chat-search", chatId, debouncedSearchQuery],
+    queryFn: () => api.post("/api/search/global", {
+      userId: user!.id,
+      query: debouncedSearchQuery,
+      chatId: chatId,
+      limit: 50
+    }),
+    enabled: showSearchModal && debouncedSearchQuery.trim().length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60,
+  });
+
+  const handleSearchResultPress = useCallback((result: SearchMessageResult) => {
+    setShowSearchModal(false);
+    setSearchQuery("");
+    // Jump to message
+    loadMessageContext(result.message.id);
+  }, [loadMessageContext]);
 
   // MOVED UP: Thread hooks and state for Realtime updates
   const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
@@ -2015,18 +2383,19 @@ const ChatScreen = () => {
     console.log(`[ChatScreen] Loading context for message ${targetMessageId}`);
     
     try {
+      // Use the new 'around' parameter to fetch context
       const response = await api.get<{
         messages: Message[],
-        targetMessageId: string,
+        hasMore: boolean,
         nextCursor: string | null,
         prevCursor: string | null
-      }>(`/api/messages/${targetMessageId}/context?limit=50`);
+      }>(`/api/chats/${chatId}/messages?userId=${user?.id}&around=${targetMessageId}&limit=50`);
       
       if (response && response.messages) {
         console.log(`[ChatScreen] Loaded ${response.messages.length} messages for context`);
         setAllMessages(response.messages);
         setNextCursor(response.nextCursor);
-        setPrevCursor(response.prevCursor);
+        setPrevCursor(response.prevCursor || null);
         return true;
       }
     } catch (error) {
@@ -2036,7 +2405,7 @@ const ChatScreen = () => {
       setIsLoadingContext(false);
     }
     return false;
-  }, [isLoadingContext]);
+  }, [isLoadingContext, chatId, user?.id]);
 
   // Handle messageId param (deep link or search navigation)
   const contextFetchAttemptedRef = useRef<string | null>(null);
@@ -2214,6 +2583,29 @@ const ChatScreen = () => {
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
 
             if (newMessage) {
+               // Translate new message in real-time if translation is enabled
+               if (translationEnabled && newMessage.content && newMessage.content.trim() !== "") {
+                 try {
+                   const translateResponse = await api.post<{ translatedText: string }>(
+                     "/ai-native/translate",
+                     {
+                       messageId: newMessage.id,
+                       targetLanguage: translationLanguage,
+                     }
+                   );
+                   
+                   if (translateResponse.data.translatedText) {
+                     setTranslatedMessages(prev => {
+                       const newMap = new Map(prev);
+                       newMap.set(newMessage.id, translateResponse.data.translatedText);
+                       return newMap;
+                     });
+                   }
+                 } catch (translateError) {
+                   console.error('[Translation] Failed to translate new message:', translateError);
+                 }
+               }
+               
                setAllMessages(prev => {
                  
                  // Deduplicate
@@ -2535,6 +2927,13 @@ const ChatScreen = () => {
       setNextCursor(messageData.nextCursor || null);
     }
   }, [messageData]);
+
+  // Translate visible messages when translation is enabled or language changes
+  useEffect(() => {
+    if (translationEnabled && allMessages && allMessages.length > 0) {
+      translateVisibleMessages(allMessages);
+    }
+  }, [translationEnabled, translationLanguage, allMessages.length]);
 
   // HIGH-8: Load more (older) messages
   const loadMoreMessages = useCallback(async () => {
@@ -6589,7 +6988,9 @@ const ChatScreen = () => {
                     expandButtonColor={isCurrentUser ? colors.primary : colors.text}
                   >
                     <MessageText
-                      content={message.content}
+                      content={translationEnabled && translatedMessages.has(message.id) 
+                        ? translatedMessages.get(message.id)! 
+                        : message.content}
                       mentions={message.mentions}
                       style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
@@ -6643,7 +7044,9 @@ const ChatScreen = () => {
                     expandButtonColor={isCurrentUser ? colors.primary : colors.text}
                   >
                     <MessageText
-                      content={message.content}
+                      content={translationEnabled && translatedMessages.has(message.id) 
+                        ? translatedMessages.get(message.id)! 
+                        : message.content}
                       mentions={message.mentions}
                       style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
@@ -6802,7 +7205,9 @@ const ChatScreen = () => {
                     expandButtonColor={isCurrentUser ? colors.primary : colors.text}
                   >
                     <MessageText
-                      content={message.content}
+                      content={translationEnabled && translatedMessages.has(message.id) 
+                        ? translatedMessages.get(message.id)! 
+                        : message.content}
                       mentions={message.mentions}
                       style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
@@ -6900,7 +7305,9 @@ const ChatScreen = () => {
                             hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
                           }}
                         >
-                          {message.content}
+                          {translationEnabled && translatedMessages.has(message.id) 
+                            ? translatedMessages.get(message.id)! 
+                            : message.content}
                         </Markdown>
                       </TruncatedText>
                       {message.editedAt && (
@@ -6919,7 +7326,9 @@ const ChatScreen = () => {
                       >
                         {/* HIGH-14: Reduced font size for message density */}
                         <MessageText
-                          content={message.content}
+                          content={translationEnabled && translatedMessages.has(message.id) 
+                            ? translatedMessages.get(message.id)! 
+                            : message.content}
                           mentions={message.mentions}
                           style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                           isOwnMessage={isCurrentUser}
@@ -7326,19 +7735,70 @@ const ChatScreen = () => {
         />
       </View>
       
-      {/* Custom Chat Header */}
-      <ChatHeader
-        chatName={chat?.name || chatName}
-        chatImage={chat?.image || null}
-        onAvatarPress={() => setShowAvatarViewer(true)}
-        onSettingsPress={() => navigation.navigate("GroupSettings", { chatId })}
-        onSearchPress={() => setShowSearchModal(true)}
-        onBookmarksPress={() => setShowBookmarksModal(true)}
-        onThreadsPress={() => setShowThreadsPanel(true)}
-        onEventsPress={() => setShowEventsTab(true)}
-        onInvitePress={handleShareInvite}
-        onJoinVoiceRoom={handleJoinRoom} // Added
-      />
+      {/* Custom Chat Header or Search Header */}
+      {showSearchModal ? (
+        <SearchHeader
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onClose={() => {
+            setShowSearchModal(false);
+            setSearchQuery("");
+          }}
+          insets={insets}
+          colors={colors}
+          isDark={isDark}
+        />
+      ) : (
+        <ChatHeader
+          chatName={chat?.name || chatName}
+          chatImage={chat?.image || null}
+          onAvatarPress={() => setShowAvatarViewer(true)}
+          onSettingsPress={() => navigation.navigate("GroupSettings", { chatId })}
+          onSearchPress={() => setShowSearchModal(true)}
+          onBookmarksPress={() => setShowBookmarksModal(true)}
+          onThreadsPress={() => setShowThreadsPanel(true)}
+          onEventsPress={() => setShowEventsTab(true)}
+          onInvitePress={handleShareInvite}
+          onJoinVoiceRoom={handleJoinRoom} // Added
+        />
+      )}
+
+      {/* Search Results Overlay */}
+      {showSearchModal && (
+        <View style={{ position: 'absolute', top: 70 + insets.top, left: 0, right: 0, bottom: 0, backgroundColor: colors.background, zIndex: 99 }}>
+            {isSearchingBackend ? (
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                    <LuxeLogoLoader size="large" />
+                    <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 15, fontWeight: "500" }}>
+                        Searching messages...
+                    </Text>
+                </View>
+            ) : (!searchResults || searchResults.messages.length === 0) ? (
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 16, fontWeight: "500", color: colors.textSecondary, textAlign: "center" }}>
+                        {debouncedSearchQuery ? "No results found" : "Search in conversation"}
+                    </Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={searchResults.messages}
+                    keyExtractor={(item) => item.message.id}
+                    renderItem={({ item }) => (
+                        <SearchResultItem
+                            item={item}
+                            onPress={handleSearchResultPress}
+                            searchQuery={debouncedSearchQuery}
+                            colors={colors}
+                            isDark={isDark}
+                        />
+                    )}
+                    contentContainerStyle={{ paddingVertical: 16 }}
+                    keyboardDismissMode="on-drag"
+                    keyboardShouldPersistTaps="handled"
+                />
+            )}
+        </View>
+      )}
 
       {/* Smart Threads Tabs - Always show to display Main Chat pill and + button */}
       {threads && (
@@ -8886,105 +9346,6 @@ const ChatScreen = () => {
           customCommands={customCommands}
         />
         )}
-
-        {/* Search Modal */}
-        <Modal
-          visible={showSearchModal}
-          transparent={false}
-          animationType="slide"
-          onRequestClose={() => {
-            setShowSearchModal(false);
-            setSearchQuery("");
-          }}
-        >
-          <Animated.View
-            style={{
-              flex: 1,
-              transform: [{ translateY: searchModalDragY }],
-            }}
-            {...searchModalPanResponder.panHandlers}
-          >
-            <LinearGradient
-              colors={["#0A0A0A", "#1A1A2E", "#16213E"]}
-              style={{ flex: 1 }}
-            >
-              <View style={{ paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 20 }}>
-                <View style={{ borderRadius: 16, overflow: "hidden" }}>
-                  <BlurView intensity={30} tint="dark" style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
-                    <LinearGradient
-                      colors={["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.05)"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                    />
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                      <Search size={24} color={colors.text} />
-                      <TextInput
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        placeholder="Search messages..."
-                        placeholderTextColor="#666"
-                        style={{ flex: 1, color: "#FFFFFF", fontSize: 17 }}
-                        autoFocus
-                        keyboardAppearance={isDark ? "dark" : "light"}
-                      />
-                      <Pressable onPress={() => { setShowSearchModal(false); setSearchQuery(""); }}>
-                        <X size={20} color={colors.text} />
-                      </Pressable>
-                    </View>
-                  </BlurView>
-                </View>
-              </View>
-
-            <FlashList
-              data={searchResults}
-              keyExtractor={(item) => item.id}
-              estimatedItemSize={100}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 20 }}
-              ListEmptyComponent={
-                <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 60 }}>
-                  <Search size={64} color="#666" />
-                  <Text style={{ color: colors.textSecondary, fontSize: 17, fontWeight: "600", marginTop: 16 }}>
-                    {searchQuery ? "No results found" : "Start typing to search"}
-                  </Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    scrollToMessage(item.id);
-                  }}
-                  style={{ marginBottom: 12 }}
-                >
-                  <View
-                    style={{
-                      borderRadius: 16,
-                      overflow: "hidden",
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.1)",
-                      padding: 16,
-                    }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                      <Text style={{ color: "#007AFF", fontSize: 14, fontWeight: "600" }}>
-                        {item.user.name}
-                      </Text>
-                      <Text style={{ color: "#666", fontSize: 12, marginLeft: 12 }}>
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <Text style={{ color: "#FFFFFF", fontSize: 15, lineHeight: 20 }}>
-                      {item.content}
-                    </Text>
-                  </View>
-                </Pressable>
-              )}
-            />
-            </LinearGradient>
-          </Animated.View>
-        </Modal>
 
         {/* Bookmarks Modal */}
         <Modal

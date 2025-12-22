@@ -1481,3 +1481,19 @@ export const leaveVoiceRoomResponseSchema = z.object({
     success: z.boolean(),
 });
 export type LeaveVoiceRoomResponse = z.infer<typeof leaveVoiceRoomResponseSchema>;
+
+// POST /api/search/global - Unified Global Search
+export const globalSearchRequestSchema = z.object({
+  query: z.string(),
+  userId: z.string(),
+  limit: z.number().min(1).max(100).default(20).optional(),
+  chatId: z.string().optional(), // Optional: Filter by specific chat
+});
+export type GlobalSearchRequest = z.infer<typeof globalSearchRequestSchema>;
+
+export const globalSearchResponseSchema = z.object({
+  chats: z.array(chatWithMetadataSchema),
+  users: z.array(userSchema),
+  messages: z.array(searchMessageResultSchema),
+});
+export type GlobalSearchResponse = z.infer<typeof globalSearchResponseSchema>;

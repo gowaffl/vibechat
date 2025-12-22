@@ -925,11 +925,10 @@ chats.get("/:id/messages", async (c) => {
     const limit = parseInt(c.req.query("limit") || "100");
     const cursor = c.req.query("cursor"); // ISO date string for cursor-based pagination
     const since = c.req.query("since"); // ISO date string for gap recovery (fetch messages AFTER this timestamp)
+    const around = c.req.query("around"); // Message ID to jump to (fetch context around this message)
     
     // Optimize: Fetch messages with all relations in a single query
-    let query = db
-      .from("message")
-      .select(`
+    const selectQuery = `
         *,
         user:userId (*),
         aiFriend:aiFriendId (*),
@@ -948,51 +947,100 @@ chats.get("/:id/messages", async (c) => {
           mentionedBy:mentionedByUserId (*)
         ),
         tags:message_tag (*)
-      `)
-      .eq("chatId", chatId);
-    
-    // If 'since' is provided, fetch messages AFTER that timestamp (for gap recovery)
-    // Otherwise, use standard descending order with cursor pagination
-    if (since) {
-      query = query
+      `;
+
+    let messagesData: any[] = [];
+    let hasMore = false;
+    let nextCursor: string | null = null;
+
+    if (around) {
+      // Contextual Fetch: Get message + 50 before + 50 after
+      // 1. Get target message details
+      const { data: targetMsg, error: targetError } = await db
+        .from("message")
+        .select(selectQuery)
+        .eq("id", around)
+        .eq("chatId", chatId)
+        .single();
+
+      if (targetError || !targetMsg) {
+        return c.json({ error: "Target message not found" }, 404);
+      }
+
+      const targetDate = targetMsg.createdAt;
+
+      // 2. Fetch older messages (before target)
+      const { data: beforeData } = await db
+        .from("message")
+        .select(selectQuery)
+        .eq("chatId", chatId)
+        .lt("createdAt", targetDate)
+        .order("createdAt", { ascending: false })
+        .limit(50); // Fetch 50 older
+
+      // 3. Fetch newer messages (after target)
+      const { data: afterData } = await db
+        .from("message")
+        .select(selectQuery)
+        .eq("chatId", chatId)
+        .gt("createdAt", targetDate)
+        .order("createdAt", { ascending: true })
+        .limit(50); // Fetch 50 newer
+
+      // Combine: [...after (reversed to be newest first?), target, ...before]
+      // Our frontend expects newest at index 0 (descending order)
+      // So: [...after.reverse(), target, ...before]
+      const after = (afterData || []).reverse(); // Newest to Oldest (closest to target)
+      const before = (beforeData || []); // Closest to target to Oldest
+
+      messagesData = [...after, targetMsg, ...before];
+      
+      // For 'around' queries, hasMore/nextCursor logic is different or disabled for simplicity
+      // Client usually replaces entire list
+      hasMore = false; 
+      nextCursor = null;
+
+    } else if (since) {
+      // Gap Recovery
+      const { data, error } = await db
+        .from("message")
+        .select(selectQuery)
+        .eq("chatId", chatId)
         .gt("createdAt", since)
         .order("createdAt", { ascending: true }) // Oldest first for recovery
         .limit(limit);
+        
+      if (error) throw error;
+      messagesData = data || [];
+      hasMore = false;
+      nextCursor = null;
     } else {
-      query = query
+      // Standard Pagination
+      let query = db
+        .from("message")
+        .select(selectQuery)
+        .eq("chatId", chatId)
         .order("createdAt", { ascending: false })
         .limit(limit + 1);
       
       if (cursor) {
         query = query.lt("createdAt", cursor);
       }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("[Chats] Error fetching messages:", error);
+        return c.json({ error: "Failed to fetch messages" }, 500);
+      }
+      messagesData = data || [];
+      
+      hasMore = messagesData.length > limit;
+      if (hasMore) messagesData = messagesData.slice(0, limit); // Remove extra
+      nextCursor = hasMore && messagesData.length > 0 ? messagesData[messagesData.length - 1].createdAt : null;
     }
     
-    const { data: messagesData, error: messagesError } = await query;
-    
-    if (messagesError) {
-      console.error("[Chats] Error fetching messages:", messagesError);
-      return c.json({ error: "Failed to fetch messages" }, 500);
-    }
-    
-    // Handle pagination differently for 'since' queries vs regular pagination
-    let hasMore = false;
-    let messages = messagesData || [];
-    let nextCursor: string | null = null;
-    
-    if (since) {
-      // For gap recovery, return all messages (no pagination trimming needed)
-      // Messages are in ascending order (oldest first), reverse for UI if needed
-      hasMore = false;
-      nextCursor = null;
-    } else {
-      // Standard pagination: check if there are more messages
-      hasMore = messagesData && messagesData.length > limit;
-      messages = messages.slice(0, limit); // Remove the extra item
-      nextCursor = hasMore && messages.length > 0 
-        ? messages[messages.length - 1].createdAt 
-        : null;
-    }
+    let messages = messagesData;
+
 
     // Decrypt any encrypted messages
     const decryptedMessages = await decryptMessages(messages);

@@ -58,6 +58,7 @@ import reactionsRouter from "./routes/reactions";
 import customCommandsRouter from "./routes/custom-commands";
 import chatsRouter from "./routes/chats";
 import inviteRouter from "./routes/invite";
+import searchRouter from "./routes/search";
 import { linkPreviewRouter } from "./routes/link-preview";
 import bookmarksRouter from "./routes/bookmarks";
 import aiFriendsRouter from "./routes/ai-friends";
@@ -114,6 +115,9 @@ app.route("/api/chats", chatsRouter);
 
 console.log("🎟️  Mounting invite routes at /api/invite");
 app.route("/api/invite", inviteRouter);
+
+console.log("🔍 Mounting search routes at /api/search");
+app.route("/api/search", searchRouter);
 
 console.log("💬 Mounting messages routes at /api/messages");
 app.route("/api/messages", messagesRouter);

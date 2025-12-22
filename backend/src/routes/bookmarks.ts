@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db";
 import { formatTimestamp } from "../utils/supabase-helpers";
+import { decryptMessages } from "../services/message-encryption";
 
 const app = new Hono();
 
@@ -40,10 +41,13 @@ app.get("/", async (c) => {
           return { ...bookmark, message: null };
         }
 
+        // Decrypt message content if encrypted
+        const [decryptedMessage] = await decryptMessages([message]);
+
         const { data: user, error: userError } = await db
           .from("user")
           .select("id, name, image")
-          .eq("id", message.userId)
+          .eq("id", decryptedMessage.userId)
           .single();
 
         if (userError) {
@@ -53,7 +57,7 @@ app.get("/", async (c) => {
         return {
           ...bookmark,
           message: {
-            ...message,
+            ...decryptedMessage,
             user: user || null,
           },
         };
