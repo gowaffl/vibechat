@@ -134,6 +134,7 @@ async function handleEgressEnded(event: any) {
 
 /**
  * Handle room_finished event - triggered when all participants leave
+ * IMPORTANT: This also cleans up any "zombie" participants who didn't properly call leave API
  */
 async function handleRoomFinished(event: any) {
   try {
@@ -144,7 +145,22 @@ async function handleRoomFinished(event: any) {
     
     console.log(`[Webhook] Room finished: ${roomName}`);
     
-    // Mark the voice room as inactive
+    // First, mark ALL participants as left (in case some didn't call leave API)
+    // This handles edge cases like app crashes, network disconnects, etc.
+    const { data: zombieParticipants, error: zombieError } = await db
+      .from("voice_participant")
+      .update({ leftAt: new Date().toISOString() })
+      .eq("voiceRoomId", roomName)
+      .is("leftAt", null)
+      .select();
+    
+    if (zombieError) {
+      console.error("[Webhook] Error cleaning up participants:", zombieError);
+    } else if (zombieParticipants && zombieParticipants.length > 0) {
+      console.log(`[Webhook] Cleaned up ${zombieParticipants.length} zombie participant(s) in room ${roomName}`);
+    }
+    
+    // Then mark the voice room as inactive
     await db
       .from("voice_room")
       .update({ 
@@ -152,6 +168,8 @@ async function handleRoomFinished(event: any) {
         endedAt: new Date().toISOString()
       })
       .eq("id", roomName);
+      
+    console.log(`[Webhook] Room ${roomName} marked as inactive`);
       
   } catch (error) {
     console.error("[Webhook] Error handling room_finished:", error);

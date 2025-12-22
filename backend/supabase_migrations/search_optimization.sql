@@ -2,40 +2,6 @@
 -- Enable pg_trgm for fuzzy search
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- ============================================================================
--- STORAGE BUCKETS CONFIGURATION
--- ============================================================================
-
--- Vibe Call Recordings Bucket
--- Used by LiveKit Egress to store voice room recordings via S3
--- File size limit: 500MB (524,288,000 bytes) to accommodate longer recordings
--- Updated: 2024-12-19 (previously 25MB, caused 413 EntityTooLarge errors)
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'vibe-call-recordings',
-  'vibe-call-recordings',
-  false,  -- Private bucket, recordings are not publicly accessible
-  524288000,  -- 500MB limit
-  ARRAY['audio/mp4', 'audio/mpeg', 'audio/webm', 'audio/ogg', 'video/mp4']
-)
-ON CONFLICT (id) DO UPDATE SET
-  file_size_limit = 524288000,
-  allowed_mime_types = ARRAY['audio/mp4', 'audio/mpeg', 'audio/webm', 'audio/ogg', 'video/mp4'];
-
--- Uploads Bucket (general file uploads)
-INSERT INTO storage.buckets (id, name, public, file_size_limit)
-VALUES (
-  'uploads',
-  'uploads',
-  true,  -- Public bucket
-  NULL   -- No file size limit
-)
-ON CONFLICT (id) DO NOTHING;
-
--- ============================================================================
--- MESSAGE SEARCH & INDEXING
--- ============================================================================
-
 -- Create GIN index for full-text search on content
 CREATE INDEX IF NOT EXISTS message_content_fts_idx ON public.message USING gin (to_tsvector('english', coalesce(content, '')));
 
@@ -46,6 +12,11 @@ CREATE INDEX IF NOT EXISTS message_content_trgm_idx ON public.message USING gin 
 CREATE INDEX IF NOT EXISTS message_chat_created_idx ON public.message ("chatId", "createdAt" DESC);
 CREATE INDEX IF NOT EXISTS message_user_created_idx ON public.message ("userId", "createdAt" DESC);
 CREATE INDEX IF NOT EXISTS message_type_created_idx ON public.message ("messageType", "createdAt" DESC);
+
+-- Drop existing functions to allow signature changes
+DROP FUNCTION IF EXISTS match_messages(vector, double precision, integer, text, text[], text[], timestamp with time zone, timestamp with time zone);
+DROP FUNCTION IF EXISTS match_messages(vector, double precision, integer, text, text[]);
+DROP FUNCTION IF EXISTS search_messages_text(text, integer, text, text[], text[], timestamp with time zone, timestamp with time zone);
 
 -- Update match_messages function to include recency sorting and better threshold
 CREATE OR REPLACE FUNCTION match_messages (

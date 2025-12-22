@@ -6669,11 +6669,6 @@ const ChatScreen = () => {
                     });
                   }
                 }}
-                onLongPress={() => {
-                  if (!imageSelectionMode) {
-                    enableImageSelectionMode(message.id);
-                  }
-                }}
               >
                 <View style={{ width: 270, height: 288, position: "relative", overflow: "hidden" }}>
                   {/* Placeholder - only show while loading remote image */}
@@ -7129,7 +7124,8 @@ const ChatScreen = () => {
                   });
 
                 const bubbleLongPress = Gesture.LongPress()
-                  .minDuration(500)
+                  .minDuration(400)
+                  .maxDistance(20)
                   .onStart(() => {
                     if (!selectionMode) {
                       runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
@@ -7142,7 +7138,7 @@ const ChatScreen = () => {
 
                 return (
                   <GestureDetector gesture={bubbleGesture}>
-                    <MessageBubbleMeasurer collapsable={false}>
+                    <MessageBubbleMeasurer collapsable={false} hitSlop={{ top: 0, bottom: 0, left: 0, right: 0 }}>
                       {renderMessageContent()}
                     </MessageBubbleMeasurer>
                   </GestureDetector>

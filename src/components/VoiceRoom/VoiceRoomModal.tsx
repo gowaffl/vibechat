@@ -13,6 +13,7 @@ import {
   TouchableWithoutFeedback,
   Alert,
   PermissionsAndroid,
+  Keyboard,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import {
@@ -59,6 +60,7 @@ interface VoiceRoomModalProps {
   onLeave: () => void;
   isConnecting?: boolean;
   chatInputHeight?: number;
+  onDockStateChange?: (isDocked: boolean) => void;
 }
 
 export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
@@ -69,6 +71,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   onLeave,
   isConnecting = false,
   chatInputHeight = 60,
+  onDockStateChange,
 }) => {
   const [isDocked, setIsDocked] = useState(false);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
@@ -126,13 +129,18 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         }
       });
       slideAnim.value = withSpring(0, SPRING_CONFIG);
+      
+      // Dismiss keyboard when modal opens in full mode (not docked)
+      if (!isDocked) {
+        Keyboard.dismiss();
+      }
     } else {
       slideAnim.value = withTiming(SCREEN_HEIGHT, { duration: 300 });
       // Reset dock state when closed
       setIsDocked(false);
       dockProgress.value = 0;
     }
-  }, [visible]);
+  }, [visible, isDocked, onLeave]);
 
   // Log when token/serverUrl change
   useEffect(() => {
@@ -157,7 +165,13 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   // Worklet friendly toggle handler
   const handleDockToggle = useCallback((shouldDock: boolean) => {
     setIsDocked(shouldDock);
-  }, []);
+    onDockStateChange?.(shouldDock);
+    
+    // Dismiss keyboard when modal is fully expanded (not docked)
+    if (!shouldDock) {
+      Keyboard.dismiss();
+    }
+  }, [onDockStateChange]);
 
   const onGestureEvent = useAnimatedGestureHandler({
     onStart: (_, ctx: any) => {
@@ -201,6 +215,12 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     const nextState = !isDocked;
     setIsDocked(nextState);
     dockProgress.value = withSpring(nextState ? 1 : 0, SPRING_CONFIG);
+    onDockStateChange?.(nextState);
+    
+    // Dismiss keyboard when modal is fully expanded (not docked)
+    if (!nextState) {
+      Keyboard.dismiss();
+    }
   };
 
   // ALL useAnimatedStyle hooks BEFORE return statement

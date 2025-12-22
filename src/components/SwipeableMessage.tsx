@@ -61,8 +61,8 @@ export const SwipeableMessage: React.FC<SwipeableMessageProps> = ({
   };
 
   const panGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10]) // Require 10px horizontal movement to activate
-    .failOffsetY([-15, 15]) // Fail if vertical movement exceeds 15px
+    .activeOffsetX([-20, 20]) // Require 20px horizontal movement to activate (increased to reduce conflicts with long press)
+    .failOffsetY([-25, 25]) // Fail if vertical movement exceeds 25px
     .onUpdate((event) => {
       const translation = event.translationX;
       

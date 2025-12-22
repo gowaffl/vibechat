@@ -15,7 +15,7 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { MessageCircle, Users, X, ChevronRight, Search, Pin, LogOut, Bell, BellOff } from "lucide-react-native";
@@ -306,7 +306,6 @@ const ChatItem = React.memo(({
 import { useSearchStore } from "@/stores/searchStore";
 import { CreateChatFAB } from "@/components/CreateChatFAB";
 import { SearchFilters } from "@/components/Search/SearchFilters";
-import { useInfiniteQuery } from "@tanstack/react-query";
 import { HighlightText } from "@/components/HighlightText";
 
 const ChatListScreen = () => {
@@ -318,6 +317,7 @@ const ChatListScreen = () => {
 
   const { searchQuery, searchMode, filters } = useSearchStore();
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const isDebouncing = searchQuery !== debouncedSearchQuery;
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -330,7 +330,7 @@ const ChatListScreen = () => {
     });
   }, [filters]);
 
-  const isSearchActive = debouncedSearchQuery.trim().length > 0 || hasActiveFilters;
+  const isSearchActive = searchQuery.trim().length > 0 || hasActiveFilters;
 
   // Fetch user's chats
   const { data: chats = [], isLoading, refetch } = useQuery<GetUserChatsResponse>({
@@ -366,8 +366,10 @@ const ChatListScreen = () => {
       if (!lastPage || lastPage.length < 20) return undefined;
       return lastPage[lastPage.length - 1].message.id;
     },
-    enabled: !!user?.id && isSearchActive,
+    enabled: !!user?.id && (debouncedSearchQuery.trim().length > 0 || hasActiveFilters),
     initialPageParam: undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const searchResults = React.useMemo(() => {
@@ -853,9 +855,12 @@ const ChatListScreen = () => {
       >
       {isSearchActive ? (
         // Search Mode
-        isSearching && !searchData ? (
+        (isSearching && !searchData) || isDebouncing ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <LuxeLogoLoader size="large" />
+            <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 15, fontWeight: "500" }}>
+              {isDebouncing ? "Typing..." : "Searching messages..."}
+            </Text>
           </View>
         ) : searchResults.length === 0 ? (
           <View style={{ flex: 1, paddingHorizontal: 32 }}>
