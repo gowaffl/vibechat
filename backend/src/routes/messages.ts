@@ -134,7 +134,7 @@ messages.post("/search", zValidator("json", searchMessagesRequestSchema), async 
         
         const { data: matches, error: matchError } = await db.rpc("match_messages", {
           query_embedding: queryEmbedding,
-          match_threshold: 0.4, // Increased from 0.3 for better quality
+          match_threshold: 0.25, // Lowered threshold for better recall (was 0.4)
           match_count: limit * 2,
           filter_user_id: fromUserId || null,
           filter_chat_ids: targetChatIds,
