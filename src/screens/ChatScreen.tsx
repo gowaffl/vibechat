@@ -1878,9 +1878,18 @@ const ChatScreen = () => {
 
   // Translation handlers
   const handleTranslationToggle = async (enabled: boolean) => {
+    console.log("[Translation] Toggle translation:", enabled);
     setTranslationEnabled(enabled);
     
-    // Update user preference on backend
+    // Save per-chat translation enabled state to AsyncStorage
+    try {
+      await AsyncStorage.setItem(`chat_translation_enabled_${chatId}`, enabled.toString());
+      console.log("[Translation] Saved chat translation enabled to AsyncStorage:", enabled);
+    } catch (error) {
+      console.error("[Translation] Failed to save chat translation enabled:", error);
+    }
+    
+    // Update user global preference on backend
     try {
       await api.post("/api/ai-native/translation-preference", {
         userId: user?.id,
@@ -1899,9 +1908,11 @@ const ChatScreen = () => {
       
       // If enabling, translate all visible messages
       if (enabled && messages && messages.length > 0) {
+        console.log("[Translation] Translating visible messages, count:", messages.length);
         await translateVisibleMessages(messages);
       } else {
         // If disabling, clear translations
+        console.log("[Translation] Clearing translations");
         setTranslatedMessages(new Map());
       }
     } catch (error) {
@@ -1930,16 +1941,25 @@ const ChatScreen = () => {
   };
 
   const translateVisibleMessages = async (messagesToTranslate: Message[]) => {
-    if (!messagesToTranslate || messagesToTranslate.length === 0) return;
+    if (!messagesToTranslate || messagesToTranslate.length === 0) {
+      console.log("[Translation] No messages to translate");
+      return;
+    }
     
     // Filter only text messages that haven't been translated yet
     const textMessages = messagesToTranslate.filter(
       (m) => m.content && m.content.trim() !== "" && !translatedMessages.has(m.id)
     );
     
-    if (textMessages.length === 0) return;
+    console.log("[Translation] Filtered text messages:", textMessages.length, "of", messagesToTranslate.length);
+    
+    if (textMessages.length === 0) {
+      console.log("[Translation] No new messages to translate (all already translated or empty)");
+      return;
+    }
     
     try {
+      console.log("[Translation] Calling batch translate API for", textMessages.length, "messages to language:", translationLanguage);
       // Call batch translation endpoint
       const response = await api.post<{ translations: Record<string, string> }>(
         "/api/ai-native/translate-batch",
@@ -1950,13 +1970,17 @@ const ChatScreen = () => {
         }
       );
       
+      console.log("[Translation] Received translations:", Object.keys(response.data?.translations || {}).length);
+      
       if (response.data?.translations) {
         const newTranslations = new Map(translatedMessages);
         // Backend returns { translations: { "messageId1": "text1", "messageId2": "text2" } }
         Object.entries(response.data.translations).forEach(([messageId, translatedText]) => {
           newTranslations.set(messageId, translatedText);
+          console.log("[Translation] Set translation for message:", messageId);
         });
         setTranslatedMessages(newTranslations);
+        console.log("[Translation] Updated translatedMessages map, total:", newTranslations.size);
       }
     } catch (error) {
       console.error("[Translation] Failed to translate messages:", error);
@@ -1964,9 +1988,13 @@ const ChatScreen = () => {
   };
 
   const translateSingleMessage = async (messageToTranslate: Message) => {
-    if (!messageToTranslate.content || translatedMessages.has(messageToTranslate.id)) return;
+    if (!messageToTranslate.content || translatedMessages.has(messageToTranslate.id)) {
+      console.log("[Translation] Skipping single message translation (no content or already translated)");
+      return;
+    }
     
     try {
+      console.log("[Translation] Translating single message:", messageToTranslate.id, "to language:", translationLanguage);
       const response = await api.post<{ translatedText: string }>(
         "/api/ai-native/translate",
         {
@@ -1976,10 +2004,13 @@ const ChatScreen = () => {
         }
       );
       
+      console.log("[Translation] Received single translation:", response.data.translatedText ? "success" : "empty");
+      
       if (response.data.translatedText) {
         const newTranslations = new Map(translatedMessages);
         newTranslations.set(messageToTranslate.id, response.data.translatedText);
         setTranslatedMessages(newTranslations);
+        console.log("[Translation] Updated single message translation, total:", newTranslations.size);
       }
     } catch (error) {
       console.error("[Translation] Failed to translate message:", error);
@@ -2108,26 +2139,40 @@ const ChatScreen = () => {
   const [translationLanguage, setTranslationLanguage] = useState(user?.preferredLanguage || "en");
   const [translatedMessages, setTranslatedMessages] = useState<Map<string, string>>(new Map());
 
-  // Load chat-specific language override from AsyncStorage
+  // Load per-chat translation preferences from AsyncStorage
   useEffect(() => {
-    const loadChatLanguageOverride = async () => {
+    const loadChatTranslationPreferences = async () => {
       try {
-        const override = await AsyncStorage.getItem(`chat_language_${chatId}`);
-        if (override) {
-          setTranslationLanguage(override);
+        // Load chat-specific translation enabled state
+        const enabledOverride = await AsyncStorage.getItem(`chat_translation_enabled_${chatId}`);
+        if (enabledOverride !== null) {
+          setTranslationEnabled(enabledOverride === "true");
+          console.log("[Translation] Loaded chat translation enabled:", enabledOverride === "true");
+        } else {
+          // No override, use user's global preference
+          setTranslationEnabled(user?.translationPreference === "enabled");
+          console.log("[Translation] Using global translation preference:", user?.translationPreference === "enabled");
+        }
+
+        // Load chat-specific language override
+        const languageOverride = await AsyncStorage.getItem(`chat_language_${chatId}`);
+        if (languageOverride) {
+          setTranslationLanguage(languageOverride);
+          console.log("[Translation] Loaded chat language override:", languageOverride);
         } else {
           // No override, use user's preferred language
           setTranslationLanguage(user?.preferredLanguage || "en");
+          console.log("[Translation] Using global preferred language:", user?.preferredLanguage || "en");
         }
       } catch (error) {
-        console.error("[ChatScreen] Failed to load chat language override:", error);
+        console.error("[ChatScreen] Failed to load chat translation preferences:", error);
       }
     };
     
     if (chatId) {
-      loadChatLanguageOverride();
+      loadChatTranslationPreferences();
     }
-  }, [chatId, user?.preferredLanguage]);
+  }, [chatId, user?.preferredLanguage, user?.translationPreference]);
 
   // In-Chat Search Query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
