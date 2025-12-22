@@ -1944,6 +1944,7 @@ const ChatScreen = () => {
       const response = await api.post<{ translations: Array<{ messageId: string; translatedText: string }> }>(
         "/api/ai-native/translate-batch",
         {
+          userId: user?.id,
           messageIds: textMessages.map((m) => m.id),
           targetLanguage: translationLanguage,
         }
@@ -1968,6 +1969,7 @@ const ChatScreen = () => {
       const response = await api.post<{ translatedText: string }>(
         "/api/ai-native/translate",
         {
+          userId: user?.id,
           messageId: messageToTranslate.id,
           targetLanguage: translationLanguage,
         }
@@ -2657,6 +2659,7 @@ const ChatScreen = () => {
                    const translateResponse = await api.post<{ translatedText: string }>(
                      "/api/ai-native/translate",
                      {
+                       userId: user?.id,
                        messageId: newMessage.id,
                        targetLanguage: translationLanguage,
                      }
