@@ -1882,7 +1882,7 @@ const ChatScreen = () => {
     
     // Update user preference on backend
     try {
-      await api.post("/ai-native/translation-preference", {
+      await api.post("/api/ai-native/translation-preference", {
         userId: user?.id,
         enabled,
         language: translationLanguage,
@@ -1942,7 +1942,7 @@ const ChatScreen = () => {
     try {
       // Call batch translation endpoint
       const response = await api.post<{ translations: Array<{ messageId: string; translatedText: string }> }>(
-        "/ai-native/translate-batch",
+        "/api/ai-native/translate-batch",
         {
           messageIds: textMessages.map((m) => m.id),
           targetLanguage: translationLanguage,
@@ -1966,7 +1966,7 @@ const ChatScreen = () => {
     
     try {
       const response = await api.post<{ translatedText: string }>(
-        "/ai-native/translate",
+        "/api/ai-native/translate",
         {
           messageId: messageToTranslate.id,
           targetLanguage: translationLanguage,
@@ -2655,7 +2655,7 @@ const ChatScreen = () => {
                if (translationEnabled && newMessage.content && newMessage.content.trim() !== "") {
                  try {
                    const translateResponse = await api.post<{ translatedText: string }>(
-                     "/ai-native/translate",
+                     "/api/ai-native/translate",
                      {
                        messageId: newMessage.id,
                        targetLanguage: translationLanguage,
