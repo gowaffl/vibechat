@@ -30,7 +30,7 @@ import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming, withRepeat, withSequence } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy, Languages } from "lucide-react-native";
@@ -103,6 +103,63 @@ import { useVoiceRoom } from "@/hooks/useVoiceRoom";
 import { useDebounce } from "@/hooks/useDebounce";
 import { GlobalSearchResponse, SearchMessageResult } from "@/shared/contracts";
 import { HighlightText } from "@/components/HighlightText";
+
+const GlowMessageWrapper = ({ children, isHighlighted, color }: { children: React.ReactNode, isHighlighted: boolean, color: string }) => {
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(1);
+
+  React.useEffect(() => {
+    if (isHighlighted) {
+      // Pulse animation
+      opacity.value = withSequence(
+        withTiming(0.6, { duration: 300 }),
+        withRepeat(
+          withSequence(
+            withTiming(0.2, { duration: 800 }),
+            withTiming(0.6, { duration: 800 })
+          ),
+          4, // Repeat 4 times
+          true // Reverse
+        ),
+        withTiming(0, { duration: 500 }) // Fade out at the end
+      );
+      
+      scale.value = withSequence(
+        withTiming(1.05, { duration: 300, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 300, easing: Easing.in(Easing.ease) })
+      );
+    } else {
+      opacity.value = withTiming(0, { duration: 300 });
+      scale.value = withTiming(1, { duration: 300 });
+    }
+  }, [isHighlighted]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <View>
+      <Reanimated.View
+        style={[
+          {
+            position: 'absolute',
+            top: -6,
+            left: -6,
+            right: -6,
+            bottom: -6,
+            backgroundColor: color,
+            borderRadius: 24,
+            zIndex: -1,
+          },
+          animatedStyle,
+        ]}
+      />
+      {children}
+    </View>
+  );
+};
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
@@ -6819,77 +6876,81 @@ const ChatScreen = () => {
           };
 
       const bubbleContent = (
-        <View
-          style={{
-            // Shadow container - subtle glow effect
-            ...borderRadiusStyle,
-            shadowColor: bubbleStyle.shadowColor,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.15,
-            shadowRadius: 4,
-            elevation: 2,
-            ...(isHighlighted && {
-              shadowColor: "#FFD700",
-              shadowOpacity: 0.5,
-              shadowRadius: 8,
-              elevation: 4,
-            }),
-          }}
+        <GlowMessageWrapper 
+          isHighlighted={highlightedMessageId === message.id} 
+          color={isCurrentUser ? colors.primary : (isAI ? aiColor : (vibeConfig?.color || colors.primary))}
         >
-          {/* Clip container - handles overflow clipping with border radius */}
           <View
             style={{
+              // Shadow container - subtle glow effect
               ...borderRadiusStyle,
-              overflow: "hidden",
-              // Very subtle border - vibes get more prominent border
-              borderWidth: isHighlighted ? 2 : vibeConfig ? 1 : 0.5,
-              borderColor: isHighlighted 
-                ? "#FFD700" 
-                : vibeConfig
-                  ? `${vibeConfig.color}60` // 38% opacity for vibes
-                  : isCurrentUser 
-                    ? colors.primary + "4D"
-                    : isAI 
-                      ? "rgba(20, 184, 166, 0.3)" 
-                      : isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
+              shadowColor: bubbleStyle.shadowColor,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 2,
+              ...(isHighlighted && {
+                shadowColor: "#FFD700",
+                shadowOpacity: 0.5,
+                shadowRadius: 8,
+                elevation: 4,
+              }),
             }}
           >
-          {/* Liquid Glass Background */}
-          <BlurView
-            intensity={Platform.OS === "ios" ? 40 : 80}
-            tint={colors.blurTint}
-            style={{
-              backgroundColor: isHighlighted ? "rgba(255, 215, 0, 0.1)" : undefined,
-            }}
-          >
-            <LinearGradient
-              colors={
-                vibeConfig
-                  ? vibeConfig.gradient
-                  : isCurrentUser
-                  ? isDark 
-                    ? ["rgba(0, 122, 255, 0.25)", "rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.08)"]
-                    : ["rgba(0, 122, 255, 0.18)", "rgba(0, 122, 255, 0.10)", "rgba(0, 122, 255, 0.05)"]
-                  : isAI
-                  ? [
-                      "rgba(20, 184, 166, 0.25)",
-                      "rgba(20, 184, 166, 0.15)",
-                      "rgba(20, 184, 166, 0.08)",
-                    ]
-                  : isDark
-                    ? ["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.10)", "rgba(255, 255, 255, 0.05)"]
-                    : ["rgba(0, 0, 0, 0.06)", "rgba(0, 0, 0, 0.04)", "rgba(0, 0, 0, 0.02)"]
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ flex: 1 }}
+            {/* Clip container - handles overflow clipping with border radius */}
+            <View
+              style={{
+                ...borderRadiusStyle,
+                overflow: "hidden",
+                // Very subtle border - vibes get more prominent border
+                borderWidth: isHighlighted ? 2 : vibeConfig ? 1 : 0.5,
+                borderColor: isHighlighted 
+                  ? "#FFD700" 
+                  : vibeConfig
+                    ? `${vibeConfig.color}60` // 38% opacity for vibes
+                    : isCurrentUser 
+                      ? colors.primary + "4D"
+                      : isAI 
+                        ? "rgba(20, 184, 166, 0.3)" 
+                        : isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
+              }}
             >
-          {/* Slash Command Badge */}
-          {metadata?.slashCommand && (
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 10,
+            {/* Liquid Glass Background */}
+            <BlurView
+              intensity={Platform.OS === "ios" ? 40 : 80}
+              tint={colors.blurTint}
+              style={{
+                backgroundColor: isHighlighted ? "rgba(255, 215, 0, 0.1)" : undefined,
+              }}
+            >
+              <LinearGradient
+                colors={
+                  vibeConfig
+                    ? vibeConfig.gradient
+                    : isCurrentUser
+                    ? isDark 
+                      ? ["rgba(0, 122, 255, 0.25)", "rgba(0, 122, 255, 0.15)", "rgba(0, 122, 255, 0.08)"]
+                      : ["rgba(0, 122, 255, 0.18)", "rgba(0, 122, 255, 0.10)", "rgba(0, 122, 255, 0.05)"]
+                    : isAI
+                    ? [
+                        "rgba(20, 184, 166, 0.25)",
+                        "rgba(20, 184, 166, 0.15)",
+                        "rgba(20, 184, 166, 0.08)",
+                      ]
+                    : isDark
+                      ? ["rgba(255, 255, 255, 0.15)", "rgba(255, 255, 255, 0.10)", "rgba(255, 255, 255, 0.05)"]
+                      : ["rgba(0, 0, 0, 0.06)", "rgba(0, 0, 0, 0.04)", "rgba(0, 0, 0, 0.02)"]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ flex: 1 }}
+              >
+            {/* Slash Command Badge */}
+            {metadata?.slashCommand && (
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 10,
               paddingTop: 8,
               paddingBottom: 4,
             }}>
@@ -7371,6 +7432,7 @@ const ChatScreen = () => {
           </BlurView>
           </View>
         </View>
+        </GlowMessageWrapper>
       );
 
       // Wrap with animated bubble if message has a vibe
