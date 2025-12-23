@@ -14,6 +14,10 @@ import InviteMembersScreen from "@/screens/InviteMembersScreen";
 import InviteScreen from "@/screens/InviteScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import GroupSettingsScreen from "@/screens/GroupSettingsScreen";
+import GroupSettingsAiFriendsScreen from "@/screens/GroupSettingsAiFriendsScreen";
+import GroupSettingsWorkflowsScreen from "@/screens/GroupSettingsWorkflowsScreen";
+import GroupSettingsCommandsScreen from "@/screens/GroupSettingsCommandsScreen";
+import GroupSettingsMembersScreen from "@/screens/GroupSettingsMembersScreen";
 import OnboardingNameScreen from "@/screens/OnboardingNameScreen";
 import OnboardingPhotoScreen from "@/screens/OnboardingPhotoScreen";
 import PhoneAuthScreen from "@/screens/PhoneAuthScreen";
@@ -184,6 +188,78 @@ const RootNavigator = () => {
         options={{
           headerShown: true,
           headerTitle: "Group Settings",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
+        }}
+      />
+      <RootStack.Screen
+        name="GroupSettingsAiFriends"
+        component={GroupSettingsAiFriendsScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "AI Friends",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
+        }}
+      />
+      <RootStack.Screen
+        name="GroupSettingsWorkflows"
+        component={GroupSettingsWorkflowsScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "Workflows",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
+        }}
+      />
+      <RootStack.Screen
+        name="GroupSettingsCommands"
+        component={GroupSettingsCommandsScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "Custom Commands",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
+        }}
+      />
+      <RootStack.Screen
+        name="GroupSettingsMembers"
+        component={GroupSettingsMembersScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "Members",
           headerTransparent: true,
           headerBackground: () => (
             <LinearGradient

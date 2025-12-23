@@ -19,7 +19,11 @@ export type RootStackParamList = {
   ChatList: undefined; // Kept for backward compatibility references if any
   Chat: { chatId: string; chatName: string; messageId?: string; forceRefresh?: boolean };
   Profile: undefined; // Kept for backward compatibility references if any
-  GroupSettings: { chatId: string; expandAIFriends?: boolean; createAIFriend?: boolean };
+  GroupSettings: { chatId: string };
+  GroupSettingsAiFriends: { chatId: string };
+  GroupSettingsWorkflows: { chatId: string };
+  GroupSettingsCommands: { chatId: string };
+  GroupSettingsMembers: { chatId: string };
   InviteMembers: { chatId: string; chatName: string };
   Invite: { token: string };
   JoinChat: undefined;
