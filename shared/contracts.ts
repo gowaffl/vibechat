@@ -93,6 +93,8 @@ export const chatMemberSchema = z.object({
   userId: z.string(),
   joinedAt: z.string(),
   isMuted: z.boolean().optional().default(false),
+  translationEnabled: z.boolean().optional().default(false),
+  translationLanguage: z.string().optional().default("en"),
   user: userSchema.optional(),
 });
 export type ChatMember = z.infer<typeof chatMemberSchema>;
@@ -106,6 +108,8 @@ export const chatWithMetadataSchema = chatSchema.extend({
   isPinned: z.boolean().optional(),
   pinnedAt: z.string().nullable().optional(),
   isMuted: z.boolean().optional(),
+  translationEnabled: z.boolean().optional(),
+  translationLanguage: z.string().optional(),
 });
 export type ChatWithMetadata = z.infer<typeof chatWithMetadataSchema>;
 

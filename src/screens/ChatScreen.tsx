@@ -30,7 +30,7 @@ import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming, withRepeat, withSequence } from "react-native-reanimated";
+import Reanimated, { FadeIn, FadeInUp, FadeOut, Layout, useAnimatedStyle, useAnimatedKeyboard, useAnimatedReaction, runOnJS, useSharedValue, withTiming, withRepeat, withSequence, Easing as ReanimatedEasing } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Send, User as UserIcon, ImagePlus, X, Download, Share2, Reply, Smile, Settings, Users, ChevronLeft, ChevronDown, Trash2, Edit, Edit3, CheckSquare, StopCircle, Mic, Plus, Images, Search, Bookmark, MoreVertical, Calendar, UserPlus, Sparkles, ArrowUp, Copy, Languages } from "lucide-react-native";
@@ -125,8 +125,8 @@ const GlowMessageWrapper = ({ children, isHighlighted, color }: { children: Reac
       );
       
       scale.value = withSequence(
-        withTiming(1.05, { duration: 300, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: 300, easing: Easing.in(Easing.ease) })
+        withTiming(1.05, { duration: 300, easing: ReanimatedEasing.out(ReanimatedEasing.ease) }),
+        withTiming(1, { duration: 300, easing: ReanimatedEasing.in(ReanimatedEasing.ease) })
       );
     } else {
       opacity.value = withTiming(0, { duration: 300 });
@@ -1881,53 +1881,38 @@ const ChatScreen = () => {
     console.log("[Translation] Toggle translation:", enabled);
     setTranslationEnabled(enabled);
     
-    // Save per-chat translation enabled state to AsyncStorage
+    // Persist to backend
     try {
-      await AsyncStorage.setItem(`chat_translation_enabled_${chatId}`, enabled.toString());
-      console.log("[Translation] Saved chat translation enabled to AsyncStorage:", enabled);
+      await api.patch(`/api/chats/${chatId}/translation`, {
+        userId: user?.id,
+        translationEnabled: enabled
+      });
+      console.log("[Translation] Saved chat translation settings to server:", enabled);
     } catch (error) {
-      console.error("[Translation] Failed to save chat translation enabled:", error);
+      console.error("[Translation] Failed to save chat translation settings:", error);
     }
     
-    // Update user global preference on backend
-    try {
-      await api.post("/api/ai-native/translation-preference", {
-        userId: user?.id,
-        enabled,
-        language: translationLanguage,
-      });
-      
-      // Update user context
-      if (updateUser) {
-        updateUser({
-          ...user,
-          translationPreference: enabled ? "enabled" : "disabled",
-          preferredLanguage: translationLanguage,
-        });
-      }
-      
-      // If enabling, translate all visible messages
-      if (enabled && messages && messages.length > 0) {
-        console.log("[Translation] Translating visible messages, count:", messages.length);
-        await translateVisibleMessages(messages);
-      } else {
-        // If disabling, clear translations
-        console.log("[Translation] Clearing translations");
-        setTranslatedMessages(new Map());
-      }
-    } catch (error) {
-      console.error("[Translation] Failed to update preference:", error);
-      Alert.alert("Error", "Failed to update translation preference");
+    // If enabling, translate all visible messages
+    if (enabled && messages && messages.length > 0) {
+      console.log("[Translation] Translating visible messages, count:", messages.length);
+      await translateVisibleMessages(messages);
+    } else {
+      // If disabling, clear translations
+      console.log("[Translation] Clearing translations");
+      setTranslatedMessages(new Map());
     }
   };
 
   const handleLanguageSelect = async (language: string) => {
     setTranslationLanguage(language);
     
-    // Save chat-specific language override to AsyncStorage
-    // This overrides the user's default preferred language for this specific chat
+    // Persist to backend
     try {
-      await AsyncStorage.setItem(`chat_language_${chatId}`, language);
+      await api.patch(`/api/chats/${chatId}/translation`, {
+        userId: user?.id,
+        translationLanguage: language
+      });
+      console.log("[Translation] Saved chat language to server:", language);
       
       // Clear existing translations and re-translate with new language
       setTranslatedMessages(new Map());
@@ -1935,7 +1920,7 @@ const ChatScreen = () => {
         await translateVisibleMessages(messages);
       }
     } catch (error) {
-      console.error("[Translation] Failed to save chat language override:", error);
+      console.error("[Translation] Failed to save chat language:", error);
       Alert.alert("Error", "Failed to update translation language");
     }
   };
@@ -1960,28 +1945,43 @@ const ChatScreen = () => {
     
     try {
       console.log("[Translation] Calling batch translate API for", textMessages.length, "messages to language:", translationLanguage);
-      // Call batch translation endpoint
-      const response = await api.post<{ translations: Record<string, string> }>(
-        "/api/ai-native/translate-batch",
-        {
-          userId: user?.id,
-          messageIds: textMessages.map((m) => m.id),
-          targetLanguage: translationLanguage,
-        }
-      );
-      
-      console.log("[Translation] Received translations:", Object.keys(response.data?.translations || {}).length);
-      
-      if (response.data?.translations) {
-        const newTranslations = new Map(translatedMessages);
-        // Backend returns { translations: { "messageId1": "text1", "messageId2": "text2" } }
-        Object.entries(response.data.translations).forEach(([messageId, translatedText]) => {
-          newTranslations.set(messageId, translatedText);
-          console.log("[Translation] Set translation for message:", messageId);
-        });
-        setTranslatedMessages(newTranslations);
-        console.log("[Translation] Updated translatedMessages map, total:", newTranslations.size);
-      }
+       // Call batch translation endpoint
+       const response = await api.post<{ translations: Record<string, string> }>(
+         "/api/ai-native/translate-batch",
+         {
+           userId: user?.id,
+           messageIds: textMessages.map((m) => m.id),
+           targetLanguage: translationLanguage,
+         }
+       );
+       
+       // Log keys for debugging
+       if (response) {
+         console.log("[Translation] RAW RESPONSE KEYS:", Object.keys(response));
+       } else {
+         console.error("[Translation] Response is undefined/null");
+         return;
+       }
+
+       // Check if response has 'data' wrapper just in case, safely accessing properties
+       const responseData = (response as any).data;
+       const translations = response.translations || (responseData && responseData.translations);
+       
+       console.log("[Translation] Received translations count:", Object.keys(translations || {}).length);
+       
+       if (translations) {
+         const newTranslations = new Map(translatedMessages);
+         // Backend returns { translations: { "messageId1": "text1", "messageId2": "text2" } }
+         Object.entries(translations).forEach(([messageId, translatedText]) => {
+           if (typeof translatedText === 'string') {
+             newTranslations.set(messageId, translatedText);
+           }
+         });
+         setTranslatedMessages(newTranslations);
+         console.log("[Translation] Updated translatedMessages map, total:", newTranslations.size);
+       } else {
+         console.warn("[Translation] No translations found in response");
+       }
     } catch (error) {
       console.error("[Translation] Failed to translate messages:", error);
     }
@@ -2004,14 +2004,18 @@ const ChatScreen = () => {
         }
       );
       
-      console.log("[Translation] Received single translation:", response.data.translatedText ? "success" : "empty");
-      
-      if (response.data.translatedText) {
-        const newTranslations = new Map(translatedMessages);
-        newTranslations.set(messageToTranslate.id, response.data.translatedText);
-        setTranslatedMessages(newTranslations);
-        console.log("[Translation] Updated single message translation, total:", newTranslations.size);
-      }
+       // Safely check for translatedText directly or in data wrapper
+       const responseData = (response as any).data;
+       const translatedText = response.translatedText || (responseData && responseData.translatedText);
+       
+       console.log("[Translation] Received single translation:", translatedText ? "success" : "empty");
+       
+       if (translatedText) {
+         const newTranslations = new Map(translatedMessages);
+         newTranslations.set(messageToTranslate.id, translatedText);
+         setTranslatedMessages(newTranslations);
+         console.log("[Translation] Updated single message translation, total:", newTranslations.size);
+       }
     } catch (error) {
       console.error("[Translation] Failed to translate message:", error);
     }
@@ -2135,44 +2139,44 @@ const ChatScreen = () => {
   const [showCreateAIFriend, setShowCreateAIFriend] = useState(false);
   
   // Translation state
-  const [translationEnabled, setTranslationEnabled] = useState(user?.translationPreference === "enabled");
+  const [translationEnabled, setTranslationEnabled] = useState(false);
   const [translationLanguage, setTranslationLanguage] = useState(user?.preferredLanguage || "en");
   const [translatedMessages, setTranslatedMessages] = useState<Map<string, string>>(new Map());
 
-  // Load per-chat translation preferences from AsyncStorage
-  useEffect(() => {
-    const loadChatTranslationPreferences = async () => {
-      try {
-        // Load chat-specific translation enabled state
-        const enabledOverride = await AsyncStorage.getItem(`chat_translation_enabled_${chatId}`);
-        if (enabledOverride !== null) {
-          setTranslationEnabled(enabledOverride === "true");
-          console.log("[Translation] Loaded chat translation enabled:", enabledOverride === "true");
-        } else {
-          // No override, use user's global preference
-          setTranslationEnabled(user?.translationPreference === "enabled");
-          console.log("[Translation] Using global translation preference:", user?.translationPreference === "enabled");
-        }
+  // Fetch chat details to get latest settings (including translation)
+  const { data: chatDetails } = useQuery({
+    queryKey: ["chat", chatId],
+    queryFn: async () => {
+      // Import ChatWithMetadata type if needed, or assume response matches
+      const response = await api.get<any>(`/api/chats/${chatId}?userId=${user?.id}`);
+      return response;
+    },
+    enabled: !!chatId && !!user?.id,
+  });
 
-        // Load chat-specific language override
-        const languageOverride = await AsyncStorage.getItem(`chat_language_${chatId}`);
-        if (languageOverride) {
-          setTranslationLanguage(languageOverride);
-          console.log("[Translation] Loaded chat language override:", languageOverride);
-        } else {
-          // No override, use user's preferred language
-          setTranslationLanguage(user?.preferredLanguage || "en");
-          console.log("[Translation] Using global preferred language:", user?.preferredLanguage || "en");
+  // Sync translation settings from chat details
+  useEffect(() => {
+    if (chatDetails) {
+        // Find my membership details if available in the response
+        // The endpoint returns chat object with 'members' array
+        const myMember = chatDetails.members?.find((m: any) => m.userId === user?.id);
+        
+        if (myMember) {
+            if (myMember.translationEnabled !== undefined) {
+                setTranslationEnabled(myMember.translationEnabled);
+                console.log("[Translation] Loaded chat translation enabled from server:", myMember.translationEnabled);
+            }
+            if (myMember.translationLanguage) {
+                setTranslationLanguage(myMember.translationLanguage);
+                console.log("[Translation] Loaded chat language from server:", myMember.translationLanguage);
+            }
+        } else if (chatDetails.translationEnabled !== undefined) {
+             // Fallback if returned at top level (modified endpoint does this)
+            setTranslationEnabled(chatDetails.translationEnabled);
+            setTranslationLanguage(chatDetails.translationLanguage || "en");
         }
-      } catch (error) {
-        console.error("[ChatScreen] Failed to load chat translation preferences:", error);
-      }
-    };
-    
-    if (chatId) {
-      loadChatTranslationPreferences();
     }
-  }, [chatId, user?.preferredLanguage, user?.translationPreference]);
+  }, [chatDetails, user?.id]);
 
   // In-Chat Search Query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -3361,22 +3365,33 @@ const ChatScreen = () => {
     setTimeout(() => {
       console.log(`[ScrollToMessage] Attempting scrollToIndex to ${displayIndex}`);
       
-      try {
-        // Try to scroll to the index
-        flatListRef.current?.scrollToIndex({
-          index: displayIndex,
-          animated: true,
-          viewPosition: 0.5, // Center the message
-        });
-      } catch (error) {
-        console.log(`[ScrollToMessage] scrollToIndex failed:`, error);
-        // Fallback: scroll to approximate position
-        const estimatedOffset = displayIndex * 100; 
-        flatListRef.current?.scrollToOffset({
-          offset: estimatedOffset,
-          animated: true,
-        });
-      }
+      const performScroll = (animated: boolean) => {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: displayIndex,
+            animated,
+            viewPosition: 0.5, // Center the message
+          });
+        } catch (error) {
+          console.log(`[ScrollToMessage] scrollToIndex failed:`, error);
+          // Fallback: scroll to approximate position
+          const estimatedOffset = displayIndex * 160; 
+          flatListRef.current?.scrollToOffset({
+            offset: estimatedOffset,
+            animated,
+          });
+        }
+      };
+
+      // Initial scroll
+      performScroll(true);
+
+      // Double-scroll hack: FlashList with estimatedItemSize can be imprecise on first scroll.
+      // Scrolling again after a short delay ensures the target is actually centered once measured.
+      setTimeout(() => {
+        console.log(`[ScrollToMessage] Performing correction scroll to ${displayIndex}`);
+        performScroll(true);
+      }, 250);
       
       // Remove highlight after 2 seconds (but keep auto-scroll disabled)
       setTimeout(() => {
@@ -6743,11 +6758,11 @@ const ChatScreen = () => {
                     />
                  </View>
               ) : (
-                <MessageText 
-                  content={message.content} 
-                  style={{ color: isDark ? '#E0E0E0' : '#1C1C1E' }}
-                  isOwnMessage={false}
-                />
+                        <MessageText 
+                          content={translatedMessages.get(message.id) || message.content} 
+                          style={{ color: isDark ? '#E0E0E0' : '#1C1C1E' }}
+                          isOwnMessage={false}
+                        />
               )}
             </View>
           </View>
@@ -7760,6 +7775,8 @@ const ChatScreen = () => {
     isCrisisMessage,
     // Message grouping data
     displayDataMemo,
+    // Translations
+    translatedMessages, translationEnabled,
   ]);
 
   if (isLoading) {
@@ -7969,7 +7986,7 @@ const ChatScreen = () => {
           keyExtractor={((item: { id: string }) => item.id) as any}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           getItemType={getItemType as any}
-          estimatedItemSize={120}
+          estimatedItemSize={160}
           // HIGH-B: Performance optimization - drawDistance for smoother scrolling
           drawDistance={500}
           inverted={true}

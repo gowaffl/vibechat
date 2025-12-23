@@ -161,7 +161,29 @@ chats.get("/", async (c) => {
         // Decrypt message if it exists and is encrypted
         if (data && data.length > 0) {
           const decryptedMessages = await decryptMessages(data);
-          return { chatId, message: decryptedMessages[0] || null };
+          let message = decryptedMessages[0] || null;
+
+          // Check if we need to translate the preview
+          const membership = chatMemberships?.find((m: any) => m.chatId === chatId);
+          if (message && membership?.translation_enabled && membership?.translation_language && message.content) {
+             try {
+                // Try to find cached translation
+                const { data: cached } = await db
+                  .from("message_translation")
+                  .select("translatedContent")
+                  .eq("messageId", message.id)
+                  .eq("targetLanguage", membership.translation_language)
+                  .single();
+                  
+                if (cached) {
+                    message = { ...message, content: cached.translatedContent };
+                }
+             } catch (err) {
+                 // Ignore errors, return original
+             }
+          }
+
+          return { chatId, message };
         }
         return { chatId, message: null };
       })
@@ -212,6 +234,8 @@ chats.get("/", async (c) => {
         isPinned: membership.isPinned,
         pinnedAt: membership.pinnedAt ? new Date(membership.pinnedAt).toISOString() : null,
         isMuted: membership.isMuted,
+        translationEnabled: membership.translation_enabled || false,
+        translationLanguage: membership.translation_language || "en",
         isRestricted: chat.isRestricted,
       };
     }).filter(Boolean);
@@ -440,6 +464,8 @@ chats.get("/:id", async (c) => {
           userId: m.userId,
           joinedAt: new Date(m.joinedAt).toISOString(),
           isMuted: m.isMuted,
+          translationEnabled: m.translation_enabled || false,
+          translationLanguage: m.translation_language || "en",
           user: user ? {
             id: user.id,
             name: user.name,
@@ -853,6 +879,46 @@ chats.patch("/:id/mute", async (c) => {
   } catch (error) {
     console.error("[Chats] Error muting/unmuting chat:", error);
     return c.json({ error: "Failed to update mute status" }, 500);
+  }
+});
+
+// PATCH /api/chats/:id/translation - Update translation settings
+chats.patch("/:id/translation", async (c) => {
+  const chatId = c.req.param("id");
+  
+  try {
+    const body = await c.req.json();
+    const { userId, translationEnabled, translationLanguage } = body;
+    
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+    
+    // Update chat member settings
+    const updateData: any = {};
+    if (translationEnabled !== undefined) updateData.translation_enabled = translationEnabled;
+    if (translationLanguage !== undefined) updateData.translation_language = translationLanguage;
+    
+    if (Object.keys(updateData).length === 0) {
+        return c.json({ success: true, message: "No changes requested" });
+    }
+
+    const { error } = await db
+      .from("chat_member")
+      .update(updateData)
+      .eq("chatId", chatId)
+      .eq("userId", userId);
+      
+    if (error) {
+      console.error("[Chats] Error updating translation settings:", error);
+      return c.json({ error: "Failed to update settings" }, 500);
+    }
+    
+    return c.json({ success: true, message: "Translation settings updated" });
+    
+  } catch (error) {
+    console.error("[Chats] Error updating translation settings:", error);
+    return c.json({ error: "Failed to update settings" }, 500);
   }
 });
 
