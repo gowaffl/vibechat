@@ -176,10 +176,12 @@ BEGIN
     message.id,
     -- CRITICAL: Return empty string - content will be decrypted in backend
     ''::text as content,
-    -- Rank using search_vector (plaintext), NOT encrypted content
-    (
-      COALESCE(ts_rank_cd(message.search_vector, web_query), 0) * 1.5 + 
-      COALESCE(ts_rank_cd(message.search_vector, prefix_query), 0)
+    -- Simplified ranking with normalization for consistent 0-1 scores
+    -- Normalization flag 32: divides by document length for predictable range
+    -- Boost exact phrase matches (web_query) over prefix matches
+    GREATEST(
+      COALESCE(ts_rank(message.search_vector, web_query, 32), 0) * 2.0,  -- Exact phrase: 2x boost
+      COALESCE(ts_rank(message.search_vector, prefix_query, 32), 0)       -- Prefix match: 1x
     )::real as rank,
     message."createdAt"
   FROM message
@@ -195,7 +197,8 @@ BEGIN
   AND (filter_date_from IS NULL OR message."createdAt" >= filter_date_from)
   AND (filter_date_to IS NULL OR message."createdAt" <= filter_date_to)
   ORDER BY 
-    message."createdAt" DESC
+    rank DESC,  -- Sort by relevance first
+    message."createdAt" DESC  -- Then by recency as tiebreaker
   LIMIT match_count;
 END;
 $$;
