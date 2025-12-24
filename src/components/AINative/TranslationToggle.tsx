@@ -61,11 +61,18 @@ const TranslationToggle: React.FC<TranslationToggleProps> = ({
   const { colors, isDark } = useTheme();
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
-  const selectedLang = LANGUAGES.find((l) => l.code === selectedLanguage) || LANGUAGES[0];
+  const selectedLang = LANGUAGES.find((l) => l.code === selectedLanguage);
+  const hasLanguageSelected = selectedLanguage && selectedLanguage !== "";
 
   const handleToggle = () => {
     Haptics.selectionAsync();
-    onToggle(!enabled);
+    const newEnabled = !enabled;
+    onToggle(newEnabled);
+    
+    // If turning on and no language selected, automatically show picker
+    if (newEnabled && !hasLanguageSelected) {
+      setShowLanguagePicker(true);
+    }
   };
 
   const handleLanguageSelect = (code: string) => {
@@ -116,16 +123,32 @@ const TranslationToggle: React.FC<TranslationToggleProps> = ({
             style={[
               styles.languageSelector,
               {
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)",
+                backgroundColor: hasLanguageSelected
+                  ? (isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)")
+                  : (isDark ? "rgba(79, 195, 247, 0.2)" : "rgba(0, 122, 255, 0.15)"),
+                borderColor: hasLanguageSelected
+                  ? (isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.06)")
+                  : colors.primary,
               },
             ]}
           >
-            <Text style={styles.flag}>{selectedLang.flag}</Text>
-            <Text style={[styles.languageName, { color: colors.text }]} numberOfLines={1}>
-              {selectedLang.name}
-            </Text>
-            <ChevronDown size={14} color={colors.textSecondary} />
+            {hasLanguageSelected ? (
+              <>
+                <Text style={styles.flag}>{selectedLang!.flag}</Text>
+                <Text style={[styles.languageName, { color: colors.text }]} numberOfLines={1}>
+                  {selectedLang!.name}
+                </Text>
+                <ChevronDown size={14} color={colors.textSecondary} />
+              </>
+            ) : (
+              <>
+                <Languages size={16} color={colors.primary} />
+                <Text style={[styles.languageName, { color: colors.primary, fontWeight: "600" }]} numberOfLines={1}>
+                  Choose Language
+                </Text>
+                <ChevronDown size={14} color={colors.primary} />
+              </>
+            )}
           </TouchableOpacity>
         )}
       </View>

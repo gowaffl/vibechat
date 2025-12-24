@@ -1868,19 +1868,18 @@ const ChatScreen = () => {
       console.error("[Translation] Failed to save chat translation settings:", error);
     }
     
-    // If enabling, translate all visible messages
-    if (enabled && messages && messages.length > 0) {
-      console.log("[Translation] Translating visible messages, count:", messages.length);
-      await translateVisibleMessages(messages, false);
-    } else {
-      // If disabling, clear translations
+    // If disabling, clear translations
+    if (!enabled) {
       console.log("[Translation] Clearing translations");
       setTranslatedMessages({});
       setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
     }
+    // Note: If enabling, we DON'T translate yet - wait for user to select language
+    // Translation will be triggered by handleLanguageSelect or by the translation effects
   };
 
   const handleLanguageSelect = async (language: string) => {
+    console.log("[Translation] Language selected:", language);
     setTranslationLanguage(language);
     
     // Persist to backend
@@ -1891,10 +1890,13 @@ const ChatScreen = () => {
       });
       console.log("[Translation] Saved chat language to server:", language);
       
-      // Clear existing translations and re-translate with new language
+      // Clear existing translations and translate with new language
       setTranslatedMessages({});
       setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
+      
+      // Now that language is selected, trigger translation if enabled
       if (translationEnabled && messages && messages.length > 0) {
+        console.log("[Translation] Language selected, translating", messages.length, "messages");
         await translateVisibleMessages(messages, true);
       }
     } catch (error) {
@@ -1906,6 +1908,12 @@ const ChatScreen = () => {
   const translateVisibleMessages = useCallback(async (messagesToTranslate: Message[], forceRetranslate: boolean = false) => {
     if (!messagesToTranslate || messagesToTranslate.length === 0) {
       console.log("[Translation] No messages to translate");
+      return;
+    }
+    
+    // Check if translation is already in progress
+    if (translationInProgressRef.current) {
+      console.log("[Translation] Translation already in progress, skipping duplicate request");
       return;
     }
     
@@ -1927,6 +1935,9 @@ const ChatScreen = () => {
       console.log("[Translation] No new messages to translate (all already translated or empty)");
       return;
     }
+    
+    // Set lock
+    translationInProgressRef.current = true;
     
     try {
       // Use ref to get the current value (avoids stale closure)
@@ -1970,8 +1981,16 @@ const ChatScreen = () => {
        } else {
          console.warn("[Translation] No translations found in response");
        }
-    } catch (error) {
-      console.error("[Translation] Failed to translate messages:", error);
+    } catch (error: any) {
+      // Only log error if it's not a cancellation
+      if (!error?.message?.includes("canceled") && !error?.message?.includes("cancelled")) {
+        console.error("[Translation] Failed to translate messages:", error);
+      } else {
+        console.log("[Translation] Request was canceled (likely due to component unmount or navigation)");
+      }
+    } finally {
+      // Release lock
+      translationInProgressRef.current = false;
     }
   }, [user?.id]); // translationLanguage is accessed via ref to avoid stale closures
 
@@ -2131,10 +2150,12 @@ const ChatScreen = () => {
   
   // Translation state - Use object instead of Map for proper React re-rendering
   const [translationEnabled, setTranslationEnabled] = useState(false);
-  const [translationLanguage, setTranslationLanguage] = useState(user?.preferredLanguage || "en");
+  const [translationLanguage, setTranslationLanguage] = useState(""); // Empty string = no language selected yet
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [translationVersion, setTranslationVersion] = useState(0); // Version counter for forcing re-renders
   const translationLanguageRef = useRef(translationLanguage); // Ref to always get current value
+  const translationInProgressRef = useRef(false); // Lock to prevent concurrent translations
+  const translationTimeoutRef = useRef<NodeJS.Timeout | null>(null); // For debouncing
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -2176,7 +2197,10 @@ const ChatScreen = () => {
         } else if (chatDetails.translationEnabled !== undefined) {
              // Fallback if returned at top level (modified endpoint does this)
             setTranslationEnabled(chatDetails.translationEnabled);
-            setTranslationLanguage(chatDetails.translationLanguage || "en");
+            // Only set language if it's not empty
+            if (chatDetails.translationLanguage) {
+                setTranslationLanguage(chatDetails.translationLanguage);
+            }
         }
     }
   }, [chatDetails, user?.id]);
@@ -2714,10 +2738,10 @@ const ChatScreen = () => {
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
 
             if (newMessage) {
-              // Translate new message in real-time if translation is enabled
-              if (translationEnabled && newMessage.content && newMessage.content.trim() !== "") {
+              // Translate new message in real-time if translation is enabled AND a language is selected
+              const currentLanguage = translationLanguageRef.current;
+              if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "") {
                 try {
-                  const currentLanguage = translationLanguageRef.current;
                   const translateResponse = await api.post<{ translatedText: string }>(
                     "/api/ai-native/translate",
                     {
@@ -3062,29 +3086,61 @@ const ChatScreen = () => {
     }
   }, [messageData]);
 
-  // Translate main chat messages when translation is enabled or messages change
+  // Translate main chat messages when translation is enabled or messages change (DEBOUNCED)
   useEffect(() => {
-    console.log("[Translation] Main chat effect check - enabled:", translationEnabled, "threadId:", currentThreadId, "msgCount:", allMessages.length);
-    if (translationEnabled && !currentThreadId && allMessages && allMessages.length > 0) {
-      console.log("[Translation] Main chat effect - TRIGGERING translation for", allMessages.length, "messages, language:", translationLanguage);
-      translateVisibleMessages(allMessages, false);
+    console.log("[Translation] Main chat effect check - enabled:", translationEnabled, "language:", translationLanguage, "threadId:", currentThreadId, "msgCount:", allMessages.length);
+    
+    // Clear any pending translation
+    if (translationTimeoutRef.current) {
+      clearTimeout(translationTimeoutRef.current);
     }
-  }, [translationEnabled, translationLanguage, allMessages, currentThreadId, translateVisibleMessages]);
+    
+    // Only translate if enabled AND a language is selected
+    if (translationEnabled && translationLanguage && translationLanguage !== "" && !currentThreadId && allMessages && allMessages.length > 0) {
+      console.log("[Translation] Main chat effect - SCHEDULING translation for", allMessages.length, "messages in 500ms");
+      translationTimeoutRef.current = setTimeout(() => {
+        console.log("[Translation] Main chat effect - EXECUTING translation");
+        translateVisibleMessages(allMessages, false);
+      }, 500); // 500ms debounce
+    }
+    
+    return () => {
+      if (translationTimeoutRef.current) {
+        clearTimeout(translationTimeoutRef.current);
+      }
+    };
+  }, [translationEnabled, translationLanguage, allMessages.length, currentThreadId, translateVisibleMessages]); // Use allMessages.length instead of allMessages
 
-  // Translate thread messages when they load or translation settings change
+  // Translate thread messages when they load or translation settings change (DEBOUNCED)
   useEffect(() => {
-    if (translationEnabled && currentThreadId && allThreadMessages && allThreadMessages.length > 0) {
-      console.log("[Translation] Thread effect - translating", allThreadMessages.length, "messages for thread:", currentThreadId, "language:", translationLanguage);
-      translateVisibleMessages(allThreadMessages, false);
+    // Clear any pending translation
+    if (translationTimeoutRef.current) {
+      clearTimeout(translationTimeoutRef.current);
     }
-  }, [translationEnabled, translationLanguage, currentThreadId, allThreadMessages, translateVisibleMessages]);
+    
+    // Only translate if enabled AND a language is selected
+    if (translationEnabled && translationLanguage && translationLanguage !== "" && currentThreadId && allThreadMessages && allThreadMessages.length > 0) {
+      console.log("[Translation] Thread effect - SCHEDULING translation for", allThreadMessages.length, "messages in 500ms");
+      translationTimeoutRef.current = setTimeout(() => {
+        console.log("[Translation] Thread effect - EXECUTING translation");
+        translateVisibleMessages(allThreadMessages, false);
+      }, 500); // 500ms debounce
+    }
+    
+    return () => {
+      if (translationTimeoutRef.current) {
+        clearTimeout(translationTimeoutRef.current);
+      }
+    };
+  }, [translationEnabled, translationLanguage, currentThreadId, allThreadMessages.length, translateVisibleMessages]); // Use allThreadMessages.length instead of allThreadMessages
   
-  // Re-translate when returning to the screen
+  // Re-translate when returning to the screen (ONLY when screen is focused, not on every render)
   useFocusEffect(
     useCallback(() => {
-      console.log("[Translation] Screen focused - translation enabled:", translationEnabled, "currentThreadId:", currentThreadId);
-      if (translationEnabled) {
-        // Small delay to ensure messages are loaded
+      console.log("[Translation] Screen focused - translation enabled:", translationEnabled, "language:", translationLanguage, "currentThreadId:", currentThreadId);
+      // Only translate if enabled AND a language is selected
+      if (translationEnabled && translationLanguage && translationLanguage !== "") {
+        // Longer delay to ensure messages are loaded and to avoid conflict with other effects
         const timer = setTimeout(() => {
           if (currentThreadId && allThreadMessages.length > 0) {
             console.log("[Translation] On focus - translating", allThreadMessages.length, "thread messages");
@@ -3093,11 +3149,11 @@ const ChatScreen = () => {
             console.log("[Translation] On focus - translating", allMessages.length, "main chat messages");
             translateVisibleMessages(allMessages, false);
           }
-        }, 100);
+        }, 800); // 800ms delay to avoid conflict
         
         return () => clearTimeout(timer);
       }
-    }, [translationEnabled, currentThreadId, allThreadMessages.length, allMessages.length, translateVisibleMessages])
+    }, [translationEnabled, translationLanguage, currentThreadId, allThreadMessages.length, allMessages.length, translateVisibleMessages])
   );
 
   // HIGH-8: Load more (older) messages
