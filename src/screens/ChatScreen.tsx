@@ -9088,7 +9088,20 @@ const ChatScreen = () => {
                         </Animated.View>
                         
                         {/* Always show animated icons, no loading spinner */}
-                        {(!messageText.trim() && selectedImages.length === 0 && !selectedVideo) ? (
+                        {(selectedVibe || previewVibe) ? (
+                          <Animated.View
+                            style={{
+                              transform: [
+                                { scale: buttonIconScale },
+                              ],
+                            }}
+                          >
+                            {(() => {
+                              const VibeIcon = VIBE_CONFIG[selectedVibe || previewVibe!].icon;
+                              return <VibeIcon size={20} color="white" strokeWidth={2.5} />;
+                            })()}
+                          </Animated.View>
+                        ) : (!messageText.trim() && selectedImages.length === 0 && !selectedVideo) ? (
                           <Animated.View
                             style={{
                               transform: [
@@ -9112,22 +9125,8 @@ const ChatScreen = () => {
                           </Animated.View>
                         )}
                         
-                        {/* Vibe indicator dot when vibe is selected */}
-                        {(selectedVibe || previewVibe) && (
-                          <View
-                            style={{
-                              position: "absolute",
-                              top: 1,
-                              right: 1,
-                              width: 8,
-                              height: 8,
-                              borderRadius: 4,
-                              backgroundColor: VIBE_CONFIG[selectedVibe || previewVibe!].color,
-                              borderWidth: 1,
-                              borderColor: "rgba(0, 0, 0, 0.3)",
-                            }}
-                          />
-                        )}
+                        {/* Vibe indicator dot removed as main icon now changes */}
+                        {/* (selectedVibe || previewVibe) && ( ... ) was here */}
                       </Animated.View>
                     </BlurView>
                   </Animated.View>
