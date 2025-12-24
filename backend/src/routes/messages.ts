@@ -1980,6 +1980,8 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
     }
 
     // Create a system message indicating the unsend action
+    /* 
+    // REMOVED: System message is now handled client-side as an ephemeral message
     await db
       .from("message")
       .insert({
@@ -1988,6 +1990,7 @@ messages.post("/:id/unsend", zValidator("json", unsendMessageRequestSchema), asy
         userId: "system",
         chatId: message.chatId,
       });
+    */
 
     console.log(`✅ [Messages] Message ${messageId} unsent successfully`);
 

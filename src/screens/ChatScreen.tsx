@@ -66,7 +66,7 @@ import { MediaCarousel } from "@/components/MediaCarousel";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import AttachmentsMenu from "@/components/AttachmentsMenu";
 import type { RootStackScreenProps } from "@/navigation/types";
-import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, ThreadFilterRules, MessageTag, Event, UploadImageResponse, Poll, ImagePreviewResponse, GenerateImageResponse, LinkPreview } from "@/shared/contracts";
+import type { Message, AiChatRequest, AiChatResponse, User, AddReactionRequest, GetGroupSettingsResponse, GetCustomCommandsResponse, ExecuteCustomCommandRequest, Reaction, Chat, DeleteMessageResponse, CustomSlashCommand, SmartRepliesResponse, GetBookmarksResponse, ToggleBookmarkRequest, ToggleBookmarkResponse, UnreadCount, GetChatResponse, Thread, ThreadFilterRules, MessageTag, Event, UploadImageResponse, Poll, ImagePreviewResponse, GenerateImageResponse, LinkPreview, GenerateInviteLinkResponse } from "@/shared/contracts";
 
 // AI Super Features imports
 import { CatchUpModal, CatchUpButton } from "@/components/CatchUp";
@@ -2226,8 +2226,13 @@ const ChatScreen = () => {
       setAllThreadMessages([]);
       setThreadHasMore(false);
       setThreadNextCursor(null);
+    } else if (currentThreadId && isLoadingThreadMessages) {
+      // Clear previous thread messages while loading new ones to show loading state
+      setAllThreadMessages([]);
+      setThreadHasMore(false);
+      setThreadNextCursor(null);
     }
-  }, [threadData, currentThreadId]);
+  }, [threadData, currentThreadId, isLoadingThreadMessages]);
 
   // Load more thread messages
   const loadMoreThreadMessages = useCallback(async () => {
@@ -3490,6 +3495,22 @@ const ChatScreen = () => {
     toggleBookmarkMutation.mutate(messageId);
   }, [toggleBookmarkMutation]);
 
+  // Generate invite link mutation
+  const generateInviteLinkMutation = useMutation({
+    mutationFn: () => api.post<GenerateInviteLinkResponse>(`/api/chats/${chatId}/invite-link`, { userId: user?.id }),
+    onSuccess: (data) => {
+      // Invalidate chat query to update the invite token in the chat object
+      queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return data;
+    },
+    onError: (error) => {
+      console.error("[Chat] Failed to generate invite link:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", "Failed to generate invite link");
+    },
+  });
+
   // Helper function to scroll to the very bottom (index 0 in inverted list)
   const scrollToBottom = useCallback((animated: boolean = true) => {
     if (flatListRef.current) {
@@ -3966,6 +3987,37 @@ const ChatScreen = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Add ephemeral system message locally
+      const ephemeralMessage: Message = {
+        id: `ephemeral-unsend-${Date.now()}`,
+        content: "You unsent a message.",
+        messageType: "system",
+        userId: "system",
+        chatId: chatId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isUnsent: false,
+        user: {
+          id: "system",
+          name: "System",
+          phone: "",
+          hasCompletedOnboarding: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          bio: null,
+          image: null,
+        } as any,
+        reactions: [],
+        mentions: [],
+        metadata: { isEphemeral: true } as any
+      };
+
+      if (currentThreadId) {
+        setAllThreadMessages(prev => [ephemeralMessage, ...prev]);
+      } else {
+        setAllMessages(prev => [ephemeralMessage, ...prev]);
+      }
     },
     onError: (error: any) => {
       console.error("Error unsending message:", error);
@@ -7842,17 +7894,62 @@ const ChatScreen = () => {
   const currentThread = threads?.find(t => t.id === currentThreadId);
 
   const handleShareInvite = async () => {
-    if (!chat?.inviteToken) {
-      Alert.alert("Error", "Invite link not available");
-      return;
-    }
-
     try {
-      await Share.share({
-        message: `Join our chat "${chat.name}" on VibeChat!\n\nInvite Code: ${chat.inviteToken}`,
-      });
-    } catch (error) {
-      console.error("Error sharing invite:", error);
+      console.log("[Chat] handleShareInvite called, chat:", chat?.name, "inviteToken:", chat?.inviteToken);
+      let inviteToken = chat?.inviteToken;
+      let inviteLink = `vibechat://invite?token=${inviteToken}`;
+
+      // If no invite token exists, generate one
+      if (!inviteToken) {
+        console.log("[Chat] No invite token, generating one...");
+        const result = await generateInviteLinkMutation.mutateAsync();
+        inviteToken = result.inviteToken;
+        inviteLink = result.inviteLink;
+        console.log("[Chat] Generated invite token:", inviteToken);
+      }
+
+      if (!inviteToken) {
+        console.error("[Chat] Failed to get invite token");
+        Alert.alert("Error", "Failed to generate invite link");
+        return;
+      }
+
+      const shareMessage = `Join our chat "${chat?.name}" on VibeChat!\n\nInvite Code: ${inviteToken}\n\n${inviteLink}`;
+      console.log("[Chat] About to share:", shareMessage);
+      
+      // Try to use Share API, but fallback to clipboard if it fails
+      try {
+        const sharePromise = Share.share({
+          message: shareMessage,
+        });
+        
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Share timeout")), 3000)
+        );
+        
+        const result = await Promise.race([sharePromise, timeoutPromise]) as any;
+        
+        console.log("[Chat] Share result:", result);
+        
+        if (result?.action === Share.sharedAction) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      } catch (shareError: any) {
+        console.log("[Chat] Share failed, using clipboard fallback:", shareError?.message);
+        
+        // Fallback: Copy to clipboard and show alert
+        await Clipboard.setStringAsync(shareMessage);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        Alert.alert(
+          "Invite Link Copied!",
+          `Invite Code: ${inviteToken}\n\nThe invite link and code have been copied to your clipboard. Share it with anyone you want to invite to "${chat?.name}"!`,
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error: any) {
+      console.error("[Chat] Error sharing invite:", error);
+      Alert.alert("Error", "Failed to generate invite. Please try again.");
     }
   };
 
@@ -8033,7 +8130,6 @@ const ChatScreen = () => {
       {/* Messages FlatList - Wrapped in Reanimated View for keyboard animation */}
       <Reanimated.View 
         key={`${chatId}-${currentThreadId || 'main'}`}
-        entering={FadeIn.duration(200)}
         style={[{ flex: 1 }, chatListContainerAnimatedStyle]}
       >
         <AnimatedFlashList

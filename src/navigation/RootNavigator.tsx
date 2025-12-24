@@ -28,6 +28,7 @@ import BirthdateScreen from "@/screens/BirthdateScreen";
 import JoinChatScreen from "@/screens/JoinChatScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import { useUser } from "@/contexts/UserContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useTimezoneSync } from "@/hooks/useTimezoneSync";
 
 /**
@@ -38,6 +39,7 @@ const RootStack = createStackNavigator<RootStackParamList>();
 
 const RootNavigator = () => {
   const { user, loading, isAuthenticated } = useUser();
+  const { colors } = useTheme();
   
   // Automatically sync user's timezone with their device
   useTimezoneSync();
@@ -59,7 +61,7 @@ const RootNavigator = () => {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <RootStack.Navigator 
         initialRouteName={initialRoute}
       screenOptions={{
@@ -115,6 +117,9 @@ const RootNavigator = () => {
       <RootStack.Screen
         name="Chat"
         component={ChatScreen}
+        options={{
+          cardStyle: { backgroundColor: colors.background },
+        }}
       />
       <RootStack.Screen
         name="InviteMembers"

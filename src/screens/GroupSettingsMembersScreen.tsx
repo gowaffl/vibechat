@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, ScrollView, Alert, Platform, Modal } from "react-native";
+import { View, Text, Pressable, ScrollView, Alert, Platform, Modal, Share } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -43,10 +43,10 @@ const GroupSettingsMembersScreen = () => {
   const isRestricted = chat?.isRestricted || false;
   
   const generateInviteLinkMutation = useMutation({
-    mutationFn: () => api.post<GenerateInviteLinkResponse>(`/api/chats/${chatId}/invite`, { userId: user?.id }),
+    mutationFn: () => api.post<GenerateInviteLinkResponse>(`/api/chats/${chatId}/invite-link`, { userId: user?.id }),
     onSuccess: (data) => {
-      setInviteToken(data.token);
-      setInviteLink(`vibechat://invite?token=${data.token}`);
+      setInviteToken(data.inviteToken);
+      setInviteLink(data.inviteLink);
       setShowInviteModal(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -342,7 +342,32 @@ const GroupSettingsMembersScreen = () => {
 
                         <Pressable
                         onPress={async () => {
-                             // Implement sharing logic
+                            if (inviteToken && inviteLink && chat?.name) {
+                              const shareMessage = `Join our chat "${chat.name}" on VibeChat!\n\nInvite Code: ${inviteToken}\n\n${inviteLink}`;
+                              
+                              try {
+                                // Try to use Share API with timeout
+                                const sharePromise = Share.share({ message: shareMessage });
+                                const timeoutPromise = new Promise((_, reject) => 
+                                  setTimeout(() => reject(new Error("Share timeout")), 3000)
+                                );
+                                
+                                await Promise.race([sharePromise, timeoutPromise]);
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                              } catch (error: any) {
+                                console.log("[Members] Share failed, using clipboard fallback:", error?.message);
+                                
+                                // Fallback: Copy to clipboard and show alert
+                                await Clipboard.setStringAsync(shareMessage);
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                
+                                Alert.alert(
+                                  "Invite Link Copied!",
+                                  `Invite Code: ${inviteToken}\n\nThe invite link and code have been copied to your clipboard. Share it with anyone you want to invite to "${chat.name}"!`,
+                                  [{ text: "OK" }]
+                                );
+                              }
+                            }
                         }}
                         style={({ pressed }) => ({
                             opacity: pressed ? 0.7 : 1,
