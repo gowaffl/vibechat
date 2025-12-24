@@ -8,7 +8,7 @@
                 "--project-ref=xxekfvxdzixesjrbxoju"
             ],
             "env": {
-                "SUPABASE_ACCESS_TOKEN": "sbp_f137339a5d2a51dc555f7612e272a12a852d528d"
+                "SUPABASE_ACCESS_TOKEN": "sbp_ae4adb2b872d736317abefe546dd1f8f829b6b71"
             }
         }, "render": {
                 "url": "https://mcp.render.com/mcp",

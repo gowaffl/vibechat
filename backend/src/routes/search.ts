@@ -105,7 +105,7 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
         
         const { data: matches, error: matchError } = await db.rpc("match_messages", {
           query_embedding: queryEmbedding,
-          match_threshold: 0.5, // Increased threshold for quality matches only
+          match_threshold: 0.3, // Balanced threshold - not too low (noise) not too high (misses)
           match_count: limit * 2,
           filter_user_id: null,
           filter_chat_ids: filterChatIds,
