@@ -1490,6 +1490,7 @@ export type LeaveVoiceRoomResponse = z.infer<typeof leaveVoiceRoomResponseSchema
 export const globalSearchRequestSchema = z.object({
   query: z.string(),
   userId: z.string(),
+  mode: z.enum(["text", "semantic", "hybrid"]).default("hybrid").optional(),
   limit: z.number().min(1).max(100).default(20).optional(),
   chatId: z.string().optional(), // Optional: Filter by specific chat
 });

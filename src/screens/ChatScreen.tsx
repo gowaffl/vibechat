@@ -2213,6 +2213,7 @@ const ChatScreen = () => {
       userId: user!.id,
       query: debouncedSearchQuery,
       chatId: chatId,
+      mode: "hybrid", // Use hybrid mode for best results in chat search
       limit: 50
     }),
     enabled: showSearchModal && debouncedSearchQuery.trim().length > 0,

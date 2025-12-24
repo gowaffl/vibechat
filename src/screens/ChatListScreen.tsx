@@ -384,6 +384,7 @@ const ChatListScreen = () => {
     queryFn: () => api.post("/api/search/global", { 
       userId: user!.id, 
       query: debouncedSearchQuery,
+      mode: searchMode, // Pass search mode (text/semantic/hybrid)
       limit: 20
     }),
     enabled: !!user?.id && (debouncedSearchQuery.trim().length > 0),

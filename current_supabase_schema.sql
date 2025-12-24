@@ -130,9 +130,10 @@ $$;
 -- New RPC for High-Performance Text Search
 -- CRITICAL: Uses search_vector (plaintext) column, NOT encrypted content
 -- Returns empty content string - backend must decrypt using decryptMessages()
+-- Fixed: Proper data types (text IDs to match schema) and quoted "createdAt" to preserve case
 CREATE OR REPLACE FUNCTION search_messages_text (
   search_query text,
-  match_count int,
+  match_count integer,
   filter_user_id text DEFAULT NULL,
   filter_chat_ids text[] DEFAULT NULL,
   filter_message_types text[] DEFAULT NULL,
@@ -142,8 +143,8 @@ CREATE OR REPLACE FUNCTION search_messages_text (
 RETURNS TABLE (
   id text,
   content text,
-  rank float,
-  createdAt timestamp without time zone
+  rank real,
+  "createdAt" timestamp without time zone
 )
 LANGUAGE plpgsql
 AS $$
@@ -179,7 +180,7 @@ BEGIN
     (
       COALESCE(ts_rank_cd(message.search_vector, web_query), 0) * 1.5 + 
       COALESCE(ts_rank_cd(message.search_vector, prefix_query), 0)
-    ) as rank,
+    )::real as rank,
     message."createdAt"
   FROM message
   WHERE (
