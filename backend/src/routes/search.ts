@@ -12,10 +12,6 @@ const search = new Hono<AppType>();
 search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) => {
   const { query, userId, limit = 20, chatId, mode = "hybrid" } = c.req.valid("json");
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:13',message:'Search request received',data:{query,userId,limit,chatId,mode},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ALL'})}).catch(()=>{});
-  // #endregion
-
   if (!query || query.trim().length === 0) {
     return c.json({ chats: [], users: [], messages: [] });
   }
@@ -74,10 +70,6 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
         filterChatIds = userChatsResult.data?.map(c => c.chatId) || [];
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:72',message:'Filter chat IDs prepared',data:{filterChatIds,chatIdCount:filterChatIds.length,isSingleChat:!!chatId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-
     // Prepare to collect and merge results
     const matchMap = new Map<string, { id: string; score: number; createdAt: string; similarity?: number; rank?: number }>();
     
@@ -125,13 +117,7 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
 
         if (matchError) {
           console.error("[Global Search] Semantic match error:", matchError);
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:119',message:'Semantic search error',data:{error:matchError.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
         } else if (matches) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:124',message:'Semantic search results',data:{matchCount:matches?.length || 0,sampleIds:matches?.slice(0,3).map((m:any)=>m.id)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
-          // #endregion
           for (const m of matches) {
             // Semantic score 0-10
             addMatch(m.id, m.similarity * 10, m.createdAt, m.similarity); 
@@ -158,13 +144,7 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
 
       if (searchError) {
         console.error("[Global Search] Text search error:", searchError);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:146',message:'Text search error',data:{error:searchError.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
       } else if (textMatches) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:151',message:'Text search results',data:{matchCount:textMatches?.length || 0,sampleIds:textMatches?.slice(0,3).map((m:any)=>m.id)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-        // #endregion
         for (const m of textMatches) {
           // Text rank is usually 0.1-1.0. Multiply by 20 for weighting
           const rankScore = (m.rank || 0.1) * 20;
@@ -176,12 +156,15 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
     // Sort and paginate results
     let allResults = Array.from(matchMap.values());
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:163',message:'Merged results before sorting',data:{totalMatches:allResults.length,sampleIds:allResults.slice(0,3).map(r=>r.id)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
-    // Sort by createdAt DESC (recency first)
-    allResults.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Sort by RELEVANCE (score) first, then by recency as tiebreaker
+    allResults.sort((a, b) => {
+      // Primary sort: Higher score = more relevant (descending)
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      // Tiebreaker: More recent = better (descending)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
     
     // Apply limit
     const paginatedResults = allResults.slice(0, limit);
@@ -199,16 +182,8 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
         `)
         .in("id", resultIds);
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:179',message:'Full messages fetched',data:{requestedIds:resultIds.length,fetchedCount:fullMessages?.length || 0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-
       // CRITICAL: Decrypt messages before returning them
       const decryptedMessages = await decryptMessages(fullMessages || []);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:186',message:'Messages decrypted',data:{decryptedCount:decryptedMessages?.length || 0,sampleContent:decryptedMessages?.[0]?.content?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
 
       if (decryptedMessages && decryptedMessages.length > 0) {
         const messageMap = new Map(decryptedMessages.map(m => [m.id, m]));
@@ -216,20 +191,19 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
           .map((r: any) => {
             const fullMsg = messageMap.get(r.id);
             if (!fullMsg) return null;
+            // Use the BEST score: if both similarity and rank exist (hybrid match), use the higher one
+            // Otherwise use whichever is available
+            const relevanceScore = Math.max(r.similarity || 0, r.rank || 0);
             return {
               message: fullMsg,
               chat: fullMsg.chat,
-              similarity: r.similarity || r.rank, // Use semantic similarity or text rank
+              similarity: relevanceScore,
               matchedField: "content"
             };
           })
           .filter(Boolean);
       }
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/46a05f2d-60bc-49f4-9932-8a6a3fb39c17',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'search.ts:207',message:'Final response prepared',data:{chatCount:chats.length,userCount:users.length,messageCount:enrichedMessages.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ALL'})}).catch(()=>{});
-    // #endregion
 
     return c.json({
       chats: chats,
