@@ -1936,8 +1936,17 @@ const ChatScreen = () => {
       return;
     }
     
-    // Set lock
+    // Set lock and loading states
     translationInProgressRef.current = true;
+    setIsBatchTranslating(true);
+    
+    // Mark all messages as translating
+    const messageIds = textMessages.map((m) => m.id);
+    setTranslatingMessages(prev => {
+      const newSet = new Set(prev);
+      messageIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
     
     try {
       // Use ref to get the current value (avoids stale closure)
@@ -1948,7 +1957,7 @@ const ChatScreen = () => {
          "/api/ai-native/translate-batch",
          {
            userId: user?.id,
-           messageIds: textMessages.map((m) => m.id),
+           messageIds: messageIds,
            targetLanguage: currentLanguage,
          }
        );
@@ -1989,8 +1998,16 @@ const ChatScreen = () => {
         console.log("[Translation] Request was canceled (likely due to component unmount or navigation)");
       }
     } finally {
-      // Release lock
+      // Release lock and clear loading states
       translationInProgressRef.current = false;
+      setIsBatchTranslating(false);
+      
+      // Remove translated messages from translating set
+      setTranslatingMessages(prev => {
+        const newSet = new Set(prev);
+        textMessages.forEach(m => newSet.delete(m.id));
+        return newSet;
+      });
     }
   }, [user?.id]); // translationLanguage is accessed via ref to avoid stale closures
 
@@ -1999,6 +2016,9 @@ const ChatScreen = () => {
       console.log("[Translation] Skipping single message translation (no content or already translated)");
       return;
     }
+    
+    // Mark message as translating
+    setTranslatingMessages(prev => new Set(prev).add(messageToTranslate.id));
     
     try {
       const currentLanguage = translationLanguageRef.current;
@@ -2028,6 +2048,13 @@ const ChatScreen = () => {
        }
     } catch (error) {
       console.error("[Translation] Failed to translate message:", error);
+    } finally {
+      // Remove message from translating set
+      setTranslatingMessages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(messageToTranslate.id);
+        return newSet;
+      });
     }
   };
 
@@ -2153,6 +2180,8 @@ const ChatScreen = () => {
   const [translationLanguage, setTranslationLanguage] = useState(""); // Empty string = no language selected yet
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [translationVersion, setTranslationVersion] = useState(0); // Version counter for forcing re-renders
+  const [translatingMessages, setTranslatingMessages] = useState<Set<string>>(new Set()); // Messages currently being translated
+  const [isBatchTranslating, setIsBatchTranslating] = useState(false); // Batch translation in progress
   const translationLanguageRef = useRef(translationLanguage); // Ref to always get current value
   const translationInProgressRef = useRef(false); // Lock to prevent concurrent translations
   const translationTimeoutRef = useRef<NodeJS.Timeout | null>(null); // For debouncing
@@ -2741,7 +2770,11 @@ const ChatScreen = () => {
               // Translate new message in real-time if translation is enabled AND a language is selected
               const currentLanguage = translationLanguageRef.current;
               if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "") {
+                // Mark message as translating
+                setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
+                
                 try {
+                  console.log('[Translation] Translating new real-time message:', newMessage.id, 'to language:', currentLanguage);
                   const translateResponse = await api.post<{ translatedText: string }>(
                     "/api/ai-native/translate",
                     {
@@ -2751,15 +2784,29 @@ const ChatScreen = () => {
                     }
                   );
                    
-                  if (translateResponse.data.translatedText) {
+                  // Safely check for translatedText directly or in data wrapper (same as translateSingleMessage)
+                  const responseData = (translateResponse as any).data;
+                  const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
+                  
+                  console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty');
+                   
+                  if (translatedText) {
                     setTranslatedMessages(prev => ({
                       ...prev,
-                      [newMessage.id]: translateResponse.data.translatedText
+                      [newMessage.id]: translatedText
                     }));
                     setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
+                    console.log('[Translation] Updated real-time message translation');
                   }
                  } catch (translateError) {
                    console.error('[Translation] Failed to translate new message:', translateError);
+                 } finally {
+                   // Remove message from translating set
+                   setTranslatingMessages(prev => {
+                     const newSet = new Set(prev);
+                     newSet.delete(newMessage.id);
+                     return newSet;
+                   });
                  }
                }
                
@@ -7587,9 +7634,11 @@ const ChatScreen = () => {
                             hr: { backgroundColor: "rgba(255, 255, 255, 0.2)", height: 1, marginVertical: 10 },
                           }}
                         >
-                          {translationEnabled && translatedMessages[message.id] 
-                            ? translatedMessages[message.id]! 
-                            : message.content}
+                          {translationEnabled && translatingMessages.has(message.id) 
+                            ? "Translating..."
+                            : translationEnabled && translatedMessages[message.id] 
+                              ? translatedMessages[message.id]! 
+                              : message.content}
                         </Markdown>
                       </TruncatedText>
                       {message.editedAt && (
@@ -7607,14 +7656,21 @@ const ChatScreen = () => {
                         expandButtonColor="#007AFF"
                       >
                         {/* HIGH-14: Reduced font size for message density */}
-                        <MessageText
-                          content={translationEnabled && translatedMessages[message.id] 
-                            ? translatedMessages[message.id]! 
-                            : message.content}
-                          mentions={message.mentions}
-                          style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
-                          isOwnMessage={isCurrentUser}
-                        />
+                        {translationEnabled && translatingMessages.has(message.id) ? (
+                          <ShimmeringText 
+                            text="Translating..." 
+                            style={{ fontSize: 15, color: colors.textSecondary, lineHeight: 20, fontStyle: 'italic' }}
+                          />
+                        ) : (
+                          <MessageText
+                            content={translationEnabled && translatedMessages[message.id] 
+                              ? translatedMessages[message.id]! 
+                              : message.content}
+                            mentions={message.mentions}
+                            style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
+                            isOwnMessage={isCurrentUser}
+                          />
+                        )}
                       </TruncatedText>
                       {message.editedAt && (
                         <Text style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)", fontStyle: "italic", marginTop: 4 }}>
@@ -8092,6 +8148,37 @@ const ChatScreen = () => {
           onJoinVoiceRoom={handleJoinRoom}
           onTranslatePress={() => setShowTranslationModal(true)}
         />
+      )}
+
+      {/* Batch Translation Banner */}
+      {isBatchTranslating && (
+        <Reanimated.View
+          entering={FadeInUp}
+          exiting={FadeOut}
+          style={{
+            position: "absolute",
+            top: insets.top + 70,
+            left: 0,
+            right: 0,
+            zIndex: 98,
+            backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
+            borderBottomWidth: 1,
+            borderBottomColor: isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 122, 255, 0.2)",
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+          }}
+        >
+          <ActivityIndicator size="small" color={colors.primary} />
+          <ShimmeringText 
+            text="Translating messages..." 
+            style={{ fontSize: 14, color: colors.primary, fontWeight: "600" }}
+            shimmerColor={isDark ? "rgba(79, 195, 247, 0.8)" : "rgba(0, 122, 255, 0.8)"}
+          />
+        </Reanimated.View>
       )}
 
       {/* Search Results Overlay */}

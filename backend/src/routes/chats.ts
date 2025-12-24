@@ -2172,4 +2172,108 @@ chats.post("/debug-link-preview", async (c) => {
   }
 });
 
+// GET /:chatId - Get chat details including translation settings
+chats.get("/:chatId", async (c) => {
+  try {
+    const chatId = c.req.param("chatId");
+    const userId = c.req.query("userId");
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    console.log(`[Chats] Fetching chat details for chat ${chatId}, user ${userId}`);
+
+    // Fetch chat details
+    const { data: chat, error: chatError } = await db
+      .from("chat")
+      .select("*")
+      .eq("id", chatId)
+      .single();
+
+    if (chatError || !chat) {
+      console.error("[Chats] Error fetching chat:", chatError);
+      return c.json({ error: "Chat not found" }, 404);
+    }
+
+    // Fetch chat members with translation settings
+    const { data: members, error: membersError } = await db
+      .from("chat_member")
+      .select("*, user:userId(*)")
+      .eq("chatId", chatId);
+
+    if (membersError) {
+      console.error("[Chats] Error fetching members:", membersError);
+      return c.json({ error: "Failed to fetch members" }, 500);
+    }
+
+    // Find current user's member record for translation settings
+    const myMember = members?.find((m: any) => m.userId === userId);
+
+    console.log(`[Chats] Found chat ${chatId} with ${members?.length || 0} members. User translation settings:`, {
+      translationEnabled: myMember?.translation_enabled,
+      translationLanguage: myMember?.translation_language
+    });
+
+    return c.json({
+      ...chat,
+      members,
+      translationEnabled: myMember?.translation_enabled || false,
+      translationLanguage: myMember?.translation_language || ""
+    });
+  } catch (error) {
+    console.error("[Chats] Error fetching chat details:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// PATCH /:chatId/translation - Update per-chat translation settings for a user
+chats.patch("/:chatId/translation", async (c) => {
+  try {
+    const chatId = c.req.param("chatId");
+    const body = await c.req.json();
+    const { userId, translationEnabled, translationLanguage } = body;
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    console.log(`[Chats] Updating translation settings for user ${userId} in chat ${chatId}:`, {
+      translationEnabled,
+      translationLanguage
+    });
+
+    // Build update object dynamically based on what's provided
+    const updateData: any = {};
+    if (translationEnabled !== undefined) {
+      updateData.translation_enabled = translationEnabled;
+    }
+    if (translationLanguage !== undefined) {
+      updateData.translation_language = translationLanguage;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return c.json({ error: "No translation settings provided" }, 400);
+    }
+
+    // Update the chat_member record
+    const { error } = await db
+      .from("chat_member")
+      .update(updateData)
+      .eq("chatId", chatId)
+      .eq("userId", userId);
+
+    if (error) {
+      console.error("[Chats] Error updating translation settings:", error);
+      return c.json({ error: "Failed to update translation settings" }, 500);
+    }
+
+    console.log(`[Chats] Successfully updated translation settings for user ${userId} in chat ${chatId}`);
+    return c.json({ success: true, ...updateData });
+  } catch (error) {
+    console.error("[Chats] Error in translation settings update:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 export default chats;
