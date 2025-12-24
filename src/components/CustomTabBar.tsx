@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { View, Text, TouchableOpacity, Platform, TextInput, Pressable, Keyboard, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
-import { MessageCircle, User, MoreHorizontal, Search, Globe, ChevronLeft, Sparkles } from "lucide-react-native";
+import { MessageCircle, User, MoreHorizontal, Search, Globe, ChevronLeft } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import Animated, { 
@@ -28,7 +28,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { width: screenWidth } = useWindowDimensions();
-  const { isSearchOpen, toggleSearch, searchQuery, setSearchQuery, setSearchOpen, searchMode, setSearchMode } = useSearchStore();
+  const { isSearchOpen, toggleSearch, searchQuery, setSearchQuery, setSearchOpen } = useSearchStore();
   const { colors, isDark } = useTheme();
   
   // Animation values
@@ -285,7 +285,7 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
               <TextInput
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholder={searchMode === "semantic" ? "Ask AI to find something..." : "Search messages..."}
+                  placeholder="Search messages..."
                   placeholderTextColor={colors.textTertiary}
                   style={{
                       flex: 1,
@@ -296,39 +296,6 @@ export const CustomTabBar: React.FC<CustomTabBarProps> = ({ activeRouteName }) =
                   }}
                   autoFocus={isSearchOpen}
               />
-              
-              {/* AI Toggle */}
-              <Pressable
-                  onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setSearchMode(searchMode === "text" ? "semantic" : "text");
-                  }}
-                  style={{
-                      padding: 8,
-                      backgroundColor: searchMode === "semantic" ? (isDark ? "rgba(79, 195, 247, 0.2)" : "rgba(0, 122, 255, 0.1)") : colors.glassBackground,
-                      borderRadius: 20,
-                      marginRight: 4,
-                      borderWidth: 1,
-                      borderColor: searchMode === "semantic" ? (isDark ? "rgba(79, 195, 247, 0.4)" : "rgba(0, 122, 255, 0.3)") : colors.glassBorder,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4
-                  }}
-              >
-                  <Sparkles 
-                      size={14} 
-                      color={searchMode === "semantic" ? colors.primary : colors.textSecondary} 
-                      fill={searchMode === "semantic" ? colors.primary : "transparent"}
-                      fillOpacity={0.2}
-                  />
-                  <Text style={{ 
-                      color: searchMode === "semantic" ? colors.primary : colors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: "600"
-                  }}>
-                      AI
-                  </Text>
-              </Pressable>
           </Animated.View>
       </Animated.View>
 

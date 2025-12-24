@@ -34,7 +34,7 @@ export const useSearchStore = create<SearchState>()(
     (set, get) => ({
       searchQuery: '',
       isSearchOpen: false,
-      searchMode: "hybrid", // Default to Hybrid as requested
+      searchMode: "text", // Default to text-only search
       filters: {},
       searchHistory: [],
       

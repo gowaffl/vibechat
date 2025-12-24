@@ -1502,3 +1502,71 @@ export const globalSearchResponseSchema = z.object({
   messages: z.array(searchMessageResultSchema),
 });
 export type GlobalSearchResponse = z.infer<typeof globalSearchResponseSchema>;
+
+// ============================================================================
+// COMMUNITY MARKETPLACE SCHEMAS
+// ============================================================================
+
+// Community AI Friend schema
+export const communityAIFriendSchema = z.object({
+  id: z.string(),
+  originalAiFriendId: z.string().nullable(),
+  creatorUserId: z.string(),
+  name: z.string(),
+  personality: z.string().nullable(),
+  tone: z.string().nullable(),
+  description: z.string().nullable(),
+  category: z.enum(["productivity", "entertainment", "support", "creative", "utility", "other"]).nullable(),
+  tags: z.array(z.string()).default([]),
+  cloneCount: z.number().default(0),
+  isPublic: z.boolean().default(true),
+  isFeatured: z.boolean().default(false),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  creator: userSchema.optional(),
+});
+export type CommunityAIFriend = z.infer<typeof communityAIFriendSchema>;
+
+// Community Command schema
+export const communityCommandSchema = z.object({
+  id: z.string(),
+  originalCommandId: z.string().nullable(),
+  creatorUserId: z.string(),
+  command: z.string(),
+  prompt: z.string(),
+  description: z.string().nullable(),
+  category: z.enum(["productivity", "entertainment", "creative", "utility", "other"]).nullable(),
+  tags: z.array(z.string()).default([]),
+  cloneCount: z.number().default(0),
+  isPublic: z.boolean().default(true),
+  isFeatured: z.boolean().default(false),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  creator: userSchema.optional(),
+});
+export type CommunityCommand = z.infer<typeof communityCommandSchema>;
+
+// Community Workflow schema
+export const communityWorkflowSchema = z.object({
+  id: z.string(),
+  originalWorkflowId: z.string().nullable(),
+  creatorUserId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  triggerType: z.enum(["message_pattern", "scheduled", "ai_mention", "keyword", "time_based"]),
+  triggerConfig: z.record(z.any()),
+  actionType: z.enum(["create_event", "create_poll", "send_message", "ai_response", "summarize", "remind"]),
+  actionConfig: z.record(z.any()),
+  category: z.enum(["productivity", "entertainment", "creative", "utility", "other"]).nullable(),
+  tags: z.array(z.string()).default([]),
+  cloneCount: z.number().default(0),
+  isPublic: z.boolean().default(true),
+  isFeatured: z.boolean().default(false),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  creator: userSchema.optional(),
+});
+export type CommunityWorkflow = z.infer<typeof communityWorkflowSchema>;
+
+// Clone item types
+export type CloneItemType = "ai_friend" | "command" | "workflow";

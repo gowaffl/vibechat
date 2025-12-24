@@ -10,6 +10,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Plus } from "lucide-react-native";
 import { WorkflowBuilderModal, WorkflowList } from "@/components/Workflows";
+import ShareToCommunityModal from "@/components/Community/ShareToCommunityModal";
 import type { RootStackScreenProps } from "@/navigation/types";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 
@@ -26,6 +27,10 @@ const GroupSettingsWorkflowsScreen = () => {
   // Workflow state
   const [showWorkflowBuilder, setShowWorkflowBuilder] = useState(false);
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
+  
+  // Share to community state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [itemToShare, setItemToShare] = useState<any | null>(null);
 
   // Check permissions (assuming canEdit is true for now or fetched)
   const { data: chat } = useQuery<any>({
@@ -161,6 +166,10 @@ const GroupSettingsWorkflowsScreen = () => {
               setEditingWorkflowId(null);
               setShowWorkflowBuilder(true);
             }}
+            onShareToCommunity={(workflow) => {
+              setItemToShare(workflow);
+              setShowShareModal(true);
+            }}
           />
         </View>
       </KeyboardAvoidingView>
@@ -178,6 +187,19 @@ const GroupSettingsWorkflowsScreen = () => {
           queryClient.invalidateQueries({ queryKey: ["workflows", chatId] });
           setShowWorkflowBuilder(false);
           setEditingWorkflowId(null);
+        }}
+      />
+
+      <ShareToCommunityModal
+        visible={showShareModal}
+        onClose={() => {
+          setShowShareModal(false);
+          setItemToShare(null);
+        }}
+        item={itemToShare}
+        itemType="workflow"
+        onSuccess={() => {
+          console.log("[GroupSettingsWorkflows] Workflow shared to community");
         }}
       />
     </View>

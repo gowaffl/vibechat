@@ -25,6 +25,7 @@ import {
   Trash2,
   Edit2,
   ChevronRight,
+  Globe,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -46,6 +47,7 @@ interface WorkflowListProps {
   onEdit: (workflow: Workflow) => void;
   onDelete: (workflowId: string) => void;
   onCreateNew: () => void;
+  onShareToCommunity?: (workflow: Workflow) => void;
 }
 
 const TRIGGER_ICONS: Record<string, any> = {
@@ -72,6 +74,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   onEdit,
   onDelete,
   onCreateNew,
+  onShareToCommunity,
 }) => {
   const { colors, isDark } = useTheme();
 
@@ -204,6 +207,22 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
                 <Edit2 size={14} color={colors.textSecondary} />
                 <Text style={[styles.actionText, { color: colors.textSecondary }]}>Edit</Text>
               </TouchableOpacity>
+
+              {onShareToCommunity && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onShareToCommunity(workflow);
+                  }}
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: `${colors.primary}15` },
+                  ]}
+                >
+                  <Globe size={14} color={colors.primary} />
+                  <Text style={[styles.actionText, { color: colors.primary }]}>Share</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 onPress={() => {

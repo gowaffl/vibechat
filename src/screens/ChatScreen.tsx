@@ -1716,11 +1716,6 @@ const SearchHeader = ({
 };
 
 const SearchResultItem = ({ item, onPress, searchQuery, colors, isDark }: { item: SearchMessageResult, onPress: (item: SearchMessageResult) => void, searchQuery: string, colors: any, isDark: boolean }) => {
-    const isSemantic = item.matchedField === "content" && item.similarity;
-    const matchLabel = item.matchedField === "transcription" ? "Voice Match" 
-                     : item.matchedField === "description" ? "Image Match" 
-                     : null;
-
     const formatTime = (dateString: string) => {
         const date = new Date(dateString);
         return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1760,25 +1755,6 @@ const SearchResultItem = ({ item, onPress, searchQuery, colors, isDark }: { item
                 {formatTime(item.message.createdAt)}
               </Text>
             </View>
-
-            {(isSemantic || matchLabel) && (
-              <View style={{ flexDirection: "row", marginBottom: 6 }}>
-                <View style={{ 
-                  backgroundColor: isSemantic ? colors.primary + '20' : colors.textTertiary + '20', 
-                  paddingHorizontal: 8, 
-                  paddingVertical: 2, 
-                  borderRadius: 8 
-                }}>
-                  <Text style={{ 
-                    fontSize: 10, 
-                    fontWeight: "600", 
-                    color: isSemantic ? colors.primary : colors.textSecondary 
-                  }}>
-                    {matchLabel || `AI Match ${(item.similarity! * 100).toFixed(0)}%`}
-                  </Text>
-                </View>
-              </View>
-            )}
 
             <HighlightText 
               text={item.message.content || (item.message.voiceTranscription ? `🎤 ${item.message.voiceTranscription}` : (item.message.imageDescription ? `🖼️ ${item.message.imageDescription}` : "Media message"))}
@@ -2214,7 +2190,7 @@ const ChatScreen = () => {
       userId: user!.id,
       query: debouncedSearchQuery,
       chatId: chatId,
-      mode: "hybrid", // Use hybrid mode for best results in chat search
+      mode: "text", // Text-only search
       limit: 50
     }),
     enabled: showSearchModal && debouncedSearchQuery.trim().length > 0,
@@ -2222,12 +2198,13 @@ const ChatScreen = () => {
     staleTime: 1000 * 60,
   });
 
+  // State to trigger scroll to message from search
+  const [scrollToSearchMessageId, setScrollToSearchMessageId] = useState<string | null>(null);
+
   const handleSearchResultPress = useCallback((result: SearchMessageResult) => {
-    setShowSearchModal(false);
-    setSearchQuery("");
-    // Jump to message
-    loadMessageContext(result.message.id);
-  }, [loadMessageContext]);
+    // Trigger scroll to the selected message (scrollToMessage will close modal)
+    setScrollToSearchMessageId(result.message.id);
+  }, []);
 
   // MOVED UP: Thread hooks and state for Realtime updates
   const { threads, createThread, updateThread, deleteThread, reorderThreads, isCreating: isCreatingThread } = useThreads(chatId || "", user?.id || "");
@@ -3461,6 +3438,15 @@ const ChatScreen = () => {
       }, 2000);
     }, 300);
   }, [activeMessages, isAITyping, typingUsers, currentThreadId, isLoadingContext, loadMessageContext]);
+
+  // Handle scroll to search result
+  useEffect(() => {
+    if (scrollToSearchMessageId) {
+      console.log(`[ChatScreen] Scrolling to search result: ${scrollToSearchMessageId}`);
+      scrollToMessage(scrollToSearchMessageId);
+      setScrollToSearchMessageId(null); // Clear after triggering
+    }
+  }, [scrollToSearchMessageId, scrollToMessage]);
 
   // Filter messages to get media (images and videos) for gallery (memoized for performance)
   const mediaMessages = useMemo(

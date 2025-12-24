@@ -1,49 +1,22 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSearchStore, SearchMode } from '@/stores/searchStore';
-import { Calendar, User, FileText, X, Check, Brain, Search as SearchIcon } from 'lucide-react-native';
-import clsx from 'clsx';
+import { useSearchStore } from '@/stores/searchStore';
+import { Calendar, User, FileText, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { SearchFilterSheet } from './SearchFilterSheet';
 
 export const SearchFilters = () => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { 
     filters, 
     setFilters, 
-    searchMode, 
-    setSearchMode, 
     clearFilters 
   } = useSearchStore();
 
   const [activeSheet, setActiveSheet] = useState<'date' | 'type' | 'user' | null>(null);
 
   const activeFiltersCount = Object.keys(filters).length;
-
-  const toggleMode = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (searchMode === 'hybrid') setSearchMode('text');
-    else if (searchMode === 'text') setSearchMode('semantic');
-    else setSearchMode('hybrid');
-  };
-
-  const ModeIcon = useMemo(() => {
-    switch (searchMode) {
-      case 'hybrid': return Brain;
-      case 'semantic': return Brain;
-      case 'text': return SearchIcon;
-    }
-  }, [searchMode]);
-
-  const modeLabel = useMemo(() => {
-    switch (searchMode) {
-      case 'hybrid': return 'Hybrid';
-      case 'semantic': return 'AI Only';
-      case 'text': return 'Text Only';
-    }
-  }, [searchMode]);
 
   const handleApplyFilter = (data: any) => {
     setFilters(data);
@@ -56,28 +29,6 @@ export const SearchFilters = () => {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Search Mode Toggle */}
-        <Pressable 
-          onPress={toggleMode}
-          style={[
-            styles.chip, 
-            { 
-              backgroundColor: searchMode === 'text' ? colors.card : colors.primary + '20',
-              borderColor: searchMode === 'text' ? colors.border : colors.primary
-            }
-          ]}
-        >
-          <ModeIcon size={14} color={searchMode === 'text' ? colors.text : colors.primary} />
-          <Text style={[
-            styles.chipText, 
-            { color: searchMode === 'text' ? colors.text : colors.primary, fontWeight: '600' }
-          ]}>
-            {modeLabel}
-          </Text>
-        </Pressable>
-
-        <View style={[styles.separator, { backgroundColor: colors.border }]} />
-
         {/* Date Filter */}
         <Pressable 
           style={[
@@ -220,10 +171,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  separator: {
-    width: 1,
-    height: 20,
-    marginHorizontal: 4,
-  }
 });
 

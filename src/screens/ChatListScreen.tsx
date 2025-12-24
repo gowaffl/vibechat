@@ -348,7 +348,7 @@ const ChatListScreen = () => {
   const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
 
-  const { searchQuery, searchMode, filters } = useSearchStore();
+  const { searchQuery, filters } = useSearchStore();
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const isDebouncing = searchQuery !== debouncedSearchQuery;
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
@@ -381,11 +381,11 @@ const ChatListScreen = () => {
     isLoading: isSearching,
     isFetching: isSearchFetching, 
   } = useQuery<GlobalSearchResponse>({
-    queryKey: ["global-search", debouncedSearchQuery, searchMode, filters],
+    queryKey: ["global-search", debouncedSearchQuery, filters],
     queryFn: () => api.post("/api/search/global", { 
       userId: user!.id, 
       query: debouncedSearchQuery,
-      mode: searchMode, // Pass search mode (text/semantic/hybrid)
+      mode: "text", // Text-only search
       limit: 20
     }),
     enabled: !!user?.id && (debouncedSearchQuery.trim().length > 0),
@@ -669,11 +669,6 @@ const ChatListScreen = () => {
   }, [filteredChats]);
 
   const renderSearchResult = ({ item }: { item: SearchMessageResult }) => {
-    const isSemantic = item.matchedField === "content" && item.similarity;
-    const matchLabel = item.matchedField === "transcription" ? "Voice Match" 
-                     : item.matchedField === "description" ? "Image Match" 
-                     : null;
-
     return (
       <Pressable
         onPress={() => handleSearchResultPress(item)}
@@ -716,26 +711,6 @@ const ChatListScreen = () => {
                 {formatTime(item.message.createdAt)}
               </Text>
             </View>
-
-            {/* Match Indicator */}
-            {(isSemantic || matchLabel) && (
-              <View style={{ flexDirection: "row", marginBottom: 6 }}>
-                <View style={{ 
-                  backgroundColor: isSemantic ? colors.primary + '20' : colors.textTertiary + '20', 
-                  paddingHorizontal: 8, 
-                  paddingVertical: 2, 
-                  borderRadius: 8 
-                }}>
-                  <Text style={{ 
-                    fontSize: 10, 
-                    fontWeight: "600", 
-                    color: isSemantic ? colors.primary : colors.textSecondary 
-                  }}>
-                    {matchLabel || `AI Match ${(item.similarity! * 100).toFixed(0)}%`}
-                  </Text>
-                </View>
-              </View>
-            )}
 
             {/* Message Content */}
             <HighlightText 
@@ -881,7 +856,7 @@ const ChatListScreen = () => {
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <LuxeLogoLoader size="large" />
             <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 15, fontWeight: "500" }}>
-              {isDebouncing ? "Typing..." : searchMode === "semantic" ? "AI searching..." : "Searching messages..."}
+              {isDebouncing ? "Typing..." : "Searching messages..."}
             </Text>
           </View>
         ) : (searchResults.chats.length === 0 && searchResults.users.length === 0 && searchResults.messages.length === 0) ? (

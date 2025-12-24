@@ -1,7 +1,7 @@
 /**
  * Clone Modal Component
  *
- * Modal for cloning community AI personas and commands to user's chats.
+ * Modal for cloning community AI personas, commands, and workflows to user's chats.
  * Allows selecting target chat(s) and shows item details before cloning.
  */
 
@@ -21,6 +21,7 @@ import {
   X,
   Sparkles,
   Zap,
+  Wand2,
   Download,
   Check,
   MessageCircle,
@@ -54,6 +55,8 @@ interface CommunityItem {
   personality?: string;
   prompt?: string;
   tone?: string;
+  triggerType?: string;
+  actionType?: string;
   category?: string;
   tags?: string[];
   cloneCount?: number;
@@ -75,7 +78,7 @@ interface CloneModalProps {
   visible: boolean;
   onClose: () => void;
   item: CommunityItem | null;
-  itemType: "ai_friend" | "command";
+  itemType: "ai_friend" | "command" | "workflow";
   onSuccess: () => void;
 }
 
@@ -171,10 +174,21 @@ const CloneModal: React.FC<CloneModalProps> = ({
   if (!item) return null;
 
   const isPersona = itemType === "ai_friend";
+  const isCommand = itemType === "command";
+  const isWorkflow = itemType === "workflow";
+  
   const itemName = isPersona 
     ? item.name 
-    : (item.command.startsWith('/') ? item.command : `/${item.command}`);
-  const itemInstructions = isPersona ? item.personality : item.prompt;
+    : isCommand
+    ? (item.command?.startsWith('/') ? item.command : `/${item.command}`)
+    : item.name;
+    
+  const itemInstructions = isPersona 
+    ? item.personality 
+    : isCommand
+    ? item.prompt
+    : `${item.triggerType} → ${item.actionType}`;
+    
   const hasDescription = item.description && item.description.length > 0;
 
   return (
@@ -204,16 +218,22 @@ const CloneModal: React.FC<CloneModalProps> = ({
                   {
                     backgroundColor: isPersona
                       ? `${colors.primary}33`
+                      : isCommand
+                      ? isDark
+                        ? "rgba(175, 82, 222, 0.2)"
+                        : "rgba(175, 82, 222, 0.1)"
                       : isDark
-                      ? "rgba(175, 82, 222, 0.2)"
-                      : "rgba(175, 82, 222, 0.1)",
+                      ? "rgba(0, 122, 255, 0.2)"
+                      : "rgba(0, 122, 255, 0.1)",
                   },
                 ]}
               >
                 {isPersona ? (
                   <Sparkles size={24} color={colors.primary} />
-                ) : (
+                ) : isCommand ? (
                   <Zap size={24} color="#AF52DE" />
+                ) : (
+                  <Wand2 size={24} color="#007AFF" />
                 )}
               </View>
               <View style={styles.headerInfo}>

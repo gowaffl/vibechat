@@ -1,9 +1,9 @@
 /**
  * Community Marketplace API Routes
  *
- * Endpoints for the AI Personas and Slash Commands marketplace:
+ * Endpoints for the AI Personas, Slash Commands, and Workflows marketplace:
  * - Browse and search community items
- * - Share AI friends and commands to community
+ * - Share AI friends, commands, and workflows to community
  * - Clone items to user's chats
  * - Rankings and featured items
  */
@@ -36,9 +36,17 @@ const shareCommandSchema = z.object({
   tags: z.array(z.string()).max(10).optional().default([]),
 });
 
+const shareWorkflowSchema = z.object({
+  userId: z.string(),
+  workflowId: z.string(),
+  description: z.string().max(500).optional(),
+  category: z.enum(["productivity", "entertainment", "creative", "utility", "other"]).optional().default("other"),
+  tags: z.array(z.string()).max(10).optional().default([]),
+});
+
 const cloneItemSchema = z.object({
   userId: z.string(),
-  itemType: z.enum(["ai_friend", "command"]),
+  itemType: z.enum(["ai_friend", "command", "workflow"]),
   communityItemId: z.string(),
   targetChatIds: z.array(z.string()).min(1).max(10),
 });
@@ -155,7 +163,61 @@ app.get("/commands", async (c) => {
   }
 });
 
-// GET /api/community/rankings - Get top personas and commands
+// GET /api/community/workflows - List community workflows
+app.get("/workflows", async (c) => {
+  const category = c.req.query("category");
+  const search = c.req.query("search");
+  const sortBy = c.req.query("sortBy") || "cloneCount";
+  const featured = c.req.query("featured") === "true";
+  const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
+  const offset = parseInt(c.req.query("offset") || "0");
+
+  try {
+    let query = db
+      .from("community_workflow")
+      .select(`
+        *,
+        creator:creatorUserId (id, name, image)
+      `)
+      .eq("isPublic", true);
+
+    if (category) {
+      query = query.eq("category", category);
+    }
+
+    if (featured) {
+      query = query.eq("isFeatured", true);
+    }
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+    }
+
+    if (sortBy === "createdAt") {
+      query = query.order("createdAt", { ascending: false });
+    } else {
+      query = query.order("cloneCount", { ascending: false });
+    }
+
+    const { data: workflows, error } = await query.range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error("[Community] Error fetching workflows:", error);
+      return c.json({ error: "Failed to fetch workflows" }, 500);
+    }
+
+    return c.json({
+      items: workflows || [],
+      hasMore: (workflows?.length || 0) === limit,
+      offset: offset + (workflows?.length || 0),
+    });
+  } catch (error) {
+    console.error("[Community] Error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// GET /api/community/rankings - Get top personas, commands, and workflows
 app.get("/rankings", async (c) => {
   const limit = Math.min(parseInt(c.req.query("limit") || "10"), 25);
 
@@ -174,6 +236,17 @@ app.get("/rankings", async (c) => {
     // Get top commands
     const { data: topCommands } = await db
       .from("community_command")
+      .select(`
+        *,
+        creator:creatorUserId (id, name, image)
+      `)
+      .eq("isPublic", true)
+      .order("cloneCount", { ascending: false })
+      .limit(limit);
+
+    // Get top workflows
+    const { data: topWorkflows } = await db
+      .from("community_workflow")
       .select(`
         *,
         creator:creatorUserId (id, name, image)
@@ -205,11 +278,24 @@ app.get("/rankings", async (c) => {
       .order("cloneCount", { ascending: false })
       .limit(5);
 
+    const { data: featuredWorkflows } = await db
+      .from("community_workflow")
+      .select(`
+        *,
+        creator:creatorUserId (id, name, image)
+      `)
+      .eq("isPublic", true)
+      .eq("isFeatured", true)
+      .order("cloneCount", { ascending: false })
+      .limit(5);
+
     return c.json({
       topPersonas: topPersonas || [],
       topCommands: topCommands || [],
+      topWorkflows: topWorkflows || [],
       featuredPersonas: featuredPersonas || [],
       featuredCommands: featuredCommands || [],
+      featuredWorkflows: featuredWorkflows || [],
     });
   } catch (error) {
     console.error("[Community] Error:", error);
@@ -421,6 +507,76 @@ app.post("/commands", zValidator("json", shareCommandSchema), async (c) => {
   }
 });
 
+// POST /api/community/workflows - Share workflow to community
+app.post("/workflows", zValidator("json", shareWorkflowSchema), async (c) => {
+  const data = c.req.valid("json");
+
+  try {
+    // Get the original workflow
+    const { data: workflow, error: fetchError } = await db
+      .from("ai_workflow")
+      .select("*")
+      .eq("id", data.workflowId)
+      .single();
+
+    if (fetchError || !workflow) {
+      return c.json({ error: "Workflow not found" }, 404);
+    }
+
+    // Verify user has access (is member of the chat)
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", workflow.chatId)
+      .eq("userId", data.userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not authorized to share this workflow" }, 403);
+    }
+
+    // Check if already shared
+    const { data: existing } = await db
+      .from("community_workflow")
+      .select("id")
+      .eq("originalWorkflowId", data.workflowId)
+      .single();
+
+    if (existing) {
+      return c.json({ error: "This workflow is already shared to the community", existingId: existing.id }, 400);
+    }
+
+    // Create community entry
+    const { data: communityItem, error: insertError } = await db
+      .from("community_workflow")
+      .insert({
+        originalWorkflowId: data.workflowId,
+        creatorUserId: data.userId,
+        name: workflow.name,
+        description: data.description || workflow.description || `Workflow: ${workflow.name}`,
+        triggerType: workflow.triggerType,
+        triggerConfig: workflow.triggerConfig,
+        actionType: workflow.actionType,
+        actionConfig: workflow.actionConfig,
+        category: data.category,
+        tags: data.tags,
+        isPublic: true,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("[Community] Error sharing workflow:", insertError);
+      return c.json({ error: "Failed to share workflow" }, 500);
+    }
+
+    return c.json(communityItem, 201);
+  } catch (error) {
+    console.error("[Community] Error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // ==========================================
 // Clone Items
 // ==========================================
@@ -580,6 +736,87 @@ app.post("/clone", zValidator("json", cloneItemSchema), async (c) => {
 
         clonedItems.push({ chatId, commandId: newCommand.id });
       }
+    } else if (data.itemType === "workflow") {
+      // Get community workflow
+      const { data: communityItem, error: fetchError } = await db
+        .from("community_workflow")
+        .select("*")
+        .eq("id", data.communityItemId)
+        .eq("isPublic", true)
+        .single();
+
+      if (fetchError || !communityItem) {
+        return c.json({ error: "Community workflow not found" }, 404);
+      }
+
+      // Clone to each target chat
+      for (const chatId of data.targetChatIds) {
+        // Check if already cloned to this chat
+        const { data: existingClone } = await db
+          .from("community_clone")
+          .select("id")
+          .eq("userId", data.userId)
+          .eq("communityItemId", data.communityItemId)
+          .eq("targetChatId", chatId)
+          .single();
+
+        if (existingClone) {
+          continue;
+        }
+
+        // Create workflow in target chat
+        const { data: newWorkflow, error: insertError } = await db
+          .from("ai_workflow")
+          .insert({
+            chatId: chatId,
+            creatorId: data.userId,
+            name: communityItem.name,
+            description: communityItem.description,
+            triggerType: communityItem.triggerType,
+            triggerConfig: communityItem.triggerConfig,
+            actionType: communityItem.actionType,
+            actionConfig: communityItem.actionConfig,
+            isEnabled: true,
+            cooldownMinutes: 5,
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("[Community] Error cloning workflow:", insertError);
+          continue;
+        }
+
+        // Record the clone
+        await db.from("community_clone").insert({
+          userId: data.userId,
+          itemType: "workflow",
+          communityItemId: data.communityItemId,
+          targetChatId: chatId,
+        });
+
+        clonedItems.push({ chatId, workflowId: newWorkflow.id });
+      }
+    }
+
+    // Increment clone count for the community item
+    if (clonedItems.length > 0) {
+      const table = data.itemType === "ai_friend" 
+        ? "community_ai_friend" 
+        : data.itemType === "command"
+        ? "community_command"
+        : "community_workflow";
+      
+      await db.rpc("increment", { 
+        row_id: data.communityItemId,
+        table_name: table,
+        column_name: "cloneCount"
+      }).catch(() => {
+        // Fallback: manual increment
+        db.from(table)
+          .update({ cloneCount: db.raw("\"cloneCount\" + 1") })
+          .eq("id", data.communityItemId);
+      });
     }
 
     return c.json({
@@ -618,9 +855,16 @@ app.get("/my-shares", async (c) => {
       .eq("creatorUserId", userId)
       .order("createdAt", { ascending: false });
 
+    const { data: workflows } = await db
+      .from("community_workflow")
+      .select("*")
+      .eq("creatorUserId", userId)
+      .order("createdAt", { ascending: false });
+
     return c.json({
       personas: personas || [],
       commands: commands || [],
+      workflows: workflows || [],
     });
   } catch (error) {
     console.error("[Community] Error:", error);
@@ -688,6 +932,39 @@ app.delete("/commands/:id", async (c) => {
     await db.from("community_command").delete().eq("id", id);
 
     return c.json({ success: true, message: "Command removed from community" });
+  } catch (error) {
+    console.error("[Community] Error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// DELETE /api/community/workflows/:id - Remove shared workflow
+app.delete("/workflows/:id", async (c) => {
+  const id = c.req.param("id");
+  const userId = c.req.query("userId");
+
+  if (!userId) {
+    return c.json({ error: "userId is required" }, 400);
+  }
+
+  try {
+    const { data: workflow } = await db
+      .from("community_workflow")
+      .select("creatorUserId")
+      .eq("id", id)
+      .single();
+
+    if (!workflow) {
+      return c.json({ error: "Workflow not found" }, 404);
+    }
+
+    if (workflow.creatorUserId !== userId) {
+      return c.json({ error: "Not authorized to delete this workflow" }, 403);
+    }
+
+    await db.from("community_workflow").delete().eq("id", id);
+
+    return c.json({ success: true, message: "Workflow removed from community" });
   } catch (error) {
     console.error("[Community] Error:", error);
     return c.json({ error: "Internal server error" }, 500);

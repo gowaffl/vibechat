@@ -1,7 +1,7 @@
 /**
  * Share to Community Modal
  *
- * Allows users to share their AI Friends and Custom Commands to the community marketplace.
+ * Allows users to share their AI Friends, Custom Commands, and Workflows to the community marketplace.
  */
 
 import React, { useState } from "react";
@@ -23,6 +23,7 @@ import {
   X,
   Sparkles,
   Zap,
+  Wand2,
   Globe,
   Tag,
   FileText,
@@ -45,13 +46,16 @@ interface ShareableItem {
   tone?: string;
   engagementMode?: string;
   engagementPercent?: number;
+  description?: string;
+  triggerType?: string;
+  actionType?: string;
 }
 
 interface ShareToCommunityModalProps {
   visible: boolean;
   onClose: () => void;
   item: ShareableItem | null;
-  itemType: "ai_friend" | "command";
+  itemType: "ai_friend" | "command" | "workflow";
   onSuccess?: () => void;
 }
 
@@ -97,7 +101,9 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
       const endpoint =
         itemType === "ai_friend"
           ? "/api/community/personas"
-          : "/api/community/commands";
+          : itemType === "command"
+          ? "/api/community/commands"
+          : "/api/community/workflows";
 
       const payload =
         itemType === "ai_friend"
@@ -109,9 +115,18 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
               tags,
               isPublic,
             }
-          : {
+          : itemType === "command"
+          ? {
               userId: user.id,
               commandId: item.id,
+              description,
+              category: selectedCategory,
+              tags,
+              isPublic,
+            }
+          : {
+              userId: user.id,
+              workflowId: item.id,
               description,
               category: selectedCategory,
               tags,
@@ -152,12 +167,20 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
   if (!item) return null;
 
   const isPersona = itemType === "ai_friend";
+  const isCommand = itemType === "command";
+  const isWorkflow = itemType === "workflow";
+  
   const itemName = isPersona 
     ? item.name 
-    : (item.command.startsWith('/') ? item.command : `/${item.command}`);
+    : isCommand
+    ? (item.command?.startsWith('/') ? item.command : `/${item.command}`)
+    : item.name;
+    
   const itemDetails = isPersona
     ? item.personality || "Custom AI Personality"
-    : item.prompt || "Custom AI Command";
+    : isCommand
+    ? item.prompt || "Custom AI Command"
+    : item.description || `${item.triggerType} → ${item.actionType}`;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
@@ -232,22 +255,28 @@ const ShareToCommunityModal: React.FC<ShareToCommunityModalProps> = ({
                           ? isDark
                             ? "rgba(52, 199, 89, 0.2)"
                             : "rgba(52, 199, 89, 0.1)"
+                          : isCommand
+                          ? isDark
+                            ? "rgba(175, 82, 222, 0.2)"
+                            : "rgba(175, 82, 222, 0.1)"
                           : isDark
-                          ? "rgba(175, 82, 222, 0.2)"
-                          : "rgba(175, 82, 222, 0.1)",
+                          ? "rgba(0, 122, 255, 0.2)"
+                          : "rgba(0, 122, 255, 0.1)",
                       },
                     ]}
                   >
                     {isPersona ? (
                       <Sparkles size={20} color="#34C759" />
-                    ) : (
+                    ) : isCommand ? (
                       <Zap size={20} color="#AF52DE" />
+                    ) : (
+                      <Wand2 size={20} color="#007AFF" />
                     )}
                   </View>
                   <View style={styles.previewInfo}>
                     <Text style={[styles.previewName, { color: colors.text }]}>{itemName}</Text>
                     <Text style={[styles.previewType, { color: colors.textSecondary }]}>
-                      {isPersona ? "AI Persona" : "Slash Command"}
+                      {isPersona ? "AI Persona" : isCommand ? "Slash Command" : "AI Workflow"}
                     </Text>
                   </View>
                 </View>

@@ -33,6 +33,7 @@ import {
   Clock,
   ChevronRight,
   Zap,
+  Wand2,
   Award,
 } from "lucide-react-native";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -91,7 +92,26 @@ interface CommunityCommand {
   };
 }
 
-type TabType = "personas" | "commands" | "rankings";
+interface CommunityWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  triggerType: string;
+  actionType: string;
+  category: string;
+  tags: string[];
+  cloneCount: number;
+  isPublic: boolean;
+  isFeatured: boolean;
+  createdAt: string;
+  creator?: {
+    id: string;
+    name: string;
+    image: string;
+  };
+}
+
+type TabType = "personas" | "commands" | "workflows" | "rankings";
 type SortType = "popular" | "recent";
 
 const CATEGORIES = [
@@ -115,17 +135,25 @@ const CommunityScreen = () => {
   const [sortBy, setSortBy] = useState<SortType>("popular");
   const [personas, setPersonas] = useState<CommunityPersona[]>([]);
   const [commands, setCommands] = useState<CommunityCommand[]>([]);
+  const [workflows, setWorkflows] = useState<CommunityWorkflow[]>([]);
   const [featuredPersonas, setFeaturedPersonas] = useState<CommunityPersona[]>([]);
   const [featuredCommands, setFeaturedCommands] = useState<CommunityCommand[]>([]);
+  const [featuredWorkflows, setFeaturedWorkflows] = useState<CommunityWorkflow[]>([]);
   const [topPersonas, setTopPersonas] = useState<CommunityPersona[]>([]);
   const [topCommands, setTopCommands] = useState<CommunityCommand[]>([]);
+  const [topWorkflows, setTopWorkflows] = useState<CommunityWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Clone modal state
   const [cloneModalVisible, setCloneModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<CommunityPersona | CommunityCommand | null>(null);
-  const [selectedItemType, setSelectedItemType] = useState<"ai_friend" | "command">("ai_friend");
+  const [selectedItem, setSelectedItem] = useState<CommunityPersona | CommunityCommand | CommunityWorkflow | null>(null);
+  const [selectedItemType, setSelectedItemType] = useState<"ai_friend" | "command" | "workflow">("ai_friend");
+
+  // Rankings expanded state
+  const [personasExpanded, setPersonasExpanded] = useState(false);
+  const [commandsExpanded, setCommandsExpanded] = useState(false);
+  const [workflowsExpanded, setWorkflowsExpanded] = useState(false);
 
   // Fetch data
   const fetchPersonas = useCallback(async () => {
@@ -160,19 +188,39 @@ const CommunityScreen = () => {
     }
   }, [searchQuery, selectedCategory, sortBy]);
 
+  const fetchWorkflows = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("search", searchQuery);
+      if (selectedCategory !== "all") params.append("category", selectedCategory);
+      params.append("sortBy", sortBy === "popular" ? "cloneCount" : "createdAt");
+
+      const response = await api.get<{ items: CommunityWorkflow[] }>(
+        `/api/community/workflows?${params.toString()}`
+      );
+      setWorkflows(response.items || []);
+    } catch (error) {
+      console.error("[Community] Error fetching workflows:", error);
+    }
+  }, [searchQuery, selectedCategory, sortBy]);
+
   const fetchRankings = useCallback(async () => {
     try {
       const response = await api.get<{
         topPersonas: CommunityPersona[];
         topCommands: CommunityCommand[];
+        topWorkflows: CommunityWorkflow[];
         featuredPersonas: CommunityPersona[];
         featuredCommands: CommunityCommand[];
+        featuredWorkflows: CommunityWorkflow[];
       }>("/api/community/rankings?limit=10");
 
       setTopPersonas(response.topPersonas || []);
       setTopCommands(response.topCommands || []);
+      setTopWorkflows(response.topWorkflows || []);
       setFeaturedPersonas(response.featuredPersonas || []);
       setFeaturedCommands(response.featuredCommands || []);
+      setFeaturedWorkflows(response.featuredWorkflows || []);
     } catch (error) {
       console.error("[Community] Error fetching rankings:", error);
     }
@@ -185,13 +233,15 @@ const CommunityScreen = () => {
         await fetchPersonas();
       } else if (activeTab === "commands") {
         await fetchCommands();
+      } else if (activeTab === "workflows") {
+        await fetchWorkflows();
       } else {
         await fetchRankings();
       }
     } finally {
       setLoading(false);
     }
-  }, [activeTab, fetchPersonas, fetchCommands, fetchRankings]);
+  }, [activeTab, fetchPersonas, fetchCommands, fetchWorkflows, fetchRankings]);
 
   useEffect(() => {
     loadData();
@@ -203,7 +253,7 @@ const CommunityScreen = () => {
     setRefreshing(false);
   };
 
-  const handleClone = (item: CommunityPersona | CommunityCommand, type: "ai_friend" | "command") => {
+  const handleClone = (item: CommunityPersona | CommunityCommand | CommunityWorkflow, type: "ai_friend" | "command" | "workflow") => {
     setSelectedItem(item);
     setSelectedItemType(type);
     setCloneModalVisible(true);
@@ -226,7 +276,9 @@ const CommunityScreen = () => {
             {
               backgroundColor: isActive
                 ? `${colors.primary}33`
-                : "transparent",
+                : isDark 
+                  ? "rgba(255,255,255,0.1)" 
+                  : "rgba(0,0,0,0.05)",
               borderColor: isActive
                 ? `${colors.primary}66`
                 : "transparent",
@@ -413,8 +465,88 @@ const CommunityScreen = () => {
     </TouchableOpacity>
   );
 
+  const renderWorkflowCard = (workflow: CommunityWorkflow, index?: number) => (
+    <TouchableOpacity
+      key={workflow.id}
+      onPress={() => handleClone(workflow, "workflow")}
+      style={[
+        styles.card,
+        {
+          backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+          borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
+        },
+      ]}
+    >
+      {index !== undefined && index < 3 && (
+        <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
+          <Text style={styles.rankText}>#{index + 1}</Text>
+        </View>
+      )}
+      <View style={styles.cardHeader}>
+        <View
+          style={[
+            styles.iconContainer,
+            { backgroundColor: isDark ? "rgba(0, 122, 255, 0.2)" : "rgba(0, 122, 255, 0.1)" },
+          ]}
+        >
+          <Wand2 size={24} color="#007AFF" />
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+            {workflow.name}
+          </Text>
+          <Text style={[styles.cardCategory, { color: colors.textSecondary }]}>
+            {workflow.category || "General"}
+          </Text>
+        </View>
+      </View>
+      {workflow.description && (
+        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+          {workflow.description}
+        </Text>
+      )}
+      <View style={styles.promptSection}>
+        <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>Automation:</Text>
+        <Text style={[styles.promptText, { color: colors.textSecondary }]} numberOfLines={2}>
+          {workflow.triggerType} → {workflow.actionType}
+        </Text>
+      </View>
+      {workflow.tags && workflow.tags.length > 0 && (
+        <View style={styles.tagsContainer}>
+          {workflow.tags.slice(0, 3).map((tag, i) => (
+            <View
+              key={i}
+              style={[
+                styles.tag,
+                { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
+              ]}
+            >
+              <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      <View style={styles.cardFooter}>
+        {workflow.creator && (
+          <View style={styles.creatorRow}>
+            <User size={12} color={colors.textTertiary} />
+            <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
+              {formatCreatorName(workflow.creator.name)}
+            </Text>
+          </View>
+        )}
+        <View style={styles.cloneStats}>
+          <Download size={14} color={colors.textSecondary} />
+          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
+            {formatNumber(workflow.cloneCount)}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
   const renderFeaturedSection = () => {
-    if (featuredPersonas.length === 0 && featuredCommands.length === 0) return null;
+    if (featuredPersonas.length === 0 && featuredCommands.length === 0 && featuredWorkflows.length === 0) return null;
 
     return (
       <View style={styles.section}>
@@ -433,46 +565,148 @@ const CommunityScreen = () => {
               {renderCommandCard(command)}
             </View>
           ))}
+          {featuredWorkflows.map((workflow) => (
+            <View key={workflow.id} style={styles.horizontalCard}>
+              {renderWorkflowCard(workflow)}
+            </View>
+          ))}
         </ScrollView>
       </View>
     );
   };
 
-  const renderRankingsTab = () => (
-    <View>
-      {renderFeaturedSection()}
+  const renderRankingsTab = () => {
+    const INITIAL_LIMIT = 5;
 
-      {/* Top Personas */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Trophy size={20} color="#FFD60A" />
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Top AI Personas</Text>
-        </View>
-        {topPersonas.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No personas shared yet. Be the first!
-          </Text>
-        ) : (
-          topPersonas.map((persona, index) => renderPersonaCard(persona, index))
-        )}
-      </View>
+    return (
+      <View>
+        {renderFeaturedSection()}
 
-      {/* Top Commands */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Trophy size={20} color="#AF52DE" />
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Top Slash Commands</Text>
+        {/* Top Personas */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Trophy size={20} color="#FFD60A" />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Top AI Personas</Text>
+          </View>
+          {topPersonas.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No personas shared yet. Be the first!
+            </Text>
+          ) : (
+            <>
+              {topPersonas
+                .slice(0, personasExpanded ? topPersonas.length : INITIAL_LIMIT)
+                .map((persona, index) => renderPersonaCard(persona, index))}
+              {topPersonas.length > INITIAL_LIMIT && (
+                <TouchableOpacity
+                  onPress={() => setPersonasExpanded(!personasExpanded)}
+                  style={[
+                    styles.seeMoreButton,
+                    {
+                      backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.seeMoreText, { color: colors.primary }]}>
+                    {personasExpanded ? "See Less" : `See More (${topPersonas.length - INITIAL_LIMIT})`}
+                  </Text>
+                  <ChevronRight
+                    size={16}
+                    color={colors.primary}
+                    style={{
+                      transform: [{ rotate: personasExpanded ? "270deg" : "90deg" }],
+                    }}
+                  />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
         </View>
-        {topCommands.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No commands shared yet. Be the first!
-          </Text>
-        ) : (
-          topCommands.map((command, index) => renderCommandCard(command, index))
-        )}
+
+        {/* Top Commands */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Trophy size={20} color="#AF52DE" />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Top Slash Commands</Text>
+          </View>
+          {topCommands.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No commands shared yet. Be the first!
+            </Text>
+          ) : (
+            <>
+              {topCommands
+                .slice(0, commandsExpanded ? topCommands.length : INITIAL_LIMIT)
+                .map((command, index) => renderCommandCard(command, index))}
+              {topCommands.length > INITIAL_LIMIT && (
+                <TouchableOpacity
+                  onPress={() => setCommandsExpanded(!commandsExpanded)}
+                  style={[
+                    styles.seeMoreButton,
+                    {
+                      backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.seeMoreText, { color: colors.primary }]}>
+                    {commandsExpanded ? "See Less" : `See More (${topCommands.length - INITIAL_LIMIT})`}
+                  </Text>
+                  <ChevronRight
+                    size={16}
+                    color={colors.primary}
+                    style={{
+                      transform: [{ rotate: commandsExpanded ? "270deg" : "90deg" }],
+                    }}
+                  />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Top Workflows */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Trophy size={20} color="#007AFF" />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Top AI Workflows</Text>
+          </View>
+          {topWorkflows.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No workflows shared yet. Be the first!
+            </Text>
+          ) : (
+            <>
+              {topWorkflows
+                .slice(0, workflowsExpanded ? topWorkflows.length : INITIAL_LIMIT)
+                .map((workflow, index) => renderWorkflowCard(workflow, index))}
+              {topWorkflows.length > INITIAL_LIMIT && (
+                <TouchableOpacity
+                  onPress={() => setWorkflowsExpanded(!workflowsExpanded)}
+                  style={[
+                    styles.seeMoreButton,
+                    {
+                      backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.seeMoreText, { color: colors.primary }]}>
+                    {workflowsExpanded ? "See Less" : `See More (${topWorkflows.length - INITIAL_LIMIT})`}
+                  </Text>
+                  <ChevronRight
+                    size={16}
+                    color={colors.primary}
+                    style={{
+                      transform: [{ rotate: workflowsExpanded ? "270deg" : "90deg" }],
+                    }}
+                  />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderCategoryFilter = () => (
     <ScrollView
@@ -623,11 +857,17 @@ const CommunityScreen = () => {
         </View>
 
         {/* Tabs */}
-        <View style={styles.tabs}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabs}
+          contentContainerStyle={styles.tabsContent}
+        >
           {renderTab("personas", "AI Personas", <Sparkles size={18} color={activeTab === "personas" ? colors.primary : colors.textSecondary} />)}
           {renderTab("commands", "Commands", <Zap size={18} color={activeTab === "commands" ? colors.primary : colors.textSecondary} />)}
+          {renderTab("workflows", "Workflows", <Wand2 size={18} color={activeTab === "workflows" ? colors.primary : colors.textSecondary} />)}
           {renderTab("rankings", "Rankings", <Award size={18} color={activeTab === "rankings" ? colors.primary : colors.textSecondary} />)}
-        </View>
+        </ScrollView>
 
         {/* Category Filter & Sort (only for personas/commands tabs) */}
         {activeTab !== "rankings" && (
@@ -659,7 +899,7 @@ const CommunityScreen = () => {
               personas.map((persona) => renderPersonaCard(persona))
             )}
           </View>
-        ) : (
+        ) : activeTab === "commands" ? (
           <View style={styles.listContainer}>
             {commands.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -671,6 +911,20 @@ const CommunityScreen = () => {
               </View>
             ) : (
               commands.map((command) => renderCommandCard(command))
+            )}
+          </View>
+        ) : (
+          <View style={styles.listContainer}>
+            {workflows.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Wand2 size={48} color={colors.textTertiary} />
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No workflows found</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  Be the first to share a workflow!
+                </Text>
+              </View>
+            ) : (
+              workflows.map((workflow) => renderWorkflowCard(workflow))
             )}
           </View>
         )}
@@ -757,17 +1011,20 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   tabs: {
-    flexDirection: "row",
-    gap: 8,
     marginBottom: 16,
+    marginHorizontal: -16,
+  },
+  tabsContent: {
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingRight: 8,
   },
   tab: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
     gap: 6,
@@ -961,6 +1218,20 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     textAlign: "center",
+  },
+  seeMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    gap: 6,
+  },
+  seeMoreText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
 

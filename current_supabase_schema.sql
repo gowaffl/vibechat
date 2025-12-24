@@ -235,3 +235,71 @@ BEGIN
 END;
 $function$;
 
+-- ============================================================================
+-- COMMUNITY MARKETPLACE
+-- ============================================================================
+
+-- Community Workflow Table
+-- Stores AI workflows shared to the community marketplace
+-- Users can share their workflows and others can clone them to their chats
+CREATE TABLE IF NOT EXISTS public.community_workflow (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "originalWorkflowId" text REFERENCES public.ai_workflow(id) ON DELETE SET NULL,
+  "creatorUserId" text NOT NULL REFERENCES public.user(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text,
+  "triggerType" text NOT NULL CHECK ("triggerType" = ANY (ARRAY['message_pattern'::text, 'scheduled'::text, 'ai_mention'::text, 'keyword'::text, 'time_based'::text])),
+  "triggerConfig" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "actionType" text NOT NULL CHECK ("actionType" = ANY (ARRAY['create_event'::text, 'create_poll'::text, 'send_message'::text, 'ai_response'::text, 'summarize'::text, 'remind'::text])),
+  "actionConfig" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  category text CHECK (category = ANY (ARRAY['productivity'::text, 'entertainment'::text, 'creative'::text, 'utility'::text, 'other'::text])) DEFAULT 'other'::text,
+  tags text[] DEFAULT '{}'::text[],
+  "cloneCount" integer DEFAULT 0,
+  "isPublic" boolean DEFAULT true,
+  "isFeatured" boolean DEFAULT false,
+  "createdAt" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for community_workflow
+CREATE INDEX IF NOT EXISTS community_workflow_category_idx ON public.community_workflow(category);
+CREATE INDEX IF NOT EXISTS community_workflow_clone_count_idx ON public.community_workflow("cloneCount" DESC);
+CREATE INDEX IF NOT EXISTS community_workflow_created_at_idx ON public.community_workflow("createdAt" DESC);
+CREATE INDEX IF NOT EXISTS community_workflow_is_public_idx ON public.community_workflow("isPublic") WHERE "isPublic" = true;
+CREATE INDEX IF NOT EXISTS community_workflow_is_featured_idx ON public.community_workflow("isFeatured") WHERE "isFeatured" = true;
+CREATE INDEX IF NOT EXISTS community_workflow_creator_idx ON public.community_workflow("creatorUserId");
+CREATE INDEX IF NOT EXISTS community_workflow_tags_idx ON public.community_workflow USING gin(tags);
+
+-- Enable RLS for community_workflow
+ALTER TABLE public.community_workflow ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for community_workflow
+-- Allow public read access to public workflows
+CREATE POLICY "Public workflows are viewable by everyone" ON public.community_workflow
+  FOR SELECT USING ("isPublic" = true);
+
+-- Allow authenticated users to insert their own workflows
+CREATE POLICY "Users can share their own workflows" ON public.community_workflow
+  FOR INSERT WITH CHECK (auth.uid()::text = "creatorUserId");
+
+-- Allow users to update their own workflows
+CREATE POLICY "Users can update their own workflows" ON public.community_workflow
+  FOR UPDATE USING (auth.uid()::text = "creatorUserId");
+
+-- Allow users to delete their own workflows
+CREATE POLICY "Users can delete their own workflows" ON public.community_workflow
+  FOR DELETE USING (auth.uid()::text = "creatorUserId");
+
+-- Update community_clone table to support workflows
+-- Extend itemType check constraint to include 'workflow'
+ALTER TABLE public.community_clone DROP CONSTRAINT IF EXISTS community_clone_itemType_check;
+ALTER TABLE public.community_clone ADD CONSTRAINT community_clone_itemType_check 
+  CHECK ("itemType" = ANY (ARRAY['ai_friend'::text, 'command'::text, 'workflow'::text]));
+
+-- Add optional category and tags to ai_workflow table
+ALTER TABLE public.ai_workflow ADD COLUMN IF NOT EXISTS category text;
+ALTER TABLE public.ai_workflow ADD COLUMN IF NOT EXISTS tags text[];
+ALTER TABLE public.ai_workflow DROP CONSTRAINT IF EXISTS ai_workflow_category_check;
+ALTER TABLE public.ai_workflow ADD CONSTRAINT ai_workflow_category_check 
+  CHECK (category IS NULL OR category = ANY (ARRAY['productivity'::text, 'entertainment'::text, 'creative'::text, 'utility'::text, 'other'::text]));
+
