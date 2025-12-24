@@ -105,8 +105,8 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
         
         const { data: matches, error: matchError } = await db.rpc("match_messages", {
           query_embedding: queryEmbedding,
-          match_threshold: 0.3, // Balanced threshold - not too low (noise) not too high (misses)
-          match_count: limit * 2,
+          match_threshold: 0.25, // Lower threshold for better recall - text search handles precision
+          match_count: limit * 3, // Fetch more to find best matches
           filter_user_id: null,
           filter_chat_ids: filterChatIds,
           filter_message_types: null,
@@ -151,12 +151,8 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
       }
     }
 
-    // Combine results with balanced hybrid scoring
+    // Combine results with mode-aware scoring
     const combinedResults = new Map<string, { id: string; score: number; createdAt: string; textRank?: number; semanticScore?: number }>();
-    
-    // Weights for hybrid scoring
-    const TEXT_WEIGHT = 0.6;      // 60% weight for exact text matches
-    const SEMANTIC_WEIGHT = 0.4;  // 40% weight for semantic similarity
 
     // Process all unique message IDs
     const allMessageIds = new Set([...textResults.keys(), ...semanticResults.keys()]);
@@ -165,23 +161,36 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
       const textMatch = textResults.get(messageId);
       const semanticMatch = semanticResults.get(messageId);
       
-      // Normalize scores to 0-1 range (text rank already 0-1, semantic similarity is 0-1)
       const textRank = textMatch?.rank || 0;
       const semanticScore = semanticMatch?.similarity || 0;
       
-      // Calculate weighted hybrid score
-      let hybridScore = (textRank * TEXT_WEIGHT) + (semanticScore * SEMANTIC_WEIGHT);
+      let finalScore: number;
       
-      // Boost for perfect matches (high in both text and semantic)
-      if (textRank > 0.8 && semanticScore > 0.7) {
-        hybridScore *= 1.5; // 50% boost for messages that match both ways
-        console.log(`🎯 Perfect match bonus for message ${messageId.substring(0, 8)}`);
+      if (mode === "text") {
+        // Text-only mode: use text rank directly, scaled up for visibility
+        finalScore = textRank * 10;
+      } else if (mode === "semantic") {
+        // Semantic-only mode: use semantic similarity directly
+        finalScore = semanticScore;
+      } else {
+        // Hybrid mode: weighted combination
+        // If both exist, boost the score significantly (found by both = highly relevant)
+        if (textRank > 0 && semanticScore > 0) {
+          // Hybrid match bonus: text rank (60%) + semantic (40%) + 30% hybrid boost
+          finalScore = ((textRank * 0.6) + (semanticScore * 0.4)) * 1.3;
+        } else if (textRank > 0) {
+          // Text-only match
+          finalScore = textRank * 0.6;
+        } else {
+          // Semantic-only match
+          finalScore = semanticScore * 0.4;
+        }
       }
       
-      // Apply recency decay
+      // Apply recency decay (reduces score of old messages)
       const createdAt = textMatch?.createdAt || semanticMatch?.createdAt || new Date().toISOString();
       const recencyMultiplier = calculateRecencyMultiplier(createdAt);
-      const finalScore = hybridScore * recencyMultiplier;
+      finalScore = finalScore * recencyMultiplier;
       
       combinedResults.set(messageId, {
         id: messageId,
@@ -192,7 +201,7 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
       });
     }
     
-    console.log(`📊 Combined: ${combinedResults.size} unique messages`);
+    console.log(`📊 Combined: ${combinedResults.size} unique messages (mode: ${mode})`);
 
     // Sort and paginate results
     // Sort by final score only (recency already baked into score)

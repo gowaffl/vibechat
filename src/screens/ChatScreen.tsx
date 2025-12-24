@@ -2207,7 +2207,8 @@ const ChatScreen = () => {
 
   // In-Chat Search Query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { data: searchResults, isLoading: isSearchingBackend } = useQuery<GlobalSearchResponse>({
+  const isSearchDebouncing = searchQuery !== debouncedSearchQuery;
+  const { data: searchResults, isLoading: isSearchingBackend, isFetching: isSearchFetchingBackend } = useQuery<GlobalSearchResponse>({
     queryKey: ["chat-search", chatId, debouncedSearchQuery],
     queryFn: () => api.post("/api/search/global", {
       userId: user!.id,
@@ -7957,11 +7958,11 @@ const ChatScreen = () => {
       {/* Search Results Overlay */}
       {showSearchModal && (
         <View style={{ position: 'absolute', top: 70 + insets.top, left: 0, right: 0, bottom: 0, backgroundColor: colors.background, zIndex: 99 }}>
-            {isSearchingBackend ? (
+            {isSearchDebouncing || (isSearchFetchingBackend && !searchResults) ? (
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                     <LuxeLogoLoader size="large" />
                     <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 15, fontWeight: "500" }}>
-                        Searching messages...
+                        {isSearchDebouncing ? "Typing..." : "Searching messages..."}
                     </Text>
                 </View>
             ) : (!searchResults || searchResults.messages.length === 0) ? (
@@ -7971,22 +7972,33 @@ const ChatScreen = () => {
                     </Text>
                 </View>
             ) : (
-                <FlatList
-                    data={searchResults.messages}
-                    keyExtractor={(item) => item.message.id}
-                    renderItem={({ item }) => (
-                        <SearchResultItem
-                            item={item}
-                            onPress={handleSearchResultPress}
-                            searchQuery={debouncedSearchQuery}
-                            colors={colors}
-                            isDark={isDark}
-                        />
+                <View style={{ flex: 1 }}>
+                    {/* Subtle updating indicator when refreshing */}
+                    {isSearchFetchingBackend && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 }}>
+                            <LuxeLogoLoader size="small" />
+                            <Text style={{ marginLeft: 8, color: colors.textTertiary, fontSize: 12, fontWeight: "500" }}>
+                                Updating...
+                            </Text>
+                        </View>
                     )}
-                    contentContainerStyle={{ paddingVertical: 16 }}
-                    keyboardDismissMode="on-drag"
-                    keyboardShouldPersistTaps="handled"
-                />
+                    <FlatList
+                        data={searchResults.messages}
+                        keyExtractor={(item) => item.message.id}
+                        renderItem={({ item }) => (
+                            <SearchResultItem
+                                item={item}
+                                onPress={handleSearchResultPress}
+                                searchQuery={debouncedSearchQuery}
+                                colors={colors}
+                                isDark={isDark}
+                            />
+                        )}
+                        contentContainerStyle={{ paddingVertical: 16 }}
+                        keyboardDismissMode="on-drag"
+                        keyboardShouldPersistTaps="handled"
+                    />
+                </View>
             )}
         </View>
       )}

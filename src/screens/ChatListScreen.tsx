@@ -378,7 +378,8 @@ const ChatListScreen = () => {
   // Global Search Query
   const { 
     data: searchData, 
-    isLoading: isSearching, 
+    isLoading: isSearching,
+    isFetching: isSearchFetching, 
   } = useQuery<GlobalSearchResponse>({
     queryKey: ["global-search", debouncedSearchQuery, searchMode, filters],
     queryFn: () => api.post("/api/search/global", { 
@@ -876,11 +877,11 @@ const ChatListScreen = () => {
       >
       {isSearchActive ? (
         // Search Mode
-        (isSearching && !searchData) || isDebouncing ? (
+        isDebouncing || (isSearchFetching && !searchData) ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <LuxeLogoLoader size="large" />
             <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 15, fontWeight: "500" }}>
-              {isDebouncing ? "Typing..." : "Searching messages..."}
+              {isDebouncing ? "Typing..." : searchMode === "semantic" ? "AI searching..." : "Searching messages..."}
             </Text>
           </View>
         ) : (searchResults.chats.length === 0 && searchResults.users.length === 0 && searchResults.messages.length === 0) ? (
@@ -905,6 +906,15 @@ const ChatListScreen = () => {
           >
             <View style={{ marginBottom: 12 }}>
               <SearchFilters />
+              {/* Subtle updating indicator when refreshing results */}
+              {isSearchFetching && searchData && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 }}>
+                  <LuxeLogoLoader size="small" />
+                  <Text style={{ marginLeft: 8, color: colors.textTertiary, fontSize: 12, fontWeight: "500" }}>
+                    Updating results...
+                  </Text>
+                </View>
+              )}
               <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16, marginTop: 8 }} />
             </View>
 
