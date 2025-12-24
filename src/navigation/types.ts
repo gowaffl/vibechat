@@ -24,6 +24,8 @@ export type RootStackParamList = {
   GroupSettingsWorkflows: { chatId: string };
   GroupSettingsCommands: { chatId: string };
   GroupSettingsMembers: { chatId: string };
+  GroupSettingsMedia: { chatId: string };
+  GroupSettingsLinks: { chatId: string };
   InviteMembers: { chatId: string; chatName: string };
   Invite: { token: string };
   JoinChat: undefined;

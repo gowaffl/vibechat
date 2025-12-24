@@ -399,9 +399,7 @@ const GroupSettingsScreen = () => {
                 title="Media"
                 subtitle={`${mediaMessages.length} items`}
                 onPress={() => {
-                    // Navigate to Media Gallery or show modal
-                    // For now, let's keep it simple or expand logic later
-                    // We can reuse the gallery viewer if we want
+                  navigation.navigate("GroupSettingsMedia", { chatId });
                 }}
             >
                 {mediaMessages.length > 0 && (
@@ -425,7 +423,7 @@ const GroupSettingsScreen = () => {
                 title="Links"
                 subtitle={`${linkMessages.length} shared`}
                 onPress={() => {
-                   // Navigate or show modal
+                  navigation.navigate("GroupSettingsLinks", { chatId });
                 }}
             />
         </View>

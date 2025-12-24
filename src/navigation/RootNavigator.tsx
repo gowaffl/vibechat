@@ -18,6 +18,8 @@ import GroupSettingsAiFriendsScreen from "@/screens/GroupSettingsAiFriendsScreen
 import GroupSettingsWorkflowsScreen from "@/screens/GroupSettingsWorkflowsScreen";
 import GroupSettingsCommandsScreen from "@/screens/GroupSettingsCommandsScreen";
 import GroupSettingsMembersScreen from "@/screens/GroupSettingsMembersScreen";
+import GroupSettingsMediaScreen from "@/screens/GroupSettingsMediaScreen";
+import GroupSettingsLinksScreen from "@/screens/GroupSettingsLinksScreen";
 import OnboardingNameScreen from "@/screens/OnboardingNameScreen";
 import OnboardingPhotoScreen from "@/screens/OnboardingPhotoScreen";
 import PhoneAuthScreen from "@/screens/PhoneAuthScreen";
@@ -260,6 +262,42 @@ const RootNavigator = () => {
         options={{
           headerShown: true,
           headerTitle: "Members",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
+        }}
+      />
+      <RootStack.Screen
+        name="GroupSettingsMedia"
+        component={GroupSettingsMediaScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "Media",
+          headerTransparent: true,
+          headerBackground: () => (
+            <LinearGradient
+              colors={["rgba(0, 0, 0, 0.95)", "rgba(0, 0, 0, 0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          ),
+          headerTintColor: "#FFFFFF",
+        }}
+      />
+      <RootStack.Screen
+        name="GroupSettingsLinks"
+        component={GroupSettingsLinksScreen}
+        options={{
+          headerShown: true,
+          headerTitle: "Links",
           headerTransparent: true,
           headerBackground: () => (
             <LinearGradient

@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { globalSearchRequestSchema, globalSearchResponseSchema } from "../../../shared/contracts";
 import { db } from "../db";
 import type { AppType } from "../index";
+import { decryptMessages } from "../services/message-encryption";
 
 const search = new Hono<AppType>();
 
@@ -94,9 +95,12 @@ search.post("/global", zValidator("json", globalSearchRequestSchema), async (c) 
         `)
         .in("id", messageIds);
 
+      // CRITICAL: Decrypt messages before returning them
+      const decryptedMessages = await decryptMessages(fullMessages || []);
+
       // Sort back by rank/relevance from the RPC result
-      if (fullMessages) {
-        const messageMap = new Map(fullMessages.map(m => [m.id, m]));
+      if (decryptedMessages && decryptedMessages.length > 0) {
+        const messageMap = new Map(decryptedMessages.map(m => [m.id, m]));
         enrichedMessages = messagesData
           .map((m: any) => {
             const fullMsg = messageMap.get(m.id);

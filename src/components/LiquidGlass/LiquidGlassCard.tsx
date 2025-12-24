@@ -36,9 +36,28 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
   
   const finalIntensity = intensity ?? (isDark ? 70 : 60);
 
-  const cardContent = (
-    <>
-      <BlurView intensity={finalIntensity} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill}>
+  // The inner content with clipping for the glass effect
+  const InnerCard = (
+    <View
+      style={{
+        borderRadius: 16,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: currentVariant.borderColor,
+        // Ensure the inner view fills the width but sizes height to content
+        width: "100%",
+        backgroundColor: "transparent",
+      }}
+    >
+      <BlurView 
+        intensity={finalIntensity} 
+        tint={isDark ? "dark" : "light"} 
+        style={[
+          StyleSheet.absoluteFill, 
+          // Explicitly adding borderRadius here can sometimes help with clipping issues on certain RN versions
+          { borderRadius: 16 } 
+        ]}
+      >
         <LinearGradient
           colors={currentVariant.gradientColors}
           start={{ x: 0, y: 0 }}
@@ -86,7 +105,7 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
         {/* Content */}
         {children}
       </View>
-    </>
+    </View>
   );
 
   if (onPress) {
@@ -98,10 +117,9 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
         }}
         style={({ pressed }) => [
           {
-            borderRadius: 20,
-            overflow: "hidden",
-            borderWidth: 1,
-            borderColor: currentVariant.borderColor,
+            // Shadow container (Outer)
+            borderRadius: 16,
+            backgroundColor: "transparent", // Essential for iOS shadow visibility with no background
             shadowColor: currentVariant.shadowColor,
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: pressed ? 0.4 : 0.3,
@@ -112,7 +130,7 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
           style,
         ]}
       >
-        {cardContent}
+        {InnerCard}
       </Pressable>
     );
   }
@@ -121,10 +139,9 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
     <View
       style={[
         {
-          borderRadius: 20,
-          overflow: "hidden",
-          borderWidth: 1,
-          borderColor: currentVariant.borderColor,
+          // Shadow container (Outer)
+          borderRadius: 16,
+          backgroundColor: "transparent",
           shadowColor: currentVariant.shadowColor,
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.3,
@@ -134,7 +151,7 @@ const LiquidGlassCard: React.FC<LiquidGlassCardProps> = ({
         style,
       ]}
     >
-      {cardContent}
+      {InnerCard}
     </View>
   );
 };

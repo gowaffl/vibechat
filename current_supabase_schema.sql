@@ -128,6 +128,8 @@ END;
 $$;
 
 -- New RPC for High-Performance Text Search
+-- CRITICAL: Uses search_vector (plaintext) column, NOT encrypted content
+-- Returns empty content string - backend must decrypt using decryptMessages()
 CREATE OR REPLACE FUNCTION search_messages_text (
   search_query text,
   match_count int,
@@ -145,20 +147,46 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  formatted_query text;
+  prefix_query tsquery;
+  web_query tsquery;
 BEGIN
+  IF trim(search_query) = '' THEN
+    RETURN;
+  END IF;
+
+  -- 1. Standard Web Search Query (handles quotes, etc.)
+  web_query := websearch_to_tsquery('english', search_query);
+
+  -- 2. Prefix Query (for type-ahead feel)
+  SELECT string_agg(trim(token) || ':*', ' & ') INTO formatted_query
+  FROM regexp_split_to_table(trim(search_query), '\s+') AS token
+  WHERE trim(token) != '';
+
+  BEGIN
+    prefix_query := to_tsquery('english', formatted_query);
+  EXCEPTION WHEN OTHERS THEN
+    prefix_query := web_query; -- Fallback
+  END;
+
   RETURN QUERY
   SELECT
     message.id,
-    message.content,
-    ts_rank_cd(to_tsvector('english', coalesce(message.content, '')), websearch_to_tsquery('english', search_query)) as rank,
+    -- CRITICAL: Return empty string - content will be decrypted in backend
+    ''::text as content,
+    -- Rank using search_vector (plaintext), NOT encrypted content
+    (
+      COALESCE(ts_rank_cd(message.search_vector, web_query), 0) * 1.5 + 
+      COALESCE(ts_rank_cd(message.search_vector, prefix_query), 0)
+    ) as rank,
     message."createdAt"
   FROM message
   WHERE (
-    -- Full Text Match
-    to_tsvector('english', coalesce(message.content, '')) @@ websearch_to_tsquery('english', search_query)
+    -- Use search_vector (plaintext) instead of content (encrypted)
+    message.search_vector @@ web_query
     OR
-    -- Fallback to simple ILIKE for partial words (prefix search) using Trigram index
-    message.content ILIKE '%' || search_query || '%'
+    message.search_vector @@ prefix_query
   )
   AND (filter_user_id IS NULL OR message."userId" = filter_user_id)
   AND (filter_chat_ids IS NULL OR message."chatId" = ANY(filter_chat_ids))
@@ -166,7 +194,7 @@ BEGIN
   AND (filter_date_from IS NULL OR message."createdAt" >= filter_date_from)
   AND (filter_date_to IS NULL OR message."createdAt" <= filter_date_to)
   ORDER BY 
-    message."createdAt" DESC -- User requested strictest recency sorting
+    message."createdAt" DESC
   LIMIT match_count;
 END;
 $$;
