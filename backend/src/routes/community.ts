@@ -807,16 +807,19 @@ app.post("/clone", zValidator("json", cloneItemSchema), async (c) => {
         ? "community_command"
         : "community_workflow";
       
-      await db.rpc("increment", { 
-        row_id: data.communityItemId,
-        table_name: table,
-        column_name: "cloneCount"
-      }).catch(() => {
-        // Fallback: manual increment
-        db.from(table)
-          .update({ cloneCount: db.raw("\"cloneCount\" + 1") })
+      // Get current clone count and increment
+      const { data: currentItem } = await db
+        .from(table)
+        .select("cloneCount")
+        .eq("id", data.communityItemId)
+        .single();
+      
+      if (currentItem) {
+        await db
+          .from(table)
+          .update({ cloneCount: (currentItem.cloneCount || 0) + clonedItems.length })
           .eq("id", data.communityItemId);
-      });
+      }
     }
 
     return c.json({
@@ -825,8 +828,12 @@ app.post("/clone", zValidator("json", cloneItemSchema), async (c) => {
       message: `Cloned to ${clonedItems.length} chat(s)`,
     });
   } catch (error) {
-    console.error("[Community] Error:", error);
-    return c.json({ error: "Internal server error" }, 500);
+    console.error("[Community] Error cloning item:", error);
+    console.error("[Community] Error details:", JSON.stringify(error, null, 2));
+    return c.json({ 
+      error: "Internal server error",
+      details: error instanceof Error ? error.message : String(error)
+    }, 500);
   }
 });
 
