@@ -24,7 +24,14 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4ZWtmdnhkeml4ZXNqcmJ4b2p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NTg0MDAsImV4cCI6MjA3OTUzNDQwMH0.XRDV0omjpEd0e6zwYZ05w4B8hK5gJ_pbOchk8e8OFoQ"
       }
     },
-    "production": {}
+    "production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://vibechat-zdok.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xxekfvxdzixesjrbxoju.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4ZWtmdnhkeml4ZXNqcmJ4b2p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NTg0MDAsImV4cCI6MjA3OTUzNDQwMH0.XRDV0omjpEd0e6zwYZ05w4B8hK5gJ_pbOchk8e8OFoQ"
+      }
+    }
   },
   "submit": {
     "production": {}

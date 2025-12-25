@@ -1938,10 +1938,53 @@ const ChatScreen = () => {
     
     // Set lock and loading states
     translationInProgressRef.current = true;
-    setIsBatchTranslating(true);
     
-    // Mark all messages as translating
-    const messageIds = textMessages.map((m) => m.id);
+    // Use ref to get the current value (avoids stale closure)
+    const currentLanguage = translationLanguageRef.current;
+    
+    // Detect languages for all messages and filter out those already in target language
+    console.log("[Translation] Detecting languages for", textMessages.length, "messages");
+    const messagesToActuallyTranslate: Message[] = [];
+    const languageDetectionPromises = textMessages.map(async (message) => {
+      try {
+        const detectionResponse = await api.post<{ languageCode: string; languageName: string }>(
+          "/api/ai-native/detect-language",
+          { text: message.content }
+        );
+        
+        const detectedLang = detectionResponse.languageCode || 'unknown';
+        console.log(`[Translation] Message ${message.id.slice(0, 8)} detected as: ${detectedLang}, target: ${currentLanguage}`);
+        
+        // Only translate if detected language doesn't match target language
+        if (detectedLang !== currentLanguage) {
+          messagesToActuallyTranslate.push(message);
+        } else {
+          console.log(`[Translation] Skipping message ${message.id.slice(0, 8)} - already in target language`);
+          // Store the original content as "translation" since it's already in the target language
+          setTranslatedMessages(prev => ({
+            ...prev,
+            [message.id]: message.content
+          }));
+        }
+      } catch (error) {
+        console.error(`[Translation] Failed to detect language for message ${message.id}:`, error);
+        // If detection fails, include the message for translation as fallback
+        messagesToActuallyTranslate.push(message);
+      }
+    });
+    
+    await Promise.all(languageDetectionPromises);
+    
+    console.log(`[Translation] After language detection: ${messagesToActuallyTranslate.length} of ${textMessages.length} messages need translation`);
+    
+    if (messagesToActuallyTranslate.length === 0) {
+      console.log("[Translation] All messages are already in target language, no translation needed");
+      translationInProgressRef.current = false;
+      return;
+    }
+    
+    // Mark messages that need translation as translating
+    const messageIds = messagesToActuallyTranslate.map((m) => m.id);
     setTranslatingMessages(prev => {
       const newSet = new Set(prev);
       messageIds.forEach(id => newSet.add(id));
@@ -1949,9 +1992,7 @@ const ChatScreen = () => {
     });
     
     try {
-      // Use ref to get the current value (avoids stale closure)
-      const currentLanguage = translationLanguageRef.current;
-      console.log("[Translation] Calling batch translate API for", textMessages.length, "messages to language:", currentLanguage, "(state:", translationLanguage, ")");
+      console.log("[Translation] Calling batch translate API for", messagesToActuallyTranslate.length, "messages to language:", currentLanguage);
        // Call batch translation endpoint
        const response = await api.post<{ translations: Record<string, string> }>(
          "/api/ai-native/translate-batch",
@@ -2000,12 +2041,11 @@ const ChatScreen = () => {
     } finally {
       // Release lock and clear loading states
       translationInProgressRef.current = false;
-      setIsBatchTranslating(false);
       
       // Remove translated messages from translating set
       setTranslatingMessages(prev => {
         const newSet = new Set(prev);
-        textMessages.forEach(m => newSet.delete(m.id));
+        messagesToActuallyTranslate.forEach(m => newSet.delete(m.id));
         return newSet;
       });
     }
@@ -2017,11 +2057,38 @@ const ChatScreen = () => {
       return;
     }
     
+    const currentLanguage = translationLanguageRef.current;
+    
+    // Detect the language of the message first
+    try {
+      const detectionResponse = await api.post<{ languageCode: string; languageName: string }>(
+        "/api/ai-native/detect-language",
+        { text: messageToTranslate.content }
+      );
+      
+      const detectedLang = detectionResponse.languageCode || 'unknown';
+      console.log(`[Translation] Single message ${messageToTranslate.id.slice(0, 8)} detected as: ${detectedLang}, target: ${currentLanguage}`);
+      
+      // Skip translation if message is already in target language
+      if (detectedLang === currentLanguage) {
+        console.log(`[Translation] Skipping translation - message already in target language`);
+        // Store original content as "translation" since it's already in the target language
+        setTranslatedMessages(prev => ({
+          ...prev,
+          [messageToTranslate.id]: messageToTranslate.content
+        }));
+        setTranslationVersion(v => v + 1);
+        return;
+      }
+    } catch (detectionError) {
+      console.error("[Translation] Failed to detect language, proceeding with translation:", detectionError);
+      // Continue with translation if detection fails
+    }
+    
     // Mark message as translating
     setTranslatingMessages(prev => new Set(prev).add(messageToTranslate.id));
     
     try {
-      const currentLanguage = translationLanguageRef.current;
       console.log("[Translation] Translating single message:", messageToTranslate.id, "to language:", currentLanguage);
        const response = await api.post<{ translatedText: string }>(
          "/api/ai-native/translate",
@@ -2181,7 +2248,6 @@ const ChatScreen = () => {
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [translationVersion, setTranslationVersion] = useState(0); // Version counter for forcing re-renders
   const [translatingMessages, setTranslatingMessages] = useState<Set<string>>(new Set()); // Messages currently being translated
-  const [isBatchTranslating, setIsBatchTranslating] = useState(false); // Batch translation in progress
   const translationLanguageRef = useRef(translationLanguage); // Ref to always get current value
   const translationInProgressRef = useRef(false); // Lock to prevent concurrent translations
   const translationTimeoutRef = useRef<NodeJS.Timeout | null>(null); // For debouncing
@@ -2770,44 +2836,102 @@ const ChatScreen = () => {
               // Translate new message in real-time if translation is enabled AND a language is selected
               const currentLanguage = translationLanguageRef.current;
               if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "") {
-                // Mark message as translating
-                setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
-                
                 try {
-                  console.log('[Translation] Translating new real-time message:', newMessage.id, 'to language:', currentLanguage);
-                  const translateResponse = await api.post<{ translatedText: string }>(
-                    "/api/ai-native/translate",
-                    {
-                      userId: user?.id,
-                      messageId: newMessage.id,
-                      targetLanguage: currentLanguage,
-                    }
+                  // First, detect the language of the new message
+                  const detectionResponse = await api.post<{ languageCode: string; languageName: string }>(
+                    "/api/ai-native/detect-language",
+                    { text: newMessage.content }
                   );
-                   
-                  // Safely check for translatedText directly or in data wrapper (same as translateSingleMessage)
-                  const responseData = (translateResponse as any).data;
-                  const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
                   
-                  console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty');
-                   
-                  if (translatedText) {
+                  const detectedLang = detectionResponse.languageCode || 'unknown';
+                  console.log(`[Translation] Real-time message ${newMessage.id.slice(0, 8)} detected as: ${detectedLang}, target: ${currentLanguage}`);
+                  
+                  // Skip translation if message is already in target language
+                  if (detectedLang === currentLanguage) {
+                    console.log('[Translation] Skipping real-time translation - message already in target language');
+                    // Store original content as "translation" since it's already in the target language
                     setTranslatedMessages(prev => ({
                       ...prev,
-                      [newMessage.id]: translatedText
+                      [newMessage.id]: newMessage.content
                     }));
-                    setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
-                    console.log('[Translation] Updated real-time message translation');
+                    setTranslationVersion(v => v + 1);
+                  } else {
+                    // Language differs, proceed with translation
+                    // Mark message as translating
+                    setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
+                    
+                    try {
+                      console.log('[Translation] Translating new real-time message:', newMessage.id, 'to language:', currentLanguage);
+                      const translateResponse = await api.post<{ translatedText: string }>(
+                        "/api/ai-native/translate",
+                        {
+                          userId: user?.id,
+                          messageId: newMessage.id,
+                          targetLanguage: currentLanguage,
+                        }
+                      );
+                       
+                      // Safely check for translatedText directly or in data wrapper (same as translateSingleMessage)
+                      const responseData = (translateResponse as any).data;
+                      const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
+                      
+                      console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty');
+                       
+                      if (translatedText) {
+                        setTranslatedMessages(prev => ({
+                          ...prev,
+                          [newMessage.id]: translatedText
+                        }));
+                        setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
+                        console.log('[Translation] Updated real-time message translation');
+                      }
+                    } catch (translateError) {
+                      console.error('[Translation] Failed to translate new message:', translateError);
+                    } finally {
+                      // Remove message from translating set
+                      setTranslatingMessages(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(newMessage.id);
+                        return newSet;
+                      });
+                    }
                   }
-                 } catch (translateError) {
-                   console.error('[Translation] Failed to translate new message:', translateError);
-                 } finally {
-                   // Remove message from translating set
-                   setTranslatingMessages(prev => {
-                     const newSet = new Set(prev);
-                     newSet.delete(newMessage.id);
-                     return newSet;
-                   });
-                 }
+                } catch (detectionError) {
+                  console.error('[Translation] Failed to detect language for real-time message:', detectionError);
+                  // If detection fails, proceed with translation as fallback
+                  setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
+                  
+                  try {
+                    console.log('[Translation] Translating new real-time message (detection failed):', newMessage.id, 'to language:', currentLanguage);
+                    const translateResponse = await api.post<{ translatedText: string }>(
+                      "/api/ai-native/translate",
+                      {
+                        userId: user?.id,
+                        messageId: newMessage.id,
+                        targetLanguage: currentLanguage,
+                      }
+                    );
+                     
+                    const responseData = (translateResponse as any).data;
+                    const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
+                    
+                    if (translatedText) {
+                      setTranslatedMessages(prev => ({
+                        ...prev,
+                        [newMessage.id]: translatedText
+                      }));
+                      setTranslationVersion(v => v + 1);
+                    }
+                  } catch (translateError) {
+                    console.error('[Translation] Failed to translate new message:', translateError);
+                  } finally {
+                    setTranslatingMessages(prev => {
+                      const newSet = new Set(prev);
+                      newSet.delete(newMessage.id);
+                      return newSet;
+                    });
+                  }
+                }
                }
                
                setAllMessages(prev => {
@@ -8148,37 +8272,6 @@ const ChatScreen = () => {
           onJoinVoiceRoom={handleJoinRoom}
           onTranslatePress={() => setShowTranslationModal(true)}
         />
-      )}
-
-      {/* Batch Translation Banner */}
-      {isBatchTranslating && (
-        <Reanimated.View
-          entering={FadeInUp}
-          exiting={FadeOut}
-          style={{
-            position: "absolute",
-            top: insets.top + 70,
-            left: 0,
-            right: 0,
-            zIndex: 98,
-            backgroundColor: isDark ? "rgba(79, 195, 247, 0.15)" : "rgba(0, 122, 255, 0.1)",
-            borderBottomWidth: 1,
-            borderBottomColor: isDark ? "rgba(79, 195, 247, 0.3)" : "rgba(0, 122, 255, 0.2)",
-            paddingVertical: 12,
-            paddingHorizontal: 16,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-          }}
-        >
-          <ActivityIndicator size="small" color={colors.primary} />
-          <ShimmeringText 
-            text="Translating messages..." 
-            style={{ fontSize: 14, color: colors.primary, fontWeight: "600" }}
-            shimmerColor={isDark ? "rgba(79, 195, 247, 0.8)" : "rgba(0, 122, 255, 0.8)"}
-          />
-        </Reanimated.View>
       )}
 
       {/* Search Results Overlay */}

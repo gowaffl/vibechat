@@ -3,7 +3,7 @@
     "name": "VibeChat",
     "slug": "vibechat",
     "scheme": "vibechat",
-    "version": "1.0.0",
+    "version": "0.5.0",
     "description": "Making group chats great again. Your friend group chats with custom ChatGPT in them.",
     "orientation": "portrait",
     "icon": "./assets/vibechat icon main.png",

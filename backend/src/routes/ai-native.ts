@@ -131,6 +131,38 @@ app.post("/translate", zValidator("json", translateMessageSchema), async (c) => 
       });
     }
 
+    // Detect source language to avoid unnecessary translation
+    const detectionResponse = await executeGPT51Response({
+      systemPrompt: `Detect the language of the given text. 
+Output only the ISO 639-1 language code (e.g., 'en', 'es', 'fr', 'ja').
+If unsure, output 'en'.`,
+      userPrompt: sourceText.slice(0, 500), // Limit text for detection
+      reasoningEffort: "low",
+      maxTokens: 10,
+    });
+
+    const detectedLanguage = detectionResponse.content?.trim().toLowerCase() || "en";
+    console.log(`[AI-Native] Detected language: ${detectedLanguage}, target: ${data.targetLanguage}`);
+
+    // If already in target language, return original text without translation
+    if (detectedLanguage === data.targetLanguage) {
+      console.log(`[AI-Native] Message already in target language, skipping translation`);
+      
+      // Cache the "translation" (which is just the original text)
+      await db.from("message_translation").insert({
+        messageId: data.messageId,
+        targetLanguage: data.targetLanguage,
+        translatedContent: sourceText,
+      });
+
+      return c.json({
+        translatedText: sourceText,
+        targetLanguage: data.targetLanguage,
+        cached: false,
+        skipped: true, // Indicate no translation was needed
+      });
+    }
+
     const targetLanguageName = LANGUAGE_NAMES[data.targetLanguage] || data.targetLanguage;
 
     // Generate translation using GPT
@@ -209,14 +241,36 @@ app.post("/translate-batch", async (c) => {
       // Translate each message (could be optimized with batch API calls)
       for (const message of decryptedMessages) {
         try {
-          const response = await executeGPT51Response({
-            systemPrompt: `Translate to ${targetLanguageName}. Only output translated text.`,
-            userPrompt: message.content,
+          // Detect source language first
+          const detectionResponse = await executeGPT51Response({
+            systemPrompt: `Detect the language of the given text. 
+Output only the ISO 639-1 language code (e.g., 'en', 'es', 'fr', 'ja').
+If unsure, output 'en'.`,
+            userPrompt: message.content.slice(0, 500), // Limit text for detection
             reasoningEffort: "low",
-            maxTokens: 500,
+            maxTokens: 10,
           });
 
-          const translatedText = response.content?.trim() || message.content;
+          const detectedLanguage = detectionResponse.content?.trim().toLowerCase() || "en";
+          console.log(`[AI-Native Batch] Message ${message.id.slice(0, 8)} detected as: ${detectedLanguage}, target: ${targetLanguage}`);
+
+          let translatedText: string;
+          
+          // If already in target language, skip translation
+          if (detectedLanguage === targetLanguage) {
+            console.log(`[AI-Native Batch] Message ${message.id.slice(0, 8)} already in target language, skipping translation`);
+            translatedText = message.content;
+          } else {
+            // Perform translation
+            const response = await executeGPT51Response({
+              systemPrompt: `Translate to ${targetLanguageName}. Only output translated text.`,
+              userPrompt: message.content,
+              reasoningEffort: "low",
+              maxTokens: 500,
+            });
+            translatedText = response.content?.trim() || message.content;
+          }
+
           translations[message.id] = translatedText;
 
           // Cache it
@@ -226,6 +280,7 @@ app.post("/translate-batch", async (c) => {
             translatedContent: translatedText,
           }, { onConflict: "messageId,targetLanguage" });
         } catch (err) {
+          console.error(`[AI-Native Batch] Error processing message ${message.id}:`, err);
           translations[message.id] = message.content; // Fallback to original
         }
       }
