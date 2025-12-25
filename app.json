@@ -23,7 +23,8 @@
         "NSPhotoLibraryAddUsageDescription": "VibeChat needs permission to save images to your gallery.",
         "NSCameraUsageDescription": "VibeChat needs access to your camera to let you take photos and videos to share in chats.",
         "NSMicrophoneUsageDescription": "VibeChat needs access to your microphone to record audio for videos and voice messages.",
-        "NSContactsUsageDescription": "VibeChat needs access to your contacts to help you find and invite friends."
+        "NSContactsUsageDescription": "VibeChat needs access to your contacts to help you find and invite friends.",
+        "NSLocationWhenInUseUsageDescription": "VibeChat needs access to your location to attach location data to your photos and videos."
       },
       "entitlements": {
         "aps-environment": "development"
