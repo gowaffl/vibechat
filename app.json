@@ -14,6 +14,7 @@
       "bundleIdentifier": "com.vibecodeapp.vibechat",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["audio", "voip"],
         "NSCalendarsUsageDescription": "VibeChat needs access to your calendar to create and manage event reminders for your group chats.",
         "NSCalendarsWriteOnlyAccessUsageDescription": "VibeChat needs to add events to your calendar for group chat scheduling.",
         "NSCalendarsFullAccessUsageDescription": "VibeChat needs full calendar access to create and manage event reminders for your group chats.",
@@ -22,7 +23,7 @@
         "NSPhotoLibraryUsageDescription": "VibeChat needs access to your photos to let you save and share them.",
         "NSPhotoLibraryAddUsageDescription": "VibeChat needs permission to save images to your gallery.",
         "NSCameraUsageDescription": "VibeChat needs access to your camera to let you take photos and videos to share in chats.",
-        "NSMicrophoneUsageDescription": "VibeChat needs access to your microphone to record audio for videos and voice messages.",
+        "NSMicrophoneUsageDescription": "VibeChat needs access to your microphone for Vibe Calls and voice messages.",
         "NSContactsUsageDescription": "VibeChat needs access to your contacts to help you find and invite friends.",
         "NSLocationWhenInUseUsageDescription": "VibeChat needs access to your location to attach location data to your photos and videos."
       },
@@ -33,6 +34,12 @@
     "android": {
       "edgeToEdgeEnabled": true,
       "package": "com.vibecodeapp.vibechat",
+      "permissions": [
+        "RECORD_AUDIO",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "WAKE_LOCK"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/vibechat icon main.png",
         "backgroundColor": "#1a1a2e"

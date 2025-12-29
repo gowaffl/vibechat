@@ -24,7 +24,7 @@ import {
   useRoomContext,
 } from "@livekit/react-native";
 import { Track, ParticipantEvent } from "livekit-client";
-import { Mic, MicOff, PhoneOff, Volume2, Maximize2, Minimize2, X, ChevronDown } from "lucide-react-native";
+import { Mic, MicOff, PhoneOff, Volume2, VolumeX, Maximize2, Minimize2, X, ChevronDown, Phone } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -41,8 +41,10 @@ import { PanGestureHandler } from "react-native-gesture-handler";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Audio from "expo-audio";
 import { useUser } from "@/contexts/UserContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+import { useVoicePermissions } from "@/hooks/useVoicePermissions";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -76,12 +78,32 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [isDocked, setIsDocked] = useState(false);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
   const insets = useSafeAreaInsets();
+  const { requestWithSettingsFallback } = useVoicePermissions();
   
   // 0 = Expanded (Fullscreen), 1 = Docked (Bottom Pill)
   const dockProgress = useSharedValue(0);
   
   // Slide animation for initial mount/unmount
   const slideAnim = useSharedValue(SCREEN_HEIGHT);
+
+  // Configure audio session for background audio and proper routing
+  const configureAudioSession = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        allowsRecordingIOS: true,
+        // Allow both speaker and earpiece routing (iOS will handle proximity sensor)
+        interruptionModeIOS: 1, // MixWithOthers
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: 1, // DuckOthers
+        playThroughEarpieceAndroid: false, // Initially use speaker
+      });
+      console.log('[VoiceRoomModal] ✅ Audio session configured for background audio');
+    } catch (error) {
+      console.error('[VoiceRoomModal] ❌ Failed to configure audio session:', error);
+    }
+  };
 
   // Request audio permissions
   const requestAudioPermissions = async () => {
@@ -121,13 +143,16 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   useEffect(() => {
     console.log('[VoiceRoomModal] Visibility changed:', visible, 'Token:', !!token, 'ServerUrl:', !!serverUrl);
     if (visible) {
-      // Request permissions when opening
-      requestAudioPermissions().then(granted => {
+      // Configure audio session for background audio
+      configureAudioSession();
+      
+      // Request permissions with settings fallback
+      requestWithSettingsFallback().then(granted => {
         if (!granted) {
-          Alert.alert('Permission Required', 'Microphone permission is required for Vibe Calls');
           onLeave();
         }
       });
+      
       slideAnim.value = withSpring(0, SPRING_CONFIG);
       
       // Dismiss keyboard when modal opens in full mode (not docked)
@@ -360,6 +385,7 @@ const RoomContent = ({
   const remoteParticipants = useRemoteParticipants();
   const room = useRoomContext();
   const { user } = useUser();
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Default to speaker mode
   
   // Debug user image availability
   useEffect(() => {
@@ -389,6 +415,28 @@ const RoomContent = ({
       await localParticipant.setMicrophoneEnabled(false);
     } else {
       await localParticipant.setMicrophoneEnabled(true);
+    }
+  };
+
+  const toggleSpeaker = async () => {
+    try {
+      const newSpeakerState = !isSpeakerOn;
+      setIsSpeakerOn(newSpeakerState);
+      
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        allowsRecordingIOS: true,
+        interruptionModeIOS: 1,
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: 1,
+        playThroughEarpieceAndroid: !newSpeakerState, // Toggle Android earpiece
+        // Note: iOS handles speaker/earpiece via proximity sensor and AVAudioSession routing
+      });
+      
+      console.log('[VoiceRoom] Audio routing changed:', newSpeakerState ? 'Speaker' : 'Earpiece');
+    } catch (error) {
+      console.error('[VoiceRoom] Failed to toggle speaker:', error);
     }
   };
   
@@ -521,10 +569,23 @@ const RoomContent = ({
                          </TouchableOpacity>
                          
                          <TouchableOpacity 
-                            className="w-16 h-16 rounded-full items-center justify-center bg-white/10"
+                            onPress={toggleSpeaker}
+                            className={`w-16 h-16 rounded-full items-center justify-center shadow-lg ${
+                                isSpeakerOn ? "bg-white" : "bg-white/10"
+                            }`}
                          >
-                             <Volume2 size={28} color="white" />
+                             {isSpeakerOn ? (
+                                <Volume2 size={28} color="#000" />
+                             ) : (
+                                <Phone size={28} color="#FFF" />
+                             )}
                          </TouchableOpacity>
+                    </View>
+                    
+                    <View className="items-center mb-4">
+                        <Text className="text-white/60 text-xs font-medium">
+                            {isSpeakerOn ? "Speaker On" : "Earpiece Mode"}
+                        </Text>
                     </View>
                     
                     <TouchableOpacity
