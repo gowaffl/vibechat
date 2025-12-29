@@ -262,6 +262,8 @@ If unsure, output 'en'.`,
             translatedText = message.content;
           } else {
             // Perform translation
+            console.log(`[AI-Native Batch] Translating message ${message.id.slice(0, 8)} from ${detectedLanguage} to ${targetLanguage}`);
+            console.log(`[AI-Native Batch] Original text: "${message.content.slice(0, 100)}${message.content.length > 100 ? '...' : ''}"`);
             const response = await executeGPT51Response({
               systemPrompt: `Translate to ${targetLanguageName}. Only output translated text.`,
               userPrompt: message.content,
@@ -269,6 +271,7 @@ If unsure, output 'en'.`,
               maxTokens: 500,
             });
             translatedText = response.content?.trim() || message.content;
+            console.log(`[AI-Native Batch] Translated text: "${translatedText.slice(0, 100)}${translatedText.length > 100 ? '...' : ''}"`);
           }
 
           translations[message.id] = translatedText;
