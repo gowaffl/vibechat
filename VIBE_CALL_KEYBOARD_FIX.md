@@ -184,3 +184,4 @@ const handleDockToggle = useCallback((shouldDock: boolean) => {
 - No performance impact (native Keyboard API)
 
 
+

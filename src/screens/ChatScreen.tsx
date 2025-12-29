@@ -1942,43 +1942,14 @@ const ChatScreen = () => {
     // Use ref to get the current value (avoids stale closure)
     const currentLanguage = translationLanguageRef.current;
     
-    // Detect languages for all messages and filter out those already in target language
-    console.log("[Translation] Detecting languages for", textMessages.length, "messages");
-    const messagesToActuallyTranslate: Message[] = [];
-    const languageDetectionPromises = textMessages.map(async (message) => {
-      try {
-        const detectionResponse = await api.post<{ languageCode: string; languageName: string }>(
-          "/api/ai-native/detect-language",
-          { text: message.content }
-        );
-        
-        const detectedLang = detectionResponse.languageCode || 'unknown';
-        console.log(`[Translation] Message ${message.id.slice(0, 8)} detected as: ${detectedLang}, target: ${currentLanguage}`);
-        
-        // Only translate if detected language doesn't match target language
-        if (detectedLang !== currentLanguage) {
-          messagesToActuallyTranslate.push(message);
-        } else {
-          console.log(`[Translation] Skipping message ${message.id.slice(0, 8)} - already in target language`);
-          // Store the original content as "translation" since it's already in the target language
-          setTranslatedMessages(prev => ({
-            ...prev,
-            [message.id]: message.content
-          }));
-        }
-      } catch (error) {
-        console.error(`[Translation] Failed to detect language for message ${message.id}:`, error);
-        // If detection fails, include the message for translation as fallback
-        messagesToActuallyTranslate.push(message);
-      }
-    });
+    // Skip frontend language detection to avoid rate limiting
+    // The backend handles language detection and skipping if already in target language
+    const messagesToActuallyTranslate = textMessages;
     
-    await Promise.all(languageDetectionPromises);
-    
-    console.log(`[Translation] After language detection: ${messagesToActuallyTranslate.length} of ${textMessages.length} messages need translation`);
+    console.log(`[Translation] sending ${messagesToActuallyTranslate.length} messages to batch translation (skipping frontend detection)`);
     
     if (messagesToActuallyTranslate.length === 0) {
-      console.log("[Translation] All messages are already in target language, no translation needed");
+      console.log("[Translation] No messages to translate");
       translationInProgressRef.current = false;
       return;
     }
