@@ -138,7 +138,7 @@ Output only the ISO 639-1 language code (e.g., 'en', 'es', 'fr', 'ja').
 If unsure, output 'en'.`,
       userPrompt: sourceText.slice(0, 500), // Limit text for detection
       reasoningEffort: "low",
-      maxTokens: 10,
+      maxTokens: 16, // Minimum required by OpenAI
     });
 
     const detectedLanguage = detectionResponse.content?.trim().toLowerCase() || "en";
@@ -248,7 +248,7 @@ Output only the ISO 639-1 language code (e.g., 'en', 'es', 'fr', 'ja').
 If unsure, output 'en'.`,
             userPrompt: message.content.slice(0, 500), // Limit text for detection
             reasoningEffort: "low",
-            maxTokens: 10,
+            maxTokens: 16, // Minimum required by OpenAI
           });
 
           const detectedLanguage = detectionResponse.content?.trim().toLowerCase() || "en";
@@ -697,7 +697,7 @@ Output only the ISO 639-1 language code (e.g., 'en', 'es', 'fr', 'ja').
 If unsure, output 'en'.`,
       userPrompt: text.slice(0, 500), // Limit text for detection
       reasoningEffort: "low",
-      maxTokens: 10,
+      maxTokens: 16, // Minimum required by OpenAI
     });
 
     const detectedLanguage = response.content?.trim().toLowerCase() || "en";
