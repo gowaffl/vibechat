@@ -591,17 +591,28 @@ chats.patch("/:id", async (c) => {
 });
 
 // POST /api/chats/:id/image - Upload chat profile image
-const chatImageUploadSchema = z.object({
-  image: z.instanceof(File),
-  userId: z.string(),
-});
-
-chats.post("/:id/image", zValidator("form", chatImageUploadSchema), async (c) => {
+chats.post("/:id/image", async (c) => {
   const chatId = c.req.param("id");
-  const { image, userId } = c.req.valid("form");
-
+  
   try {
-    console.log(`[Chats] Image upload request for chat ${chatId} by user ${userId}`);
+    // Parse form data manually (React Native FormData is different from web FormData)
+    const body = await c.req.parseBody();
+    const image = body.image as File;
+    const userId = body.userId as string;
+    
+    console.log(`📤 [Chats] Image upload request for chat ${chatId} by user ${userId}`);
+    
+    if (!image) {
+      console.log("❌ [Chats] No image file provided in request");
+      return c.json({ error: "No image file provided" }, 400);
+    }
+    
+    if (!userId) {
+      console.log("❌ [Chats] No userId provided in request");
+      return c.json({ error: "userId is required" }, 400);
+    }
+    
+    console.log(`📄 [Chats] File received: ${image.name} (${image.type}, ${(image.size / 1024).toFixed(2)} KB)`);
 
     // Check if user is creator or member
     const { data: chat, error: chatError } = await db
@@ -639,26 +650,30 @@ chats.post("/:id/image", zValidator("form", chatImageUploadSchema), async (c) =>
     // Validate file type
     const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
     if (!allowedTypes.includes(image.type)) {
-      console.log(`[Chats] Invalid file type: ${image.type}`);
+      console.log(`❌ [Chats] Invalid file type: ${image.type}`);
       return c.json({ error: `Invalid file type: ${image.type}. Only JPEG, PNG, GIF, and WebP images are allowed` }, 400);
     }
+    console.log(`✅ [Chats] File type validated: ${image.type}`);
 
     // Validate file size (10MB limit)
     const maxSize = 10 * 1024 * 1024;
     if (image.size > maxSize) {
-      console.log(`[Chats] File too large: ${(image.size / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`❌ [Chats] File too large: ${(image.size / 1024 / 1024).toFixed(2)} MB (max: 10 MB)`);
       return c.json({ error: "File too large. Maximum size is 10MB" }, 400);
     }
+    console.log(`✅ [Chats] File size validated: ${(image.size / 1024).toFixed(2)} KB`);
 
     // Upload to storage
     const fileExtension = path.extname(image.name);
     const uniqueFilename = `chat-${chatId}-${randomUUID()}${fileExtension}`;
+    console.log(`🔑 [Chats] Generated unique filename: ${uniqueFilename}`);
     
+    console.log(`💾 [Chats] Uploading file to Supabase Storage...`);
     const arrayBuffer = await image.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
     const imageUrl = await uploadFileToStorage(uniqueFilename, buffer, image.type);
-    console.log(`[Chats] Image uploaded successfully: ${imageUrl}`);
+    console.log(`✅ [Chats] File uploaded successfully. URL: ${imageUrl}`);
 
     // Update chat with new image
     const { data: updatedChat, error: updateError } = await db
@@ -669,14 +684,15 @@ chats.post("/:id/image", zValidator("form", chatImageUploadSchema), async (c) =>
       .single();
 
     if (updateError || !updatedChat) {
-      console.error("[Chats] Error updating chat image:", updateError);
+      console.error("❌ [Chats] Error updating chat image in database:", updateError);
       return c.json({ error: "Failed to update chat image" }, 500);
     }
 
-    console.log(`[Chats] Chat ${chatId} image updated successfully`);
+    console.log(`🎉 [Chats] Chat image updated successfully for chat ${chatId}`);
     return c.json({ imageUrl });
   } catch (error) {
-    console.error("[Chats] Error uploading chat image:", error);
+    console.error("💥 [Chats] Error uploading chat image:", error);
+    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace available");
     return c.json({ error: "Failed to upload chat image" }, 500);
   }
 });
