@@ -19,7 +19,11 @@ import { tagMessage } from "../services/message-tagger";
 import { extractFirstUrl } from "../utils/url-utils";
 import { fetchLinkPreview } from "../services/link-preview";
 import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import { decryptMessages } from "../services/message-encryption";
+import * as path from "node:path";
+import { randomUUID } from "node:crypto";
+import { uploadFileToStorage } from "../services/storage";
 
 const chats = new Hono<AppType>();
 
@@ -587,22 +591,16 @@ chats.patch("/:id", async (c) => {
 });
 
 // POST /api/chats/:id/image - Upload chat profile image
-chats.post("/:id/image", async (c) => {
+const chatImageUploadSchema = z.object({
+  image: z.instanceof(File),
+  userId: z.string(),
+});
+
+chats.post("/:id/image", zValidator("form", chatImageUploadSchema), async (c) => {
   const chatId = c.req.param("id");
+  const { image, userId } = c.req.valid("form");
 
   try {
-    const formData = await c.req.formData();
-    const image = formData.get("image") as File;
-    const userId = formData.get("userId") as string;
-
-    if (!image) {
-      return c.json({ error: "No image file provided" }, 400);
-    }
-
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
-    }
-
     console.log(`[Chats] Image upload request for chat ${chatId} by user ${userId}`);
 
     // Check if user is creator or member
@@ -653,10 +651,6 @@ chats.post("/:id/image", async (c) => {
     }
 
     // Upload to storage
-    const path = await import("node:path");
-    const { randomUUID } = await import("node:crypto");
-    const { uploadFileToStorage } = await import("../services/storage");
-
     const fileExtension = path.extname(image.name);
     const uniqueFilename = `chat-${chatId}-${randomUUID()}${fileExtension}`;
     
@@ -2325,6 +2319,307 @@ chats.get("/:chatId", async (c) => {
   } catch (error) {
     console.error("[Chats] Error fetching chat details:", error);
     return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// GET /api/chats/:id/commands - Get custom commands for a chat (alias endpoint)
+chats.get("/:id/commands", async (c) => {
+  const chatId = c.req.param("id");
+  const userId = c.req.query("userId");
+
+  if (!userId) {
+    return c.json({ error: "userId is required" }, 400);
+  }
+
+  try {
+    // Verify user is a member
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Get commands for this chat
+    const { data: commands, error } = await db
+      .from("custom_slash_command")
+      .select("*")
+      .eq("chatId", chatId)
+      .order("createdAt", { ascending: true });
+
+    if (error) {
+      console.error("[Chats/Commands] Error fetching commands:", error);
+      return c.json({ error: "Failed to fetch custom commands" }, 500);
+    }
+
+    const response = (commands || []).map((cmd: any) => ({
+      id: cmd.id,
+      command: cmd.command,
+      prompt: cmd.prompt,
+      chatId: cmd.chatId,
+      createdAt: new Date(cmd.createdAt).toISOString(),
+      updatedAt: new Date(cmd.updatedAt).toISOString(),
+    }));
+
+    return c.json({ commands: response });
+  } catch (error) {
+    console.error("[Chats/Commands] Error:", error);
+    return c.json({ error: "Failed to fetch custom commands" }, 500);
+  }
+});
+
+// POST /api/chats/:id/commands - Create custom command (alias endpoint)
+chats.post("/:id/commands", async (c) => {
+  const chatId = c.req.param("id");
+
+  try {
+    const body = await c.req.json();
+    const { command, prompt, userId } = body;
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    if (!command || !prompt) {
+      return c.json({ error: "command and prompt are required" }, 400);
+    }
+
+    // Verify user is a member
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can create custom commands in restricted mode" }, 403);
+      }
+    }
+
+    // Validate command starts with /
+    let cmdText = command.trim();
+    if (!cmdText.startsWith("/")) {
+      cmdText = `/${cmdText}`;
+    }
+
+    // Check if command already exists
+    const { data: existingCommand } = await db
+      .from("custom_slash_command")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("command", cmdText)
+      .single();
+
+    if (existingCommand) {
+      return c.json({ error: "Command already exists in this chat" }, 400);
+    }
+
+    // Create command
+    const { data: newCommand, error } = await db
+      .from("custom_slash_command")
+      .insert({
+        command: cmdText,
+        prompt,
+        chatId,
+      })
+      .select("*")
+      .single();
+
+    if (error || !newCommand) {
+      console.error("[Chats/Commands] Error creating command:", error);
+      return c.json({ error: "Failed to create custom command" }, 500);
+    }
+
+    return c.json({
+      id: newCommand.id,
+      command: newCommand.command,
+      prompt: newCommand.prompt,
+      chatId: newCommand.chatId,
+      createdAt: new Date(newCommand.createdAt).toISOString(),
+      updatedAt: new Date(newCommand.updatedAt).toISOString(),
+    });
+  } catch (error) {
+    console.error("[Chats/Commands] Error creating command:", error);
+    return c.json({ error: "Failed to create custom command" }, 500);
+  }
+});
+
+// PATCH /api/chats/:id/commands/:commandId - Update custom command (alias endpoint)
+chats.patch("/:id/commands/:commandId", async (c) => {
+  const chatId = c.req.param("id");
+  const commandId = c.req.param("commandId");
+
+  try {
+    const body = await c.req.json();
+    const { command, prompt, userId } = body;
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    // Verify command exists and belongs to this chat
+    const { data: existingCommand, error: fetchError } = await db
+      .from("custom_slash_command")
+      .select("*")
+      .eq("id", commandId)
+      .eq("chatId", chatId)
+      .single();
+
+    if (fetchError || !existingCommand) {
+      return c.json({ error: "Command not found" }, 404);
+    }
+
+    // Verify user is a member
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can update custom commands in restricted mode" }, 403);
+      }
+    }
+
+    // Build update data
+    const updateData: any = {};
+    if (command !== undefined) {
+      let cmdText = command.trim();
+      if (!cmdText.startsWith("/")) {
+        cmdText = `/${cmdText}`;
+      }
+      updateData.command = cmdText;
+    }
+    if (prompt !== undefined) {
+      updateData.prompt = prompt;
+    }
+
+    // Update command
+    const { data: updatedCommand, error: updateError } = await db
+      .from("custom_slash_command")
+      .update(updateData)
+      .eq("id", commandId)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedCommand) {
+      console.error("[Chats/Commands] Error updating command:", updateError);
+      return c.json({ error: "Failed to update custom command" }, 500);
+    }
+
+    return c.json({
+      id: updatedCommand.id,
+      command: updatedCommand.command,
+      prompt: updatedCommand.prompt,
+      chatId: updatedCommand.chatId,
+      createdAt: new Date(updatedCommand.createdAt).toISOString(),
+      updatedAt: new Date(updatedCommand.updatedAt).toISOString(),
+    });
+  } catch (error) {
+    console.error("[Chats/Commands] Error updating command:", error);
+    return c.json({ error: "Failed to update custom command" }, 500);
+  }
+});
+
+// DELETE /api/chats/:id/commands/:commandId - Delete custom command (alias endpoint)
+chats.delete("/:id/commands/:commandId", async (c) => {
+  const chatId = c.req.param("id");
+  const commandId = c.req.param("commandId");
+  const userId = c.req.query("userId");
+
+  if (!userId) {
+    return c.json({ error: "userId is required" }, 400);
+  }
+
+  try {
+    // Verify command exists and belongs to this chat
+    const { data: existingCommand, error: fetchError } = await db
+      .from("custom_slash_command")
+      .select("*")
+      .eq("id", commandId)
+      .eq("chatId", chatId)
+      .single();
+
+    if (fetchError || !existingCommand) {
+      return c.json({ error: "Command not found" }, 404);
+    }
+
+    // Verify user is a member
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("*")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "Not a member of this chat" }, 403);
+    }
+
+    // Check for restricted mode
+    const { data: chat } = await db
+      .from("chat")
+      .select("creatorId, isRestricted")
+      .eq("id", chatId)
+      .single();
+
+    if (chat) {
+      const isCreator = chat.creatorId === userId;
+      if (chat.isRestricted && !isCreator) {
+        return c.json({ error: "Only the creator can delete custom commands in restricted mode" }, 403);
+      }
+    }
+
+    // Delete command
+    const { error: deleteError } = await db
+      .from("custom_slash_command")
+      .delete()
+      .eq("id", commandId);
+
+    if (deleteError) {
+      console.error("[Chats/Commands] Error deleting command:", deleteError);
+      return c.json({ error: "Failed to delete custom command" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: "Command deleted successfully",
+    });
+  } catch (error) {
+    console.error("[Chats/Commands] Error deleting command:", error);
+    return c.json({ error: "Failed to delete custom command" }, 500);
   }
 });
 
