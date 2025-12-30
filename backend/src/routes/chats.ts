@@ -595,28 +595,12 @@ chats.post("/:id/image", async (c) => {
   const chatId = c.req.param("id");
   
   try {
-    // Debug: Log content type
-    const contentType = c.req.header("content-type");
-    console.log(`📤 [Chats] Image upload request for chat ${chatId}, Content-Type: ${contentType}`);
-    
-    // Parse form data manually (React Native FormData is different from web FormData)
+    // Parse form data (React Native FormData)
     const body = await c.req.parseBody();
-    
-    // Debug: Log what we received
-    console.log(`📦 [Chats] Parsed body keys: ${Object.keys(body).join(", ")}`);
-    console.log(`📦 [Chats] Body.image type: ${typeof body.image}, Body.userId: ${body.userId}`);
-    if (body.image) {
-      console.log(`📦 [Chats] Image object: ${JSON.stringify({
-        name: (body.image as any).name,
-        type: (body.image as any).type,
-        size: (body.image as any).size,
-      })}`);
-    }
-    
     const image = body.image as File;
     const userId = body.userId as string;
     
-    console.log(`📤 [Chats] Processing upload by user ${userId}`);
+    console.log(`📤 [Chats] Image upload request for chat ${chatId} by user ${userId}`);
     
     if (!image) {
       console.log("❌ [Chats] No image file provided in request");

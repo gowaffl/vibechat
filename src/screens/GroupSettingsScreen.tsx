@@ -138,9 +138,7 @@ const GroupSettingsScreen = () => {
       } as any);
       formData.append("userId", user!.id);
       
-      const response = await api.post<{ imageUrl: string }>(`/api/chats/${chatId}/image`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await api.postFormData<{ imageUrl: string }>(`/api/chats/${chatId}/image`, formData);
       return response.imageUrl;
     },
     onSuccess: (imageUrl) => {
