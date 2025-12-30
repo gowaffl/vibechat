@@ -586,6 +586,107 @@ chats.patch("/:id", async (c) => {
   }
 });
 
+// POST /api/chats/:id/image - Upload chat profile image
+chats.post("/:id/image", async (c) => {
+  const chatId = c.req.param("id");
+
+  try {
+    const formData = await c.req.formData();
+    const image = formData.get("image") as File;
+    const userId = formData.get("userId") as string;
+
+    if (!image) {
+      return c.json({ error: "No image file provided" }, 400);
+    }
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    console.log(`[Chats] Image upload request for chat ${chatId} by user ${userId}`);
+
+    // Check if user is creator or member
+    const { data: chat, error: chatError } = await db
+      .from("chat")
+      .select("*")
+      .eq("id", chatId)
+      .single();
+
+    if (chatError || !chat) {
+      return c.json({ error: "Chat not found" }, 404);
+    }
+
+    const isCreator = chat.creatorId === userId;
+
+    // Check permissions based on restricted mode
+    if (!isCreator) {
+      // If chat is restricted, only creator can update image
+      if (chat.isRestricted) {
+        return c.json({ error: "Only the creator can update chat image in restricted mode" }, 403);
+      }
+
+      // If chat is unrestricted, verify user is a member
+      const { data: membership } = await db
+        .from("chat_member")
+        .select("id")
+        .eq("chatId", chatId)
+        .eq("userId", userId)
+        .single();
+
+      if (!membership) {
+        return c.json({ error: "You must be a member to update chat image" }, 403);
+      }
+    }
+
+    // Validate file type
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(image.type)) {
+      console.log(`[Chats] Invalid file type: ${image.type}`);
+      return c.json({ error: `Invalid file type: ${image.type}. Only JPEG, PNG, GIF, and WebP images are allowed` }, 400);
+    }
+
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024;
+    if (image.size > maxSize) {
+      console.log(`[Chats] File too large: ${(image.size / 1024 / 1024).toFixed(2)} MB`);
+      return c.json({ error: "File too large. Maximum size is 10MB" }, 400);
+    }
+
+    // Upload to storage
+    const path = await import("node:path");
+    const { randomUUID } = await import("node:crypto");
+    const { uploadFileToStorage } = await import("../services/storage");
+
+    const fileExtension = path.extname(image.name);
+    const uniqueFilename = `chat-${chatId}-${randomUUID()}${fileExtension}`;
+    
+    const arrayBuffer = await image.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    const imageUrl = await uploadFileToStorage(uniqueFilename, buffer, image.type);
+    console.log(`[Chats] Image uploaded successfully: ${imageUrl}`);
+
+    // Update chat with new image
+    const { data: updatedChat, error: updateError } = await db
+      .from("chat")
+      .update({ image: imageUrl })
+      .eq("id", chatId)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedChat) {
+      console.error("[Chats] Error updating chat image:", updateError);
+      return c.json({ error: "Failed to update chat image" }, 500);
+    }
+
+    console.log(`[Chats] Chat ${chatId} image updated successfully`);
+    return c.json({ imageUrl });
+  } catch (error) {
+    console.error("[Chats] Error uploading chat image:", error);
+    return c.json({ error: "Failed to upload chat image" }, 500);
+  }
+});
+
 // DELETE /api/chats/:id - Delete chat (creator only)
 chats.delete("/:id", async (c) => {
   const chatId = c.req.param("id");
