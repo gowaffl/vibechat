@@ -231,13 +231,15 @@ const api = {
    * @param formData - FormData object containing files or other data
    */
   postFormData: async <T>(path: string, formData: FormData): Promise<T> => {
-    const cookies = authClient.getCookie();
+    // Get JWT token for authentication (same as other API methods)
+    const token = await authClient.getToken();
 
     try {
       const headers: HeadersInit = {};
 
-      if (cookies) {
-        headers.Cookie = cookies;
+      // Add Authorization header with JWT token
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
       // Create an AbortController to handle request timeout
