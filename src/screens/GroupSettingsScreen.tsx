@@ -22,8 +22,11 @@ import { Camera, Users, Sparkles, Wand2, Zap, Link2, Images, Bell, BellOff, Edit
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { api } from "@/lib/api";
+import { authClient } from "@/lib/authClient";
+import { BACKEND_URL } from "@/config";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
@@ -130,15 +133,32 @@ const GroupSettingsScreen = () => {
 
   const uploadImageMutation = useMutation({
     mutationFn: async (uri: string) => {
-      const formData = new FormData();
-      formData.append("image", {
-        uri,
-        type: "image/jpeg",
-        name: "group_image.jpg",
-      } as any);
-      formData.append("userId", user!.id);
+      // Get auth token
+      const token = await authClient.getToken();
       
-      const response = await api.postFormData<{ imageUrl: string }>(`/api/chats/${chatId}/image`, formData);
+      // Use FileSystem.uploadAsync for proper file upload in React Native
+      const uploadResult = await FileSystem.uploadAsync(
+        `${BACKEND_URL}/api/chats/${chatId}/image`,
+        uri,
+        {
+          httpMethod: "POST",
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: "image",
+          parameters: {
+            userId: user!.id,
+          },
+          headers: token ? {
+            Authorization: `Bearer ${token}`,
+          } : undefined,
+        }
+      );
+
+      if (uploadResult.status !== 200) {
+        console.error("Image upload failed:", uploadResult.status, uploadResult.body);
+        throw new Error(`Upload failed: ${uploadResult.status}`);
+      }
+
+      const response: { imageUrl: string } = JSON.parse(uploadResult.body);
       return response.imageUrl;
     },
     onSuccess: (imageUrl) => {
