@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Platform, Alert, Linking, PermissionsAndroid } from 'react-native';
-import * as Audio from 'expo-audio';
+import { Audio } from 'expo-av';
 
 export interface VoicePermissionsStatus {
   microphone: boolean;
