@@ -82,6 +82,8 @@ import { startWorkflowScheduler } from "./services/workflow-scheduler";
 import communityRouter from "./routes/community";
 // AI-Native Communication
 import aiNativeRouter from "./routes/ai-native";
+// Personal Chats
+import personalChatsRouter from "./routes/personal-chats";
 
 const app = new Hono();
 
@@ -177,6 +179,10 @@ app.route("/api/community", communityRouter);
 console.log("🌍 Mounting AI-native routes at /api/ai-native");
 app.route("/api/ai-native", aiNativeRouter);
 
+// Personal Chats
+console.log("💭 Mounting personal chats routes at /api/personal-chats");
+app.route("/api/personal-chats", personalChatsRouter);
+
 // console.log("🔔 Mounting notifications routes at /api");
 // app.route("/api", notificationsRouter); // Moved to chats router
 
@@ -223,6 +229,7 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
   console.log("  🔄 Workflows: GET/POST/PATCH/DELETE /api/workflows");
   console.log("  🌐 Community: GET/POST /api/community");
   console.log("  🌍 AI-Native: POST /api/ai-native/translate|adjust-tone|context-card");
+  console.log("  💭 Personal: GET/POST/PATCH/DELETE /api/personal-chats");
   console.log("\n  💚 Health:   GET /health");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 

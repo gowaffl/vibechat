@@ -26,6 +26,7 @@ interface CreateAIFriendModalProps {
   onClose: () => void;
   onCreate: (name: string, personality: string, tone: string, engagementMode: "on-call" | "percentage" | "off", engagementPercent?: number) => void;
   isCreating?: boolean;
+  hideEngagementMode?: boolean; // Hide engagement mode for personal chats (always on)
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -35,6 +36,7 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
   onClose,
   onCreate,
   isCreating = false,
+  hideEngagementMode = false,
 }) => {
   const { colors, isDark } = useTheme();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
@@ -388,81 +390,83 @@ const CreateAIFriendModal: React.FC<CreateAIFriendModalProps> = ({
                           </View>
                         </View>
 
-                        {/* Engagement Mode */}
-                        <View style={{ marginBottom: 16 }}>
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              fontWeight: "600",
-                              color: "rgba(255, 255, 255, 0.8)",
-                              marginBottom: 4,
-                            }}
-                          >
-                            Engagement Mode
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: "rgba(255, 255, 255, 0.6)",
-                              marginBottom: 12,
-                            }}
-                          >
-                            How often should AI participate?
-                          </Text>
-                          <View style={{ gap: 12 }}>
-                            {[
-                              { mode: "on-call" as const, label: "On-Call Only (@ai)", desc: "AI only responds when explicitly mentioned with @ai" },
-                              { mode: "percentage" as const, label: "Automatic Engagement", desc: "AI joins conversations naturally based on percentage" },
-                              { mode: "off" as const, label: "Off", desc: "AI friend is completely disabled" },
-                            ].map((option) => {
-                              const isSelected = engagementMode === option.mode;
-                              return (
-                                <Pressable
-                                  key={option.mode}
-                                  onPress={() => {
-                                    Haptics.selectionAsync();
-                                    setEngagementMode(option.mode);
-                                  }}
-                                >
-                                  <View
-                                    style={{
-                                      paddingHorizontal: 16,
-                                      paddingVertical: 12,
-                                      borderRadius: 12,
-                                      backgroundColor: isSelected
-                                        ? "rgba(52, 199, 89, 0.25)"
-                                        : "rgba(255, 255, 255, 0.05)",
-                                      borderWidth: 2,
-                                      borderColor: isSelected
-                                        ? "#34C759"
-                                        : "rgba(255, 255, 255, 0.1)",
+                        {/* Engagement Mode - Hidden for personal chats */}
+                        {!hideEngagementMode && (
+                          <View style={{ marginBottom: 16 }}>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                fontWeight: "600",
+                                color: "rgba(255, 255, 255, 0.8)",
+                                marginBottom: 4,
+                              }}
+                            >
+                              Engagement Mode
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "rgba(255, 255, 255, 0.6)",
+                                marginBottom: 12,
+                              }}
+                            >
+                              How often should AI participate?
+                            </Text>
+                            <View style={{ gap: 12 }}>
+                              {[
+                                { mode: "on-call" as const, label: "On-Call Only (@ai)", desc: "AI only responds when explicitly mentioned with @ai" },
+                                { mode: "percentage" as const, label: "Automatic Engagement", desc: "AI joins conversations naturally based on percentage" },
+                                { mode: "off" as const, label: "Off", desc: "AI friend is completely disabled" },
+                              ].map((option) => {
+                                const isSelected = engagementMode === option.mode;
+                                return (
+                                  <Pressable
+                                    key={option.mode}
+                                    onPress={() => {
+                                      Haptics.selectionAsync();
+                                      setEngagementMode(option.mode);
                                     }}
                                   >
-                                    <Text
+                                    <View
                                       style={{
-                                        fontSize: 16,
-                                        fontWeight: "600",
-                                        color: isSelected ? "#34C759" : "#FFFFFF",
-                                        marginBottom: 4,
+                                        paddingHorizontal: 16,
+                                        paddingVertical: 12,
+                                        borderRadius: 12,
+                                        backgroundColor: isSelected
+                                          ? "rgba(52, 199, 89, 0.25)"
+                                          : "rgba(255, 255, 255, 0.05)",
+                                        borderWidth: 2,
+                                        borderColor: isSelected
+                                          ? "#34C759"
+                                          : "rgba(255, 255, 255, 0.1)",
                                       }}
                                     >
-                                      {option.label}
-                                    </Text>
-                                    <Text
-                                      style={{
-                                        fontSize: 12,
-                                        color: "rgba(255, 255, 255, 0.6)",
-                                        lineHeight: 16,
-                                      }}
-                                    >
-                                      {option.desc}
-                                    </Text>
-                                  </View>
-                                </Pressable>
-                              );
-                            })}
+                                      <Text
+                                        style={{
+                                          fontSize: 16,
+                                          fontWeight: "600",
+                                          color: isSelected ? "#34C759" : "#FFFFFF",
+                                          marginBottom: 4,
+                                        }}
+                                      >
+                                        {option.label}
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 12,
+                                          color: "rgba(255, 255, 255, 0.6)",
+                                          lineHeight: 16,
+                                        }}
+                                      >
+                                        {option.desc}
+                                      </Text>
+                                    </View>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
                           </View>
-                        </View>
+                        )}
                       </ScrollView>
 
                       {/* Actions */}

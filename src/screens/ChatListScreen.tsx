@@ -35,6 +35,8 @@ import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { CustomRefreshControl } from "@/components/CustomRefreshControl";
+import { LiquidGlassTabSwitcher } from "@/components/LiquidGlass";
+import { PersonalChatListView, PersonalChatFAB } from "@/components/PersonalChat";
 import { useDebounce } from "@/hooks/useDebounce";
 import { SearchMessagesResponse, SearchMessageResult, GlobalSearchResponse } from "@/shared/contracts";
 import { ColorPalette } from "@/constants/theme";
@@ -354,6 +356,14 @@ const ChatListScreen = () => {
   const [contextMenuChat, setContextMenuChat] = useState<ChatWithMetadata | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Tab state for Group vs Personal chats
+  const [activeTab, setActiveTab] = useState<"group" | "personal">("group");
+  
+  const chatTabs = [
+    { key: "group", label: "Group" },
+    { key: "personal", label: "Personal" },
+  ];
 
   // Check if any filters are active
   const hasActiveFilters = React.useMemo(() => {
@@ -841,6 +851,14 @@ const ChatListScreen = () => {
               </View>
             </TapGestureHandler>
           </View>
+          
+          {/* Group / Personal Tab Switcher */}
+          <LiquidGlassTabSwitcher
+            tabs={chatTabs}
+            activeTab={activeTab}
+            onTabChange={(tab) => setActiveTab(tab as "group" | "personal")}
+            style={{ marginTop: 8 }}
+          />
         </View>
         </BlurView>
       </View>
@@ -873,7 +891,7 @@ const ChatListScreen = () => {
         ) : (
           <ScrollView
             contentContainerStyle={{
-              paddingTop: insets.top + 100,
+              paddingTop: insets.top + 140,
               paddingBottom: insets.bottom + 100,
             }}
             keyboardDismissMode="on-drag"
@@ -973,8 +991,13 @@ const ChatListScreen = () => {
             )}
           </ScrollView>
         )
+      ) : activeTab === "personal" ? (
+        // Personal Chat Mode
+        <View style={{ flex: 1, paddingTop: insets.top + 140 }} pointerEvents="box-none">
+          <PersonalChatListView />
+        </View>
       ) : (
-        // Chat List Mode
+        // Group Chat List Mode
         isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <LuxeLogoLoader size="large" />
@@ -1015,7 +1038,7 @@ const ChatListScreen = () => {
               />
             )}
             contentContainerStyle={{
-              paddingTop: insets.top + 100,
+              paddingTop: insets.top + 140,
               paddingBottom: insets.bottom + 100,
             }}
             ListHeaderComponent={
@@ -1055,8 +1078,12 @@ const ChatListScreen = () => {
       }
       </KeyboardAvoidingView>
 
-      {/* FAB */}
-      <CreateChatFAB />
+      {/* FAB - Show different FAB based on active tab */}
+      {activeTab === "group" ? (
+        <CreateChatFAB />
+      ) : activeTab === "personal" ? (
+        <PersonalChatFAB />
+      ) : null}
 
       {/* Context Menu Modal */}
       <Modal

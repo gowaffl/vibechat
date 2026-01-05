@@ -27,6 +27,7 @@ import WelcomeScreen from "@/screens/WelcomeScreen";
 import BirthdateScreen from "@/screens/BirthdateScreen";
 import JoinChatScreen from "@/screens/JoinChatScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
+import PersonalChatScreen from "@/screens/PersonalChatScreen";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTimezoneSync } from "@/hooks/useTimezoneSync";
@@ -117,6 +118,13 @@ const RootNavigator = () => {
       <RootStack.Screen
         name="Chat"
         component={ChatScreen}
+        options={{
+          cardStyle: { backgroundColor: colors.background },
+        }}
+      />
+      <RootStack.Screen
+        name="PersonalChat"
+        component={PersonalChatScreen}
         options={{
           cardStyle: { backgroundColor: colors.background },
         }}

@@ -303,3 +303,114 @@ ALTER TABLE public.ai_workflow DROP CONSTRAINT IF EXISTS ai_workflow_category_ch
 ALTER TABLE public.ai_workflow ADD CONSTRAINT ai_workflow_category_check 
   CHECK (category IS NULL OR category = ANY (ARRAY['productivity'::text, 'entertainment'::text, 'creative'::text, 'utility'::text, 'other'::text]));
 
+-- ============================================================================
+-- PERSONAL CHATS FEATURE
+-- ============================================================================
+
+-- Personal Conversation Table
+-- Stores personal 1:1 conversations between users and AI agents
+CREATE TABLE IF NOT EXISTS personal_conversation (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "userId" text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  "aiFriendId" text REFERENCES ai_friend(id) ON DELETE SET NULL,
+  title text NOT NULL DEFAULT 'New Conversation',
+  "lastMessageAt" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+  "createdAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Personal Message Table
+-- Stores messages within personal conversations
+CREATE TABLE IF NOT EXISTS personal_message (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "conversationId" text NOT NULL REFERENCES personal_conversation(id) ON DELETE CASCADE,
+  content text NOT NULL,
+  role text NOT NULL CHECK (role IN ('user', 'assistant')),
+  "imageUrl" text,
+  "generatedImageUrl" text,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  "createdAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User Agent Usage Table
+-- Tracks how often each user uses each agent (for "Top 3 Most Used" feature)
+CREATE TABLE IF NOT EXISTS user_agent_usage (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "userId" text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  "aiFriendId" text NOT NULL REFERENCES ai_friend(id) ON DELETE CASCADE,
+  "usageCount" integer NOT NULL DEFAULT 1,
+  "lastUsedAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "createdAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE ("userId", "aiFriendId")
+);
+
+-- Indexes for personal_conversation
+CREATE INDEX IF NOT EXISTS personal_conversation_user_idx ON personal_conversation("userId");
+CREATE INDEX IF NOT EXISTS personal_conversation_last_message_idx ON personal_conversation("lastMessageAt" DESC);
+CREATE INDEX IF NOT EXISTS personal_conversation_ai_friend_idx ON personal_conversation("aiFriendId");
+
+-- Indexes for personal_message
+CREATE INDEX IF NOT EXISTS personal_message_conversation_idx ON personal_message("conversationId");
+CREATE INDEX IF NOT EXISTS personal_message_created_at_idx ON personal_message("createdAt" DESC);
+
+-- Indexes for user_agent_usage
+CREATE INDEX IF NOT EXISTS user_agent_usage_user_idx ON user_agent_usage("userId");
+CREATE INDEX IF NOT EXISTS user_agent_usage_count_idx ON user_agent_usage("usageCount" DESC);
+CREATE INDEX IF NOT EXISTS user_agent_usage_last_used_idx ON user_agent_usage("lastUsedAt" DESC);
+
+-- Enable RLS for personal chat tables
+ALTER TABLE personal_conversation ENABLE ROW LEVEL SECURITY;
+ALTER TABLE personal_message ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_agent_usage ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for personal_conversation
+CREATE POLICY "Users can view their own conversations" ON personal_conversation
+  FOR SELECT USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can create their own conversations" ON personal_conversation
+  FOR INSERT WITH CHECK (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can update their own conversations" ON personal_conversation
+  FOR UPDATE USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can delete their own conversations" ON personal_conversation
+  FOR DELETE USING (auth.uid()::text = "userId");
+
+-- RLS Policies for personal_message
+CREATE POLICY "Users can view messages in their conversations" ON personal_message
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM personal_conversation 
+      WHERE personal_conversation.id = personal_message."conversationId" 
+      AND personal_conversation."userId" = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "Users can create messages in their conversations" ON personal_message
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM personal_conversation 
+      WHERE personal_conversation.id = personal_message."conversationId" 
+      AND personal_conversation."userId" = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "Users can delete messages in their conversations" ON personal_message
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM personal_conversation 
+      WHERE personal_conversation.id = personal_message."conversationId" 
+      AND personal_conversation."userId" = auth.uid()::text
+    )
+  );
+
+-- RLS Policies for user_agent_usage
+CREATE POLICY "Users can view their own agent usage" ON user_agent_usage
+  FOR SELECT USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can create their own agent usage" ON user_agent_usage
+  FOR INSERT WITH CHECK (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can update their own agent usage" ON user_agent_usage
+  FOR UPDATE USING (auth.uid()::text = "userId");
+

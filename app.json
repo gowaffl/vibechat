@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vibecodeapp.vibechat",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": ["audio", "voip"],
@@ -35,7 +35,7 @@
     "android": {
       "edgeToEdgeEnabled": true,
       "package": "com.vibecodeapp.vibechat",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "RECORD_AUDIO",
         "FOREGROUND_SERVICE",

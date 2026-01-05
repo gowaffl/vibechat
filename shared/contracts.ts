@@ -1570,3 +1570,188 @@ export type CommunityWorkflow = z.infer<typeof communityWorkflowSchema>;
 
 // Clone item types
 export type CloneItemType = "ai_friend" | "command" | "workflow";
+
+// ============================================================================
+// PERSONAL CHATS SCHEMAS
+// ============================================================================
+
+// Personal Message Metadata schema (for web search citations, image generation, etc.)
+export const personalMessageMetadataSchema = z.object({
+  webSearchResults: z.array(z.object({
+    title: z.string(),
+    url: z.string(),
+    snippet: z.string(),
+  })).optional(),
+  generatedImagePrompt: z.string().optional(),
+  attachedImageUrls: z.array(z.string()).optional(),
+  toolsUsed: z.array(z.string()).optional(),
+}).passthrough();
+export type PersonalMessageMetadata = z.infer<typeof personalMessageMetadataSchema>;
+
+// Personal Message schema
+export const personalMessageSchema = z.object({
+  id: z.string(),
+  conversationId: z.string(),
+  content: z.string(),
+  role: z.enum(["user", "assistant"]),
+  imageUrl: z.string().nullable().optional(),
+  generatedImageUrl: z.string().nullable().optional(),
+  metadata: personalMessageMetadataSchema.nullable().optional(),
+  createdAt: z.string(),
+});
+export type PersonalMessage = z.infer<typeof personalMessageSchema>;
+
+// Personal Conversation schema
+export const personalConversationSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  aiFriendId: z.string().nullable(),
+  title: z.string(),
+  lastMessageAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  aiFriend: aiFriendSchema.nullable().optional(),
+  messages: z.array(personalMessageSchema).optional(),
+});
+export type PersonalConversation = z.infer<typeof personalConversationSchema>;
+
+// User Agent Usage schema (for tracking most-used agents)
+export const userAgentUsageSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  aiFriendId: z.string(),
+  usageCount: z.number(),
+  lastUsedAt: z.string(),
+  createdAt: z.string(),
+  aiFriend: aiFriendSchema.optional(),
+});
+export type UserAgentUsage = z.infer<typeof userAgentUsageSchema>;
+
+// GET /api/personal-chats - Get all personal conversations for a user
+export const getPersonalConversationsRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetPersonalConversationsRequest = z.infer<typeof getPersonalConversationsRequestSchema>;
+export const getPersonalConversationsResponseSchema = z.array(personalConversationSchema);
+export type GetPersonalConversationsResponse = z.infer<typeof getPersonalConversationsResponseSchema>;
+
+// POST /api/personal-chats - Create a new personal conversation
+export const createPersonalConversationRequestSchema = z.object({
+  userId: z.string(),
+  aiFriendId: z.string().nullable().optional(),
+  title: z.string().optional(),
+});
+export type CreatePersonalConversationRequest = z.infer<typeof createPersonalConversationRequestSchema>;
+export const createPersonalConversationResponseSchema = personalConversationSchema;
+export type CreatePersonalConversationResponse = z.infer<typeof createPersonalConversationResponseSchema>;
+
+// GET /api/personal-chats/:conversationId - Get a specific conversation with messages
+export const getPersonalConversationRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetPersonalConversationRequest = z.infer<typeof getPersonalConversationRequestSchema>;
+export const getPersonalConversationResponseSchema = personalConversationSchema.extend({
+  messages: z.array(personalMessageSchema),
+});
+export type GetPersonalConversationResponse = z.infer<typeof getPersonalConversationResponseSchema>;
+
+// PATCH /api/personal-chats/:conversationId - Update conversation (title, agent)
+export const updatePersonalConversationRequestSchema = z.object({
+  userId: z.string(),
+  title: z.string().optional(),
+  aiFriendId: z.string().nullable().optional(),
+});
+export type UpdatePersonalConversationRequest = z.infer<typeof updatePersonalConversationRequestSchema>;
+export const updatePersonalConversationResponseSchema = personalConversationSchema;
+export type UpdatePersonalConversationResponse = z.infer<typeof updatePersonalConversationResponseSchema>;
+
+// DELETE /api/personal-chats/:conversationId - Delete a conversation
+export const deletePersonalConversationRequestSchema = z.object({
+  userId: z.string(),
+});
+export type DeletePersonalConversationRequest = z.infer<typeof deletePersonalConversationRequestSchema>;
+export const deletePersonalConversationResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+export type DeletePersonalConversationResponse = z.infer<typeof deletePersonalConversationResponseSchema>;
+
+// DELETE /api/personal-chats/bulk - Bulk delete conversations
+export const bulkDeletePersonalConversationsRequestSchema = z.object({
+  userId: z.string(),
+  conversationIds: z.array(z.string()),
+});
+export type BulkDeletePersonalConversationsRequest = z.infer<typeof bulkDeletePersonalConversationsRequestSchema>;
+export const bulkDeletePersonalConversationsResponseSchema = z.object({
+  success: z.boolean(),
+  deletedCount: z.number(),
+});
+export type BulkDeletePersonalConversationsResponse = z.infer<typeof bulkDeletePersonalConversationsResponseSchema>;
+
+// POST /api/personal-chats/:conversationId/messages - Send a message in personal chat
+export const sendPersonalMessageRequestSchema = z.object({
+  userId: z.string(),
+  content: z.string(),
+  imageUrl: z.string().optional(), // User-attached image
+});
+export type SendPersonalMessageRequest = z.infer<typeof sendPersonalMessageRequestSchema>;
+export const sendPersonalMessageResponseSchema = z.object({
+  userMessage: personalMessageSchema,
+  assistantMessage: personalMessageSchema,
+});
+export type SendPersonalMessageResponse = z.infer<typeof sendPersonalMessageResponseSchema>;
+
+// DELETE /api/personal-chats/:conversationId/messages/:messageId - Delete a single message
+export const deletePersonalMessageRequestSchema = z.object({
+  userId: z.string(),
+});
+export type DeletePersonalMessageRequest = z.infer<typeof deletePersonalMessageRequestSchema>;
+export const deletePersonalMessageResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+export type DeletePersonalMessageResponse = z.infer<typeof deletePersonalMessageResponseSchema>;
+
+// POST /api/personal-chats/generate-image - Generate image in personal chat
+export const generatePersonalChatImageRequestSchema = z.object({
+  userId: z.string(),
+  conversationId: z.string(),
+  prompt: z.string(),
+  aspectRatio: z.string().optional().default("1:1"),
+});
+export type GeneratePersonalChatImageRequest = z.infer<typeof generatePersonalChatImageRequestSchema>;
+export const generatePersonalChatImageResponseSchema = z.object({
+  imageUrl: z.string(),
+  message: personalMessageSchema,
+});
+export type GeneratePersonalChatImageResponse = z.infer<typeof generatePersonalChatImageResponseSchema>;
+
+// GET /api/personal-chats/top-agents - Get user's top 3 most used agents
+export const getTopAgentsRequestSchema = z.object({
+  userId: z.string(),
+  limit: z.number().min(1).max(10).default(3).optional(),
+});
+export type GetTopAgentsRequest = z.infer<typeof getTopAgentsRequestSchema>;
+export const getTopAgentsResponseSchema = z.array(userAgentUsageSchema.extend({
+  aiFriend: aiFriendSchema,
+}));
+export type GetTopAgentsResponse = z.infer<typeof getTopAgentsResponseSchema>;
+
+// GET /api/personal-chats/all-agents - Get all agents available to user (from all their chats)
+export const getAllUserAgentsRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetAllUserAgentsRequest = z.infer<typeof getAllUserAgentsRequestSchema>;
+export const getAllUserAgentsResponseSchema = z.array(aiFriendSchema.extend({
+  chatName: z.string(), // Name of the chat this agent belongs to
+}));
+export type GetAllUserAgentsResponse = z.infer<typeof getAllUserAgentsResponseSchema>;
+
+// POST /api/personal-chats/track-agent-usage - Track when user uses an agent
+export const trackAgentUsageRequestSchema = z.object({
+  userId: z.string(),
+  aiFriendId: z.string(),
+});
+export type TrackAgentUsageRequest = z.infer<typeof trackAgentUsageRequestSchema>;
+export const trackAgentUsageResponseSchema = userAgentUsageSchema;
+export type TrackAgentUsageResponse = z.infer<typeof trackAgentUsageResponseSchema>;
