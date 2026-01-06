@@ -784,7 +784,49 @@ export default function PersonalChatScreen() {
         error 
       }));
       setOptimisticUserMessage(null);
-      Alert.alert("Error", error || "Failed to get AI response. Please try again.");
+      // Don't show error alert for HTTP errors - the message may have been saved
+      // Just log and let onStreamingComplete handle the refetch
+      if (!error.includes("HTTP")) {
+        Alert.alert("Error", error || "Failed to get AI response. Please try again.");
+      }
+    },
+    // Always called when streaming finishes (success or error)
+    // This ensures we refetch conversation data to get any saved messages
+    onStreamingComplete: async () => {
+      console.log("[PersonalChat] Streaming complete, refetching conversation data");
+      // Clear optimistic message
+      setOptimisticUserMessage(null);
+      
+      // Refetch conversation to get any saved messages (even if streaming failed)
+      if (conversationId) {
+        try {
+          await queryClient.invalidateQueries({ 
+            queryKey: personalChatsKeys.conversation(conversationId) 
+          });
+          await queryClient.refetchQueries({ 
+            queryKey: personalChatsKeys.conversation(conversationId) 
+          });
+        } catch (e) {
+          console.log("[PersonalChat] Failed to refetch conversation:", e);
+        }
+      }
+      // Also refresh the conversations list for updated titles
+      try {
+        await queryClient.invalidateQueries({ 
+          queryKey: personalChatsKeys.conversations(user?.id || "") 
+        });
+      } catch (e) {
+        console.log("[PersonalChat] Failed to refetch conversations list:", e);
+      }
+      
+      // Scroll to bottom to show any new messages
+      requestAnimationFrame(() => {
+        try {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        } catch (e) {
+          // Ignore scroll errors
+        }
+      });
     },
   });
 
