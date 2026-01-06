@@ -473,10 +473,12 @@ export default function PersonalChatScreen() {
 
     // Create abort controller for cancellation
     abortControllerRef.current = new AbortController();
+    
+    // Track the active conversation ID (may be created during request)
+    let activeConversationId = conversationId;
 
     try {
       // If no conversation exists, create one first
-      let activeConversationId = conversationId;
 
       if (!activeConversationId) {
         const createResponse = await api.post<{ success: boolean; conversation: PersonalConversation }>(
@@ -567,21 +569,50 @@ export default function PersonalChatScreen() {
         console.error("[PersonalChat] Streaming error:", error);
         Alert.alert("Error", "Failed to send message. Please try again.");
       }
-    } finally {
+      // Only clear streaming state on error (not in finally)
       setStreaming(prev => ({
         ...prev,
         isStreaming: false,
         isThinking: false,
         currentToolCall: null,
       }));
-      abortControllerRef.current = null;
-      
-      // Invalidate queries to refresh data
-      if (conversationId) {
-        queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversation(conversationId) });
-      }
-      queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversations(user?.id || "") });
     }
+    
+    // Cleanup after stream completes (success or error)
+    abortControllerRef.current = null;
+    
+    // Use the active conversation ID we tracked during the request
+    const finalConversationId = activeConversationId;
+    
+    // Invalidate and await refetch before clearing streaming content
+    // This ensures the new message appears before the streaming preview disappears
+    try {
+      if (finalConversationId) {
+        await queryClient.invalidateQueries({ 
+          queryKey: personalChatsKeys.conversation(finalConversationId) 
+        });
+        // Refetch to ensure we have the latest data
+        await queryClient.refetchQueries({ 
+          queryKey: personalChatsKeys.conversation(finalConversationId) 
+        });
+      }
+      await queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.conversations(user?.id || "") 
+      });
+    } catch (refetchError) {
+      console.error("[PersonalChat] Error refetching:", refetchError);
+    }
+    
+    // Now clear streaming state after data is loaded
+    setStreaming({
+      isStreaming: false,
+      content: "",
+      messageId: null,
+      isThinking: false,
+      thinkingContent: "",
+      currentToolCall: null,
+      reasoningEffort: null,
+    });
   }, [conversationId, user?.id, selectedAgent?.id, queryClient]);
 
   // Handle individual SSE events

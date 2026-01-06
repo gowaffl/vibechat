@@ -46,7 +46,7 @@ Examples:
         },
       ],
       max_completion_tokens: 500, // gpt-5-nano uses significant tokens for reasoning
-      temperature: 0.7,
+      // Note: gpt-5-nano only supports default temperature (1)
     });
 
     const title = response.choices[0]?.message?.content?.trim();
