@@ -21,16 +21,17 @@ import {
   ActivityIndicator,
   Keyboard,
   StyleSheet,
-  KeyboardAvoidingView,
   Dimensions,
   Alert,
+  Animated,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import Animated, {
+import Reanimated, {
   FadeIn,
   FadeInUp,
   FadeOut,
@@ -69,13 +70,15 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
 import { AgentSelectorDropdown, ConversationHistoryDrawer, PersonalAttachmentsMenu } from "@/components/PersonalChat";
 import { CreateAIFriendModal } from "@/components/AIFriends";
-import { ImageGeneratorSheet } from "@/components/ImageGeneratorSheet";
+import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { personalChatsKeys } from "@/hooks/usePersonalChats";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { AIFriend, PersonalConversation, PersonalMessage, PersonalMessageMetadata } from "@/shared/contracts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const MIN_INPUT_HEIGHT = 40;
+const MAX_INPUT_HEIGHT = 120;
 
 type NavigationProp = RootStackScreenProps<"PersonalChat">["navigation"];
 type RouteProp = RootStackScreenProps<"PersonalChat">["route"];
@@ -97,7 +100,7 @@ function TypingIndicator({ isDark }: { isDark: boolean }) {
   const dot3 = useSharedValue(0);
 
   useEffect(() => {
-    const animateDot = (value: Animated.SharedValue<number>, delay: number) => {
+    const animateDot = (value: Reanimated.SharedValue<number>, delay: number) => {
       value.value = withRepeat(
         withSequence(
           withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) }),
@@ -159,13 +162,13 @@ function TypingIndicator({ isDark }: { isDark: boolean }) {
 // Web search indicator
 function SearchingIndicator({ isDark, colors }: { isDark: boolean; colors: any }) {
   return (
-    <Animated.View
+    <Reanimated.View
       entering={FadeIn.duration(200)}
       style={[styles.searchingContainer, { backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)" }]}
     >
       <Globe size={14} color="#6366f1" />
       <Text style={[styles.searchingText, { color: colors.text }]}>Searching the web...</Text>
-    </Animated.View>
+    </Reanimated.View>
   );
 }
 
@@ -199,20 +202,99 @@ export default function PersonalChatScreen() {
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
 
   // Refs
+  const isInputFocused = useRef(false);
+  const textInputRef = useRef<TextInput>(null);
+  const wasKeyboardOpenForAttachments = useRef(false);
+  const wasKeyboardOpenForImageGen = useRef(false);
+  
+  // Animated values for smooth color transitions (matching ChatScreen)
+  const hasContent = useMemo(() => inputText.trim().length > 0 || attachedImages.length > 0, [inputText, attachedImages]);
+  const isAIMessage = useMemo(() => inputText.toLowerCase().includes("@ai"), [inputText]);
+  
+  const colorAnimValue = useRef(new Animated.Value(0)).current;
+  const gradientDefaultOpacity = useRef(new Animated.Value(1)).current;
+  const gradientContentOpacity = useRef(new Animated.Value(0)).current;
+  const gradientAIOpacity = useRef(new Animated.Value(0)).current;
+
+  // Animate input colors based on state
+  useEffect(() => {
+    const targetValue = isAIMessage ? 2 : hasContent ? 1 : 0;
+    
+    Animated.spring(colorAnimValue, {
+      toValue: targetValue,
+      useNativeDriver: false,
+      tension: 80,
+      friction: 12,
+      velocity: 2,
+    }).start();
+
+    // Animate gradient layer opacities for smooth transitions
+    Animated.parallel([
+      Animated.timing(gradientDefaultOpacity, {
+        toValue: targetValue === 0 ? 1 : 0,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(gradientContentOpacity, {
+        toValue: targetValue === 1 ? 1 : 0,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(gradientAIOpacity, {
+        toValue: targetValue === 2 ? 1 : 0,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [hasContent, isAIMessage, colorAnimValue, gradientDefaultOpacity, gradientContentOpacity, gradientAIOpacity]);
+
+  // Interpolated values for smooth animations
+  const animatedBorderColor = colorAnimValue.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [
+      "transparent",
+      "rgba(0, 122, 255, 0.5)",
+      "rgba(20, 184, 166, 0.5)",
+    ],
+  });
+
+  const animatedShadowOpacity = colorAnimValue.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [0.1, 0.3, 0.3],
+  });
+
+  const inputContainerShadowColor = useMemo(() => {
+    if (isAIMessage) return "#14B8A6";
+    if (hasContent) return "#007AFF";
+    return "#000";
+  }, [isAIMessage, hasContent]);
+  
+  const inputTextColor = useMemo(() => 
+    isAIMessage ? "#14B8A6" : colors.text,
+    [isAIMessage, colors.text]
+  );
+  
+  const inputFontWeight = useMemo(() => 
+    isAIMessage ? "600" as const : "400" as const,
+    [isAIMessage]
+  );
+
+  // Refs
   const flatListRef = useRef<FlashList<MessageListItem>>(null);
-  const inputRef = useRef<TextInput>(null);
+  const isAtBottomRef = useRef(true); // Track if user is at bottom of list
+  // inputRef replaced by textInputRef above
 
   // Fetch conversation details if we have an ID
   const { data: conversationData } = useQuery({
     queryKey: personalChatsKeys.conversation(conversationId || ""),
     queryFn: async () => {
-      if (!conversationId) return null;
-      const response = await api.get<{ success: boolean; conversation: PersonalConversation & { messages: PersonalMessage[] } }>(
-        `/api/personal-chats/conversations/${conversationId}`
+      if (!conversationId || !user?.id) return null;
+      const response = await api.get<PersonalConversation & { messages: PersonalMessage[] }>(
+        `/api/personal-chats/${conversationId}?userId=${user.id}`
       );
-      return response.conversation;
+      return response;
     },
-    enabled: !!conversationId,
+    enabled: !!conversationId && !!user?.id,
   });
 
   // Get messages from conversation data
@@ -274,7 +356,7 @@ export default function PersonalChatScreen() {
 
       if (!activeConversationId) {
         const createResponse = await api.post<{ success: boolean; conversation: PersonalConversation }>(
-          "/api/personal-chats/conversations",
+          "/api/personal-chats",
           {
             userId: user?.id,
             aiFriendId: selectedAgent?.id,
@@ -293,11 +375,10 @@ export default function PersonalChatScreen() {
         success: boolean;
         userMessage: PersonalMessage;
         aiMessage: PersonalMessage;
-      }>(`/api/personal-chats/conversations/${activeConversationId}/messages`, {
+      }>(`/api/personal-chats/${activeConversationId}/messages`, {
+        userId: user?.id,
         content,
-        attachedImageUrls: images.length > 0 ? images : undefined,
-        enableWebSearch: true,
-        enableImageGeneration: true,
+        imageUrl: images.length > 0 ? images[0] : undefined, // Backend expects single image
       });
 
       return response;
@@ -321,6 +402,12 @@ export default function PersonalChatScreen() {
     },
   });
 
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback((animated = true) => {
+    flatListRef.current?.scrollToEnd({ animated });
+    isAtBottomRef.current = true;
+  }, []);
+
   // Handle send message
   const handleSend = useCallback(() => {
     const trimmedText = inputText.trim();
@@ -328,6 +415,9 @@ export default function PersonalChatScreen() {
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Keyboard.dismiss();
+
+    // Scroll to bottom when sending to see the response
+    isAtBottomRef.current = true;
 
     sendMessageMutation.mutate({
       content: trimmedText,
@@ -468,11 +558,6 @@ export default function PersonalChatScreen() {
   }, []);
 
   // Handle opening attachments menu
-  const handleOpenAttachments = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Keyboard.dismiss();
-    setShowAttachmentsMenu(true);
-  }, []);
 
   // Handle web search action
   const handleWebSearch = useCallback(() => {
@@ -482,7 +567,7 @@ export default function PersonalChatScreen() {
     } else {
       setInputText("/search ");
     }
-    inputRef.current?.focus();
+    textInputRef.current?.focus();
   }, [inputText]);
 
   // Handle new conversation from drawer
@@ -490,7 +575,7 @@ export default function PersonalChatScreen() {
     setConversationId(null);
     setInputText("");
     setAttachedImages([]);
-    inputRef.current?.focus();
+    textInputRef.current?.focus();
   }, []);
 
   // Format date for dividers
@@ -535,7 +620,7 @@ export default function PersonalChatScreen() {
       // User message - right-aligned bubble
       if (isUser) {
         return (
-          <Animated.View
+          <Reanimated.View
             entering={FadeInUp.duration(200).springify()}
             style={styles.userMessageContainer}
           >
@@ -566,13 +651,13 @@ export default function PersonalChatScreen() {
                 minute: "2-digit",
               })}
             </Text>
-          </Animated.View>
+          </Reanimated.View>
         );
       }
 
       // AI message - full width, no bubble
       return (
-        <Animated.View
+        <Reanimated.View
           entering={FadeInUp.duration(200).springify()}
           style={styles.aiMessageContainer}
         >
@@ -693,7 +778,7 @@ export default function PersonalChatScreen() {
               minute: "2-digit",
             })}
           </Text>
-        </Animated.View>
+        </Reanimated.View>
       );
     },
     [colors, isDark]
@@ -796,11 +881,22 @@ export default function PersonalChatScreen() {
             contentContainerStyle={{
               paddingHorizontal: 16,
               paddingTop: 8,
-              paddingBottom: 16,
+              paddingBottom: 20, // Extra padding to ensure messages are visible above input
             }}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
+              // Only auto-scroll if user is already at the bottom
+              if (isAtBottomRef.current) {
+                requestAnimationFrame(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                });
+              }
+            }}
+            onScroll={(event) => {
+              // Track if user is at bottom (inverted list, so offsetY near 0 = bottom)
+              const offsetY = event.nativeEvent.contentOffset.y;
+              const isNowAtBottom = offsetY < 50;
+              isAtBottomRef.current = isNowAtBottom;
             }}
             ListFooterComponent={
               streaming.isStreaming ? (
@@ -818,13 +914,12 @@ export default function PersonalChatScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
-        style={styles.inputWrapper}
       >
         <View
           style={[
             styles.inputContainer,
             {
-              paddingBottom: insets.bottom + 8,
+              paddingBottom: Platform.OS === "ios" ? insets.bottom : 8,
               backgroundColor: Platform.OS === "ios" ? "transparent" : colors.background,
             },
           ]}
@@ -847,7 +942,7 @@ export default function PersonalChatScreen() {
 
           {/* Attached images preview */}
           {attachedImages.length > 0 && (
-            <Animated.View entering={FadeIn.duration(200)} style={styles.attachedImagesContainer}>
+            <Reanimated.View entering={FadeIn.duration(200)} style={styles.attachedImagesContainer}>
               {attachedImages.map((uri, index) => (
                 <View key={index} style={styles.attachedImageWrapper}>
                   <Image source={{ uri }} style={styles.attachedImage} contentFit="cover" />
@@ -859,95 +954,285 @@ export default function PersonalChatScreen() {
                   </Pressable>
                 </View>
               ))}
-            </Animated.View>
+            </Reanimated.View>
           )}
 
-          <View style={styles.inputRow}>
-            {/* Plus button to open attachments menu - styled like group chat */}
-            <Pressable
-              onPress={handleOpenAttachments}
-              style={({ pressed }) => [
-                styles.plusButton,
-                {
-                  backgroundColor: pressed 
-                    ? isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)"
-                    : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
-                },
-              ]}
-            >
-              <Plus size={22} color={colors.text} strokeWidth={2} />
-            </Pressable>
-
-            {/* Text input - styled like group chat */}
-            <View style={styles.inputFieldWrapper}>
-              <BlurView
-                intensity={isDark ? 40 : 30}
-                tint={isDark ? "dark" : "light"}
-                style={styles.inputFieldBlur}
-              >
-                <LinearGradient
-                  colors={
-                    isDark
-                      ? ["rgba(255,255,255,0.08)", "rgba(255,255,255,0.05)"]
-                      : ["rgba(255,255,255,0.95)", "rgba(248,248,252,0.95)"]
-                  }
-                  style={[
-                    styles.inputFieldGradient,
-                    {
-                      borderColor: inputText.trim()
-                        ? isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)"
-                        : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                      shadowColor: inputText.trim() ? "#6366f1" : "transparent",
-                      shadowOpacity: inputText.trim() ? 0.2 : 0,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    ref={inputRef}
-                    style={[styles.textInput, { color: colors.text }]}
-                    placeholder="Message..."
-                    placeholderTextColor={colors.textTertiary}
-                    value={inputText}
-                    onChangeText={setInputText}
-                    multiline
-                    maxLength={4000}
-                    returnKeyType="default"
-                  />
-                </LinearGradient>
-              </BlurView>
-            </View>
-
-            {/* Send/Stop button */}
-            {streaming.isStreaming ? (
-              <Pressable onPress={handleStopGeneration} style={styles.sendButton}>
-                <View style={[styles.sendButtonInner, { backgroundColor: "#ef4444" }]}>
-                  <StopCircle size={18} color="#fff" />
+          <View style={{ width: "100%", paddingHorizontal: 16 }}>
+            <Animated.View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
+                {/* Image Generation Docked Pill */}
+                <View style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, alignItems: 'center', zIndex: 100, paddingBottom: 24 }} pointerEvents="box-none">
+                    <ImageGenerationPill
+                    isVisible={!!generatedImageUrl && !showImageGenerator}
+                    isProcessing={isGeneratingImage}
+                    onPress={() => {
+                        wasKeyboardOpenForImageGen.current = isInputFocused.current;
+                        if (isInputFocused.current) {
+                        Keyboard.dismiss();
+                        }
+                        setShowImageGenerator(true);
+                    }}
+                    style={{ position: 'relative', bottom: 0 }}
+                    />
                 </View>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={handleSend}
-                disabled={!inputText.trim() && attachedImages.length === 0}
-                style={styles.sendButton}
-              >
-                <View
-                  style={[
-                    styles.sendButtonInner,
-                    { 
-                      backgroundColor: inputText.trim() || attachedImages.length > 0 
-                        ? "#6366f1" 
-                        : isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)",
-                    },
-                  ]}
+
+                {/* Attachments Menu Button */}
+                <Pressable
+                    onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    wasKeyboardOpenForAttachments.current = isInputFocused.current;
+                    if (isInputFocused.current) {
+                        Keyboard.dismiss();
+                    }
+                    setShowAttachmentsMenu(true);
+                    }}
+                    disabled={isGeneratingImage}
                 >
-                  <ArrowUp 
-                    size={20} 
-                    color={inputText.trim() || attachedImages.length > 0 ? "#fff" : colors.textSecondary} 
-                    strokeWidth={2.5} 
-                  />
-                </View>
-              </Pressable>
-            )}
+                    <View
+                    style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 19,
+                        overflow: "hidden",
+                        shadowColor: "#007AFF",
+                        shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 6,
+                        elevation: 3,
+                    }}
+                    pointerEvents="box-only"
+                    >
+                    <BlurView
+                        intensity={Platform.OS === "ios" ? 50 : 80}
+                        tint={colors.blurTint}
+                        style={{
+                        flex: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 1.5,
+                        borderColor: isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
+                        borderRadius: 19,
+                        overflow: "hidden",
+                        }}
+                    >
+                        <LinearGradient
+                        colors={isDark ? [
+                            "rgba(255, 255, 255, 0.12)",
+                            "rgba(255, 255, 255, 0.08)",
+                            "rgba(255, 255, 255, 0.04)",
+                        ] : [
+                            "rgba(0, 0, 0, 0.04)",
+                            "rgba(0, 0, 0, 0.02)",
+                            "rgba(0, 0, 0, 0.01)",
+                        ]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                        pointerEvents="none"
+                        />
+                        <Plus size={20} color={colors.text} />
+                    </BlurView>
+                    </View>
+                </Pressable>
+
+                {/* Input Field */}
+                <Animated.View
+                    style={{
+                    flex: 1,
+                    borderRadius: 20,
+                    overflow: "hidden",
+                    shadowColor: inputContainerShadowColor,
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: animatedShadowOpacity,
+                    shadowRadius: 8,
+                    elevation: 3,
+                    }}
+                >
+                    <View
+                    style={{
+                        flex: 1,
+                        borderRadius: 20,
+                        overflow: "hidden",
+                        backgroundColor: isDark ? "#1C1C1E" : "#F2F2F7",
+                    }}
+                    >
+                    <Animated.View
+                        style={{
+                            flex: 1,
+                            borderRadius: 20,
+                            borderWidth: 1.5,
+                            borderColor: animatedBorderColor,
+                            overflow: "hidden",
+                        }}
+                    >
+                        {/* Layered animated gradient backgrounds for smooth color transitions */}
+                        {/* Default state gradient */}
+                        <Animated.View
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            opacity: gradientDefaultOpacity,
+                        }}
+                        pointerEvents="none"
+                        >
+                            <LinearGradient
+                                colors={isDark ? [
+                                    "rgba(255, 255, 255, 0.12)",
+                                    "rgba(255, 255, 255, 0.08)",
+                                    "rgba(255, 255, 255, 0.04)",
+                                ] : [
+                                    "rgba(0, 0, 0, 0.06)",
+                                    "rgba(0, 0, 0, 0.04)",
+                                    "rgba(0, 0, 0, 0.02)",
+                                ]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={{ flex: 1 }}
+                            />
+                        </Animated.View>
+                        
+                        {/* Has content state gradient (blue) */}
+                        <Animated.View
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            opacity: gradientContentOpacity,
+                        }}
+                        pointerEvents="none"
+                        >
+                            <LinearGradient
+                                colors={[
+                                    "rgba(0, 122, 255, 0.20)",
+                                    "rgba(0, 122, 255, 0.12)",
+                                    "rgba(0, 122, 255, 0.05)",
+                                ]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={{ flex: 1 }}
+                            />
+                        </Animated.View>
+                        
+                        {/* AI message state gradient (green) */}
+                        <Animated.View
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            opacity: gradientAIOpacity,
+                        }}
+                        pointerEvents="none"
+                        >
+                            <LinearGradient
+                                colors={[
+                                    "rgba(20, 184, 166, 0.25)",
+                                    "rgba(20, 184, 166, 0.15)",
+                                    "rgba(20, 184, 166, 0.08)",
+                                ]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={{ flex: 1 }}
+                            />
+                        </Animated.View>
+
+                        <TextInput
+                            ref={textInputRef}
+                            value={inputText}
+                            onChangeText={setInputText}
+                            placeholder={attachedImages.length > 0 ? "Add a caption (optional)" : "Message"}
+                            placeholderTextColor={colors.inputPlaceholder}
+                            style={{
+                                flex: 1,
+                                paddingHorizontal: 14,
+                                paddingVertical: 10,
+                                fontSize: 16,
+                                lineHeight: 20,
+                                color: inputTextColor,
+                                fontWeight: inputFontWeight,
+                                textAlignVertical: "top",
+                                maxHeight: MAX_INPUT_HEIGHT,
+                            }}
+                            multiline={true}
+                            scrollEnabled={true}
+                            maxLength={4000}
+                            onSubmitEditing={() => handleSend()}
+                            blurOnSubmit={false}
+                            keyboardType="default"
+                            keyboardAppearance={isDark ? "dark" : "light"}
+                            returnKeyType="default"
+                            enablesReturnKeyAutomatically={false}
+                            onFocus={() => {
+                                isInputFocused.current = true;
+                            }}
+                            onBlur={() => {
+                                isInputFocused.current = false;
+                            }}
+                            showSoftInputOnFocus={true}
+                            caretHidden={false}
+                        />
+                    </Animated.View>
+                    </View>
+                </Animated.View>
+
+                {/* Send Button */}
+                <Pressable
+                    onPress={streaming.isStreaming ? handleStopGeneration : handleSend}
+                    disabled={!streaming.isStreaming && !inputText.trim() && attachedImages.length === 0}
+                >
+                    <Animated.View
+                    style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 19,
+                        overflow: "hidden",
+                        shadowColor: isAIMessage
+                            ? "#14B8A6"
+                            : hasContent
+                            ? "#007AFF"
+                            : "#007AFF",
+                        shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: animatedShadowOpacity,
+                        shadowRadius: 6,
+                        elevation: 3,
+                    }}
+                    >
+                    <BlurView
+                        intensity={Platform.OS === "ios" ? 50 : 80}
+                        tint={colors.blurTint}
+                        style={{
+                        flex: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 1.5,
+                        borderColor: isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
+                        backgroundColor: streaming.isStreaming 
+                            ? "#ef4444" 
+                            : isAIMessage
+                            ? "#14B8A6"
+                            : hasContent
+                            ? "#007AFF"
+                            : "transparent",
+                        }}
+                    >
+                        {streaming.isStreaming ? (
+                            <StopCircle size={20} color="#fff" fill="#fff" />
+                        ) : (
+                            <ArrowUp 
+                                size={20} 
+                                color={hasContent ? "#fff" : colors.text} 
+                                strokeWidth={2.5} 
+                            />
+                        )}
+                    </BlurView>
+                    </Animated.View>
+                </Pressable>
+            </Animated.View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -1160,17 +1445,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
-  inputWrapper: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
   inputContainer: {
     paddingHorizontal: 12,
     paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(128,128,128,0.2)",
   },
   attachedImagesContainer: {
     flexDirection: "row",

@@ -175,30 +175,14 @@ function ConversationItem({
               </View>
             )}
             
-            {/* VibeChat Icon */}
-            <View style={[
-              styles.conversationIcon,
-              { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)" }
-            ]}>
-              <Image
-                source={require("../../../assets/vibechat icon main.png")}
-                style={{ width: 24, height: 24, borderRadius: 12 }}
-                contentFit="cover"
-              />
-            </View>
-            
-            {/* Content */}
+            {/* Content - Single line title only */}
             <View style={styles.conversationContent}>
               <Text
                 style={[styles.conversationTitle, { color: colors.text }]}
                 numberOfLines={1}
+                ellipsizeMode="tail"
               >
                 {conversation.title}
-              </Text>
-              <Text
-                style={[styles.conversationDate, { color: colors.textSecondary }]}
-              >
-                {formatDate(conversation.lastMessageAt || conversation.createdAt)}
               </Text>
             </View>
           </Pressable>
@@ -445,6 +429,33 @@ export default function ConversationHistoryDrawer({
               </Animated.View>
             )}
             
+            {/* Create New Chat Button */}
+            <View style={styles.createChatButtonContainer}>
+              <Pressable
+                onPress={handleNewConversation}
+                style={({ pressed }) => [
+                  styles.createChatButton,
+                  {
+                    backgroundColor: pressed
+                      ? isDark ? "rgba(79,195,247,0.1)" : "rgba(79,195,247,0.05)"
+                      : "transparent",
+                  }
+                ]}
+              >
+                <View style={styles.createChatButtonInner}>
+                  <Plus size={20} color="#4FC3F7" strokeWidth={2.5} />
+                  <Text style={styles.createChatButtonText}>
+                    Create New Chat
+                  </Text>
+                </View>
+              </Pressable>
+              {/* Divider */}
+              <View style={[
+                styles.divider,
+                { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }
+              ]} />
+            </View>
+            
             {/* Conversations List */}
             <GestureHandlerRootView style={styles.listContainer}>
               {conversations.length === 0 ? (
@@ -605,14 +616,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  createChatButtonContainer: {
+    paddingHorizontal: 0,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  createChatButton: {
+    paddingVertical: 18,
+    paddingRight: 16,
+    minHeight: 64,
+  },
+  createChatButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 25, // ✅ Moving the inner content to align with the text below
+  },
+  createChatButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4FC3F7",
+    marginLeft: 12,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    width: "100%",
+    marginTop: 14,
+  },
   listContainer: {
     flex: 1,
   },
   listContent: {
-    paddingVertical: 8,
+    paddingVertical: 20,
   },
   conversationItemContainer: {
     position: "relative",
+    marginBottom: 12, // ✅ Increased margin between items
   },
   deleteButtonContainer: {
     position: "absolute",
@@ -637,12 +675,14 @@ const styles = StyleSheet.create({
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingVertical: 15, // ✅ Increased padding even more to ensure change is visible
+    paddingLeft: 24,
+    paddingRight: 16,
+    minHeight: 76, // ✅ Increased minHeight even more to ensure change is visible
   },
   checkboxContainer: {
     marginRight: 4,
+    marginLeft: 8,
   },
   checkbox: {
     width: 22,
@@ -656,23 +696,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#6366f1",
     borderColor: "#6366f1",
   },
-  conversationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   conversationContent: {
     flex: 1,
+    justifyContent: "center",
+    marginLeft: 25,
   },
   conversationTitle: {
     fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  conversationDate: {
-    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 20,
   },
   emptyState: {
     flex: 1,

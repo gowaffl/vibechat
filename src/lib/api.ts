@@ -192,7 +192,8 @@ const api = {
       path.includes('/catchup') ||
       path.includes('/reactor/remix') ||
       path.includes('/reactor/meme') ||
-      path.includes('/reactor/caption');
+      path.includes('/reactor/caption') ||
+      (path.includes('/personal-chats/') && path.includes('/messages')); // Personal chat messages use AI
     
     // Increase timeout to 5 minutes (300000ms) for AI operations to match backend processing time
     const customTimeout = timeout || (isAIOperation ? 300000 : 30000); 

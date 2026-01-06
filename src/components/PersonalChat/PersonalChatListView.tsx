@@ -22,8 +22,10 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { usePersonalConversations, useDeletePersonalConversation, useCreatePersonalConversation } from "@/hooks/usePersonalChats";
 import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { CustomRefreshControl } from "@/components/CustomRefreshControl";
 import type { PersonalConversation } from "@/shared/contracts";
 import type { RootStackScreenProps } from "@/navigation/types";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Conversation item component
 const ConversationItem = React.memo(({
@@ -208,10 +210,24 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<RootStackScreenProps<"ChatList">["navigation"]>();
+  const insets = useSafeAreaInsets();
   
-  const { data: conversations, isLoading, refetch, isRefetching } = usePersonalConversations();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const { data: conversations, isLoading, refetch } = usePersonalConversations();
   const deleteConversation = useDeletePersonalConversation();
   const createConversation = useCreatePersonalConversation();
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 500);
+    }
+  }, [refetch]);
 
   const handleSelectConversation = useCallback((conversation: PersonalConversation) => {
     if (onSelectConversation) {
@@ -251,6 +267,12 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
 
   return (
     <View style={styles.container}>
+      <CustomRefreshControl 
+        refreshing={isRefreshing} 
+        message="Refreshing conversations" 
+        topOffset={insets.top + 80}
+      />
+      
       {/* Conversations List */}
       {conversations && conversations.length > 0 ? (
         <FlashList
@@ -269,9 +291,10 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={refetch}
-              tintColor={colors.primary}
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="transparent"
+              colors={["transparent"]}
             />
           }
         />

@@ -158,6 +158,136 @@ personalChats.post("/", zValidator("json", createPersonalConversationRequestSche
   }
 });
 
+// ============================================================================
+// AGENT ENDPOINTS (Must be before /:conversationId to avoid route conflicts)
+// ============================================================================
+
+// GET /api/personal-chats/top-agents - Get user's top 3 most used agents
+personalChats.get("/top-agents", zValidator("query", getTopAgentsRequestSchema), async (c) => {
+  const { userId, limit } = c.req.valid("query");
+  const agentLimit = limit || 3;
+
+  try {
+    // Get top agents by usage count
+    const { data: topUsage, error } = await db
+      .from("user_agent_usage")
+      .select(`
+        *,
+        ai_friend:aiFriendId (
+          id,
+          name,
+          personality,
+          tone,
+          color,
+          chatId,
+          engagementMode,
+          engagementPercent,
+          sortOrder,
+          createdAt,
+          updatedAt
+        )
+      `)
+      .eq("userId", userId)
+      .order("usageCount", { ascending: false })
+      .limit(agentLimit);
+
+    if (error) {
+      console.error("[PersonalChats] Error fetching top agents:", error);
+      return c.json({ error: "Failed to fetch top agents" }, 500);
+    }
+
+    return c.json(
+      topUsage
+        .filter((u) => u.ai_friend) // Only return if AI friend still exists
+        .map((u) => ({
+          id: u.id,
+          userId: u.userId,
+          aiFriendId: u.aiFriendId,
+          usageCount: u.usageCount,
+          lastUsedAt: formatTimestamp(u.lastUsedAt),
+          createdAt: formatTimestamp(u.createdAt),
+          aiFriend: {
+            id: u.ai_friend.id,
+            name: u.ai_friend.name,
+            personality: u.ai_friend.personality,
+            tone: u.ai_friend.tone,
+            color: u.ai_friend.color,
+            chatId: u.ai_friend.chatId,
+            engagementMode: u.ai_friend.engagementMode,
+            engagementPercent: u.ai_friend.engagementPercent,
+            sortOrder: u.ai_friend.sortOrder,
+            createdAt: formatTimestamp(u.ai_friend.createdAt),
+            updatedAt: formatTimestamp(u.ai_friend.updatedAt),
+          },
+        }))
+    );
+  } catch (error) {
+    console.error("[PersonalChats] Error fetching top agents:", error);
+    return c.json({ error: "Failed to fetch top agents" }, 500);
+  }
+});
+
+// GET /api/personal-chats/all-agents - Get all agents available to user (from all their chats)
+personalChats.get("/all-agents", zValidator("query", getAllUserAgentsRequestSchema), async (c) => {
+  const { userId } = c.req.valid("query");
+
+  try {
+    // Get all chats user is a member of
+    const { data: memberships, error: memberError } = await db
+      .from("chat_member")
+      .select("chatId, chat:chatId(name)")
+      .eq("userId", userId);
+
+    if (memberError) {
+      console.error("[PersonalChats] Error fetching user memberships:", memberError);
+      return c.json({ error: "Failed to fetch user chats" }, 500);
+    }
+
+    if (!memberships || memberships.length === 0) {
+      return c.json([]);
+    }
+
+    const chatIds = memberships.map((m) => m.chatId);
+    const chatNames = new Map(memberships.map((m) => [m.chatId, (m.chat as any)?.name || "Unknown Chat"]));
+
+    // Get all AI friends from these chats
+    const { data: aiFriends, error: friendsError } = await db
+      .from("ai_friend")
+      .select("*")
+      .in("chatId", chatIds)
+      .order("name", { ascending: true });
+
+    if (friendsError) {
+      console.error("[PersonalChats] Error fetching AI friends:", friendsError);
+      return c.json({ error: "Failed to fetch AI friends" }, 500);
+    }
+
+    return c.json(
+      aiFriends.map((f) => ({
+        id: f.id,
+        chatId: f.chatId,
+        name: f.name,
+        personality: f.personality,
+        tone: f.tone,
+        engagementMode: f.engagementMode,
+        engagementPercent: f.engagementPercent,
+        color: f.color,
+        sortOrder: f.sortOrder,
+        createdAt: formatTimestamp(f.createdAt),
+        updatedAt: formatTimestamp(f.updatedAt),
+        chatName: chatNames.get(f.chatId) || "Unknown Chat",
+      }))
+    );
+  } catch (error) {
+    console.error("[PersonalChats] Error fetching all agents:", error);
+    return c.json({ error: "Failed to fetch agents" }, 500);
+  }
+});
+
+// ============================================================================
+// CONVERSATION DETAIL ENDPOINTS
+// ============================================================================
+
 // GET /api/personal-chats/:conversationId - Get a specific conversation with messages
 personalChats.get("/:conversationId", zValidator("query", getPersonalConversationRequestSchema), async (c) => {
   const conversationId = c.req.param("conversationId");
@@ -813,128 +943,6 @@ personalChats.post("/track-agent-usage", zValidator("json", trackAgentUsageReque
   } catch (error) {
     console.error("[PersonalChats] Error tracking agent usage:", error);
     return c.json({ error: "Failed to track agent usage" }, 500);
-  }
-});
-
-// GET /api/personal-chats/top-agents - Get user's top 3 most used agents
-personalChats.get("/top-agents", zValidator("query", getTopAgentsRequestSchema), async (c) => {
-  const { userId, limit } = c.req.valid("query");
-  const agentLimit = limit || 3;
-
-  try {
-    // Get top agents by usage count
-    const { data: topUsage, error } = await db
-      .from("user_agent_usage")
-      .select(`
-        *,
-        ai_friend:aiFriendId (
-          id,
-          name,
-          personality,
-          tone,
-          color,
-          chatId,
-          engagementMode,
-          engagementPercent,
-          sortOrder,
-          createdAt,
-          updatedAt
-        )
-      `)
-      .eq("userId", userId)
-      .order("usageCount", { ascending: false })
-      .limit(agentLimit);
-
-    if (error) {
-      console.error("[PersonalChats] Error fetching top agents:", error);
-      return c.json({ error: "Failed to fetch top agents" }, 500);
-    }
-
-    return c.json(
-      topUsage
-        .filter((u) => u.ai_friend) // Only return if AI friend still exists
-        .map((u) => ({
-          id: u.id,
-          userId: u.userId,
-          aiFriendId: u.aiFriendId,
-          usageCount: u.usageCount,
-          lastUsedAt: formatTimestamp(u.lastUsedAt),
-          createdAt: formatTimestamp(u.createdAt),
-          aiFriend: {
-            id: u.ai_friend.id,
-            name: u.ai_friend.name,
-            personality: u.ai_friend.personality,
-            tone: u.ai_friend.tone,
-            color: u.ai_friend.color,
-            chatId: u.ai_friend.chatId,
-            engagementMode: u.ai_friend.engagementMode,
-            engagementPercent: u.ai_friend.engagementPercent,
-            sortOrder: u.ai_friend.sortOrder,
-            createdAt: formatTimestamp(u.ai_friend.createdAt),
-            updatedAt: formatTimestamp(u.ai_friend.updatedAt),
-          },
-        }))
-    );
-  } catch (error) {
-    console.error("[PersonalChats] Error fetching top agents:", error);
-    return c.json({ error: "Failed to fetch top agents" }, 500);
-  }
-});
-
-// GET /api/personal-chats/all-agents - Get all agents available to user (from all their chats)
-personalChats.get("/all-agents", zValidator("query", getAllUserAgentsRequestSchema), async (c) => {
-  const { userId } = c.req.valid("query");
-
-  try {
-    // Get all chats user is a member of
-    const { data: memberships, error: memberError } = await db
-      .from("chat_member")
-      .select("chatId, chat:chatId(name)")
-      .eq("userId", userId);
-
-    if (memberError) {
-      console.error("[PersonalChats] Error fetching user memberships:", memberError);
-      return c.json({ error: "Failed to fetch user chats" }, 500);
-    }
-
-    if (!memberships || memberships.length === 0) {
-      return c.json([]);
-    }
-
-    const chatIds = memberships.map((m) => m.chatId);
-    const chatNames = new Map(memberships.map((m) => [m.chatId, (m.chat as any)?.name || "Unknown Chat"]));
-
-    // Get all AI friends from these chats
-    const { data: aiFriends, error: friendsError } = await db
-      .from("ai_friend")
-      .select("*")
-      .in("chatId", chatIds)
-      .order("name", { ascending: true });
-
-    if (friendsError) {
-      console.error("[PersonalChats] Error fetching AI friends:", friendsError);
-      return c.json({ error: "Failed to fetch AI friends" }, 500);
-    }
-
-    return c.json(
-      aiFriends.map((f) => ({
-        id: f.id,
-        chatId: f.chatId,
-        name: f.name,
-        personality: f.personality,
-        tone: f.tone,
-        engagementMode: f.engagementMode,
-        engagementPercent: f.engagementPercent,
-        color: f.color,
-        sortOrder: f.sortOrder,
-        createdAt: formatTimestamp(f.createdAt),
-        updatedAt: formatTimestamp(f.updatedAt),
-        chatName: chatNames.get(f.chatId) || "Unknown Chat",
-      }))
-    );
-  } catch (error) {
-    console.error("[PersonalChats] Error fetching all agents:", error);
-    return c.json({ error: "Failed to fetch agents" }, 500);
   }
 });
 

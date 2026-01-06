@@ -20,7 +20,7 @@ export async function generateChatTitle(firstMessage: string): Promise<string | 
       : firstMessage;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-nano",
       messages: [
         {
           role: "system",
