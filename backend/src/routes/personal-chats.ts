@@ -709,9 +709,17 @@ If the user asks you to generate or create an image, use the image generation to
     };
 
     // Generate title from first message if still default
+    console.log("[PersonalChats] Title generation check:", {
+      currentTitle: conversation.title,
+      chatHistoryLength: chatHistory.length,
+      shouldGenerate: conversation.title === "New Conversation" && chatHistory.length === 0
+    });
+
     if (conversation.title === "New Conversation" && chatHistory.length === 0) {
+      console.log("[PersonalChats] Generating title for first message:", content.substring(0, 100));
       try {
         const generatedTitle = await generateChatTitle(content);
+        console.log("[PersonalChats] Generated title:", generatedTitle);
         if (generatedTitle) {
           updateData.title = generatedTitle;
         }
@@ -722,6 +730,7 @@ If the user asks you to generate or create an image, use the image generation to
       }
     }
 
+    console.log("[PersonalChats] Updating conversation with data:", updateData);
     await db
       .from("personal_conversation")
       .update(updateData)

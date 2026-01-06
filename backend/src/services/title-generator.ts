@@ -13,12 +13,15 @@ import { openai } from "../env";
  * @returns A short title (max 40 characters) or null on error
  */
 export async function generateChatTitle(firstMessage: string): Promise<string | null> {
+  console.log("[TitleGenerator] Starting title generation for message:", firstMessage.substring(0, 100));
+  
   try {
     // Truncate long messages for efficiency
     const truncatedMessage = firstMessage.length > 500 
       ? firstMessage.substring(0, 500) + "..." 
       : firstMessage;
 
+    console.log("[TitleGenerator] Calling gpt-5-nano...");
     const response = await openai.chat.completions.create({
       model: "gpt-5-nano",
       messages: [
@@ -50,16 +53,21 @@ Examples:
     });
 
     const title = response.choices[0]?.message?.content?.trim();
+    console.log("[TitleGenerator] Received title from gpt-5-nano:", title);
     
     if (!title) {
+      console.log("[TitleGenerator] No title generated, returning null");
       return null;
     }
 
     // Ensure title doesn't exceed 40 characters
     if (title.length > 40) {
-      return title.substring(0, 37) + "...";
+      const truncated = title.substring(0, 37) + "...";
+      console.log("[TitleGenerator] Truncated title to:", truncated);
+      return truncated;
     }
 
+    console.log("[TitleGenerator] Returning title:", title);
     return title;
   } catch (error) {
     console.error("[TitleGenerator] Error generating title:", error);
