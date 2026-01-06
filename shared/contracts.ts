@@ -1729,7 +1729,7 @@ export type GeneratePersonalChatImageResponse = z.infer<typeof generatePersonalC
 // GET /api/personal-chats/top-agents - Get user's top 3 most used agents
 export const getTopAgentsRequestSchema = z.object({
   userId: z.string(),
-  limit: z.number().min(1).max(10).default(3).optional(),
+  limit: z.coerce.number().min(1).max(10).default(3).optional(),
 });
 export type GetTopAgentsRequest = z.infer<typeof getTopAgentsRequestSchema>;
 export const getTopAgentsResponseSchema = z.array(userAgentUsageSchema.extend({

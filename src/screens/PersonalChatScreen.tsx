@@ -184,6 +184,7 @@ function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; color
   const pulseOpacity = useSharedValue(0.6);
   
   useEffect(() => {
+    // Start animation
     pulseOpacity.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 800, easing: Easing.ease }),
@@ -192,11 +193,19 @@ function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; color
       -1,
       false
     );
-  }, []);
+    
+    // Cleanup on unmount - cancel animation
+    return () => {
+      pulseOpacity.value = 0.6;
+    };
+  }, [pulseOpacity]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: pulseOpacity.value,
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      opacity: pulseOpacity.value,
+    };
+  });
 
   return (
     <Reanimated.View

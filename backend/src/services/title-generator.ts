@@ -45,7 +45,7 @@ Examples:
           content: truncatedMessage,
         },
       ],
-      max_tokens: 50,
+      max_completion_tokens: 500, // gpt-5-nano uses significant tokens for reasoning
       temperature: 0.7,
     });
 

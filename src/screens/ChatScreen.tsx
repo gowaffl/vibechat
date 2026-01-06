@@ -214,11 +214,8 @@ const ChatHeader = ({
   
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
 
-  const groupImageUrl = chatImage
-    ? (chatImage.startsWith('http')
-        ? chatImage
-        : `${BACKEND_URL}${chatImage}`)
-    : null;
+  // Use getFullImageUrl helper to handle signed URLs, public URLs, and relative paths
+  const groupImageUrl = getFullImageUrl(chatImage);
 
   return (
     <View
@@ -334,6 +331,9 @@ const ChatHeader = ({
                   marginBottom: 2,
                 }}
                 contentFit="cover"
+                onError={(error) => {
+                  console.log('[ChatHeader] Image failed to load:', groupImageUrl, error);
+                }}
               />
             ) : (
               <View
