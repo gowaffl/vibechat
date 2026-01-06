@@ -8,7 +8,8 @@
  * - Conversation history drawer (swipe from left)
  * - Image attachments and generation
  * - Web search capability
- * - Streaming AI responses
+ * - Streaming AI responses with thinking/tool call indicators
+ *   (Uses XMLHttpRequest with onprogress for React Native SSE support)
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
@@ -29,7 +30,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import Reanimated, {
   FadeIn,
@@ -73,7 +74,7 @@ import { AgentSelectorDropdown, ConversationHistoryDrawer, PersonalAttachmentsMe
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
-import { personalChatsKeys } from "@/hooks/usePersonalChats";
+import { personalChatsKeys, useAllUserAgents } from "@/hooks/usePersonalChats";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { AIFriend, PersonalConversation, PersonalMessage, PersonalMessageMetadata } from "@/shared/contracts";
 
@@ -298,6 +299,9 @@ export default function PersonalChatScreen() {
   // State
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId || null);
   const [selectedAgent, setSelectedAgent] = useState<AIFriend | null>(null);
+
+  // Fetch all agents to resolve initialAgentId if provided
+  const { data: allAgents = [] } = useAllUserAgents();
   const [inputText, setInputText] = useState("");
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -315,7 +319,6 @@ export default function PersonalChatScreen() {
     currentToolCall: null,
     reasoningEffort: null,
   });
-  const abortControllerRef = useRef<AbortController | null>(null);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
 
   // Refs
@@ -417,14 +420,25 @@ export default function PersonalChatScreen() {
   // Get messages from conversation data
   const messages = conversationData?.messages ?? [];
 
+  // Handle initial agent ID from route params (for new chats started with a specific agent)
+  useEffect(() => {
+    if (initialAgentId && allAgents.length > 0 && !conversationId) {
+      const agent = allAgents.find(a => a.id === initialAgentId);
+      if (agent) {
+        setSelectedAgent(agent);
+      }
+    }
+  }, [initialAgentId, allAgents, conversationId]);
+
   // Load agent from conversation data (ai_friend is already included in the response)
+  // Always sync the selected agent with the conversation's agent when conversation loads
   useEffect(() => {
     // The conversation data includes the ai_friend object, so use that directly
     const aiFriendFromConversation = (conversationData as any)?.ai_friend;
-    if (aiFriendFromConversation && !selectedAgent) {
+    if (aiFriendFromConversation) {
       setSelectedAgent(aiFriendFromConversation);
     }
-  }, [conversationData, selectedAgent]);
+  }, [conversationData]);
 
   // Create messages list with date dividers
   const messagesWithDividers = useMemo(() => {
@@ -454,28 +468,28 @@ export default function PersonalChatScreen() {
     return result;
   }, [messages]);
 
-  // Send message with SSE streaming
-  const sendStreamingMessage = useCallback(async (content: string, images: string[]) => {
+  // Reference to XMLHttpRequest for abort functionality
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
+
+  // Send message with SSE streaming using XMLHttpRequest
+  // React Native's fetch doesn't support streaming, so we use XHR with onprogress
+  const sendMessage = useCallback(async (content: string, images: string[]) => {
     // Initialize streaming state
     setStreaming({
       isStreaming: true,
       content: "",
       messageId: null,
-      isThinking: false,
+      isThinking: true, // Start with thinking indicator
       thinkingContent: "",
       currentToolCall: null,
       reasoningEffort: null,
     });
 
-    // Create abort controller for cancellation
-    abortControllerRef.current = new AbortController();
-    
     // Track the active conversation ID (may be created during request)
     let activeConversationId = conversationId;
 
     try {
       // If no conversation exists, create one first
-
       if (!activeConversationId) {
         const createResponse = await api.post<{ success: boolean; conversation: PersonalConversation }>(
           "/api/personal-chats",
@@ -492,143 +506,135 @@ export default function PersonalChatScreen() {
         }
       }
 
-      // Use fetch with streaming for SSE
-      const response = await fetch(
-        `${BACKEND_URL}/api/personal-chats/${activeConversationId}/messages/stream`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-          },
-          body: JSON.stringify({
-            userId: user?.id,
-            content,
-            imageUrl: images.length > 0 ? images[0] : undefined,
-            aiFriendId: selectedAgent?.id, // Send the selected agent for persona
-          }),
-          signal: abortControllerRef.current.signal,
-        }
-      );
+      console.log("[PersonalChat] Starting SSE stream to:", activeConversationId);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No reader available");
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
+      // Use XMLHttpRequest for streaming (React Native fetch doesn't support streaming)
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhrRef.current = xhr;
         
-        if (done) break;
-        
-        buffer += decoder.decode(value, { stream: true });
-        
-        // Process SSE events - SSE format is:
-        // event: eventType\n
-        // data: {"json": "data"}\n\n
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
+        let receivedLength = 0;
+        let buffer = "";
         let currentEventType = "";
-        
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          
-          if (trimmedLine.startsWith("event: ")) {
-            // Store the event type for the next data line
-            currentEventType = trimmedLine.slice(7);
-            continue;
-          }
-          
-          if (trimmedLine.startsWith("data: ")) {
-            const eventData = trimmedLine.slice(6);
+
+        xhr.open("POST", `${BACKEND_URL}/api/personal-chats/${activeConversationId}/messages/stream`, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.setRequestHeader("Accept", "text/event-stream");
+
+        // Process SSE chunks as they arrive
+        xhr.onprogress = () => {
+          const newData = xhr.responseText.slice(receivedLength);
+          receivedLength = xhr.responseText.length;
+          buffer += newData;
+
+          // Process complete SSE events
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
             
-            try {
-              const data = JSON.parse(eventData);
-              // Add the event type to the data for handling
-              data._eventType = currentEventType;
-              handleStreamEvent(data, currentEventType);
-            } catch (e) {
-              console.log("[PersonalChat] Parse error:", e, eventData);
+            if (trimmedLine === "") continue;
+            
+            if (trimmedLine.startsWith("event: ")) {
+              currentEventType = trimmedLine.slice(7);
+              continue;
             }
-            // Reset event type after processing
-            currentEventType = "";
+            
+            if (trimmedLine.startsWith("data: ")) {
+              const eventData = trimmedLine.slice(6);
+              
+              try {
+                const data = JSON.parse(eventData);
+                handleSSEEvent(currentEventType, data);
+              } catch (e) {
+                // Ignore parse errors (might be partial data)
+              }
+              currentEventType = "";
+            }
           }
-        }
-      }
-    } catch (error: any) {
-      if (error.name === "AbortError") {
-        console.log("[PersonalChat] Stream aborted by user");
-      } else {
-        console.error("[PersonalChat] Streaming error:", error);
-        Alert.alert("Error", "Failed to send message. Please try again.");
-      }
-      // Only clear streaming state on error (not in finally)
-      setStreaming(prev => ({
-        ...prev,
-        isStreaming: false,
-        isThinking: false,
-        currentToolCall: null,
-      }));
-    }
-    
-    // Cleanup after stream completes (success or error)
-    abortControllerRef.current = null;
-    
-    // Use the active conversation ID we tracked during the request
-    const finalConversationId = activeConversationId;
-    
-    // Invalidate and await refetch before clearing streaming content
-    // This ensures the new message appears before the streaming preview disappears
-    try {
-      if (finalConversationId) {
+        };
+
+        xhr.onload = () => {
+          console.log("[PersonalChat] Stream completed, status:", xhr.status);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`HTTP error: ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => {
+          console.error("[PersonalChat] XHR error");
+          reject(new Error("Network error"));
+        };
+
+        xhr.onabort = () => {
+          console.log("[PersonalChat] Stream aborted by user");
+          resolve();
+        };
+
+        // Send the request
+        xhr.send(JSON.stringify({
+          userId: user?.id,
+          content,
+          imageUrl: images.length > 0 ? images[0] : undefined,
+          aiFriendId: selectedAgent?.id,
+        }));
+      });
+
+      // After stream completes, refetch to ensure data consistency
+      if (activeConversationId) {
         await queryClient.invalidateQueries({ 
-          queryKey: personalChatsKeys.conversation(finalConversationId) 
+          queryKey: personalChatsKeys.conversation(activeConversationId) 
         });
-        // Refetch to ensure we have the latest data
         await queryClient.refetchQueries({ 
-          queryKey: personalChatsKeys.conversation(finalConversationId) 
+          queryKey: personalChatsKeys.conversation(activeConversationId) 
         });
       }
       await queryClient.invalidateQueries({ 
         queryKey: personalChatsKeys.conversations(user?.id || "") 
       });
-    } catch (refetchError) {
-      console.error("[PersonalChat] Error refetching:", refetchError);
+
+      // Scroll to bottom
+      try {
+        requestAnimationFrame(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        });
+      } catch (scrollError) {
+        console.error("[PersonalChat] Scroll error:", scrollError);
+      }
+
+    } catch (error: any) {
+      console.error("[PersonalChat] Streaming error:", error);
+      Alert.alert("Error", "Failed to send message. Please try again.");
+    } finally {
+      // Cleanup
+      xhrRef.current = null;
+      
+      // Clear streaming state
+      setStreaming({
+        isStreaming: false,
+        content: "",
+        messageId: null,
+        isThinking: false,
+        thinkingContent: "",
+        currentToolCall: null,
+        reasoningEffort: null,
+      });
     }
-    
-    // Now clear streaming state after data is loaded
-    setStreaming({
-      isStreaming: false,
-      content: "",
-      messageId: null,
-      isThinking: false,
-      thinkingContent: "",
-      currentToolCall: null,
-      reasoningEffort: null,
-    });
   }, [conversationId, user?.id, selectedAgent?.id, queryClient]);
 
   // Handle individual SSE events
-  const handleStreamEvent = useCallback((data: any, eventType: string) => {
-    // Use the event type from the SSE "event:" line
+  const handleSSEEvent = useCallback((eventType: string, data: any) => {
     switch (eventType) {
       case "connected":
-        // Connection established, stream is ready
-        console.log("[PersonalChat] SSE connection established");
+        console.log("[PersonalChat] SSE connected");
         break;
       case "ping":
-        // Keep-alive ping, ignore
+        // Keep-alive, ignore
         break;
       case "user_message":
-        // User message was saved, can ignore or log
         console.log("[PersonalChat] User message saved:", data.id);
         break;
       case "reasoning_effort":
@@ -638,7 +644,10 @@ export default function PersonalChatScreen() {
         setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
         break;
       case "thinking_delta":
-        setStreaming(prev => ({ ...prev, thinkingContent: prev.thinkingContent + (data.content || "") }));
+        setStreaming(prev => ({ 
+          ...prev, 
+          thinkingContent: prev.thinkingContent + (data.content || "") 
+        }));
         break;
       case "thinking_end":
         setStreaming(prev => ({ ...prev, isThinking: false }));
@@ -659,108 +668,32 @@ export default function PersonalChatScreen() {
         }
         break;
       case "content_delta":
-        setStreaming(prev => ({ ...prev, content: prev.content + (data.content || "") }));
+        setStreaming(prev => ({ 
+          ...prev, 
+          isThinking: false, // Content started, stop thinking
+          content: prev.content + (data.content || "") 
+        }));
         break;
       case "image_generated":
         console.log("[PersonalChat] Image generated:", data.imageId);
         break;
       case "assistant_message":
-        // Final assistant message - mark as complete with the message ID
-        console.log("[PersonalChat] Assistant message received:", data.id);
+        console.log("[PersonalChat] Assistant message saved:", data.id);
         setStreaming(prev => ({ ...prev, messageId: data.id }));
         break;
       case "done":
-        console.log("[PersonalChat] Stream complete, success:", data.success);
+        console.log("[PersonalChat] Stream complete");
         break;
       case "error":
         console.error("[PersonalChat] Server error:", data.error);
         Alert.alert("Error", data.error || "An error occurred");
         break;
       default:
-        // Log unknown event types for debugging
         if (eventType) {
-          console.log("[PersonalChat] Unknown event type:", eventType, data);
+          console.log("[PersonalChat] Unknown event:", eventType, data);
         }
     }
   }, []);
-
-  // Legacy mutation for fallback (non-streaming)
-  const sendMessageMutation = useMutation({
-    mutationFn: async ({ content, images }: { content: string; images: string[] }) => {
-      // If no conversation exists, create one first
-      let activeConversationId = conversationId;
-
-      if (!activeConversationId) {
-        const createResponse = await api.post<{ success: boolean; conversation: PersonalConversation }>(
-          "/api/personal-chats",
-          {
-            userId: user?.id,
-            aiFriendId: selectedAgent?.id,
-          }
-        );
-        if (createResponse.success) {
-          activeConversationId = createResponse.conversation.id;
-          setConversationId(activeConversationId);
-        } else {
-          throw new Error("Failed to create conversation");
-        }
-      }
-
-      // Send the message
-      const response = await api.post<{
-        success: boolean;
-        userMessage: PersonalMessage;
-        aiMessage: PersonalMessage;
-      }>(`/api/personal-chats/${activeConversationId}/messages`, {
-        userId: user?.id,
-        content,
-        imageUrl: images.length > 0 ? images[0] : undefined, // Backend expects single image
-      });
-
-      return response;
-    },
-    onMutate: async ({ content, images }) => {
-      // Optimistic update: Add pending user message
-      setStreaming({ 
-        isStreaming: true, 
-        content: "", 
-        messageId: null,
-        isThinking: false,
-        thinkingContent: "",
-        currentToolCall: null,
-        reasoningEffort: null,
-      });
-    },
-    onSuccess: (data) => {
-      // Invalidate queries to refresh data
-      if (conversationId) {
-        queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversation(conversationId) });
-      }
-      queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversations(user?.id || "") });
-      setStreaming({ 
-        isStreaming: false, 
-        content: "", 
-        messageId: null,
-        isThinking: false,
-        thinkingContent: "",
-        currentToolCall: null,
-        reasoningEffort: null,
-      });
-    },
-    onError: (error) => {
-      console.error("Failed to send message:", error);
-      setStreaming({ 
-        isStreaming: false, 
-        content: "", 
-        messageId: null,
-        isThinking: false,
-        thinkingContent: "",
-        currentToolCall: null,
-        reasoningEffort: null,
-      });
-      Alert.alert("Error", "Failed to send message. Please try again.");
-    },
-  });
 
   // Scroll to bottom helper - wrapped in try/catch to prevent crashes
   const scrollToBottom = useCallback((animated = true) => {
@@ -785,20 +718,20 @@ export default function PersonalChatScreen() {
     // Scroll to bottom when sending to see the response
     isAtBottomRef.current = true;
 
-    // Use streaming by default for better UX
-    sendStreamingMessage(trimmedText, attachedImages);
+    // Send message with streaming
+    sendMessage(trimmedText, attachedImages);
 
     setInputText("");
     setAttachedImages([]);
-  }, [inputText, attachedImages, sendStreamingMessage]);
+  }, [inputText, attachedImages, sendMessage]);
 
   // Handle stop generation
   const handleStopGeneration = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // Cancel streaming via AbortController
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    // Cancel streaming via XMLHttpRequest abort
+    if (xhrRef.current) {
+      xhrRef.current.abort();
+      xhrRef.current = null;
     }
     setStreaming({ 
       isStreaming: false, 
@@ -813,11 +746,24 @@ export default function PersonalChatScreen() {
   }, []);
 
   // Handle agent selection
-  const handleAgentSelect = useCallback((agent: AIFriend | null) => {
+  const handleAgentSelect = useCallback(async (agent: AIFriend | null) => {
     setSelectedAgent(agent);
-    // If we have an existing conversation, we might want to switch agents
-    // For now, just update the selected agent for new messages
-  }, []);
+    
+    // If we have an existing conversation, update it to use the new agent
+    if (conversationId && agent && user?.id) {
+      try {
+        await api.patch(`/api/personal-chats/${conversationId}`, {
+          userId: user.id,
+          aiFriendId: agent.id,
+        });
+        // Invalidate the conversation query to refresh data
+        queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversation(conversationId) });
+      } catch (error) {
+        console.error("Failed to update conversation agent:", error);
+        // Don't show an error to user - this is non-critical
+      }
+    }
+  }, [conversationId, queryClient, user?.id]);
 
   // Handle selecting a conversation from drawer
   const handleSelectConversation = useCallback((conversation: PersonalConversation) => {
