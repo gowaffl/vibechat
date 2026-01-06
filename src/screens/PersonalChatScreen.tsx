@@ -73,6 +73,7 @@ import { AgentSelectorDropdown, ConversationHistoryDrawer, PersonalAttachmentsMe
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
+import { ShimmeringText } from "@/components/ShimmeringText";
 import { personalChatsKeys, useAllUserAgents } from "@/hooks/usePersonalChats";
 import { usePersonalChatStreaming, type StreamingState as StreamingHookState } from "@/hooks/usePersonalChatStreaming";
 import type { RootStackScreenProps } from "@/navigation/types";
@@ -228,23 +229,30 @@ function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; color
     };
   });
 
+  // Brand cyan color for thinking indicator
+  const brandCyan = "#4FC3F7";
+  const bgColor = isDark ? "rgba(79,195,247,0.15)" : "rgba(79,195,247,0.1)";
+
   return (
     <Reanimated.View
       entering={FadeInUp.duration(300)}
       exiting={FadeOut.duration(200)}
-      style={[styles.thinkingContainer, { backgroundColor: isDark ? "rgba(168,85,247,0.15)" : "rgba(168,85,247,0.1)" }]}
+      style={[styles.thinkingContainer, { backgroundColor: bgColor }]}
     >
       <Pressable 
         onPress={() => content && setIsExpanded(!isExpanded)}
         style={styles.thinkingHeader}
       >
         <Reanimated.View style={[{ flexDirection: "row", alignItems: "center", gap: 6 }, animatedStyle]}>
-          <Sparkles size={14} color="#A855F7" />
-          <Text style={[styles.thinkingLabel, { color: "#A855F7" }]}>
-            {content ? "Thinking" : "Thinking..."}
-          </Text>
+          <Sparkles size={14} color={brandCyan} />
+          <ShimmeringText
+            text={content ? "Thinking" : "Thinking..."}
+            style={[styles.thinkingLabel, { color: brandCyan }]}
+            shimmerColor={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(79, 195, 247, 0.8)"}
+            duration={1500}
+          />
           {content && (
-            <Text style={{ color: "#A855F7", fontSize: 12 }}>
+            <Text style={{ color: brandCyan, fontSize: 12 }}>
               {isExpanded ? "▼" : "▶"}
             </Text>
           )}

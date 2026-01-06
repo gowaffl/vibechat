@@ -5,14 +5,12 @@
  * in personal chat conversations. Provides ChatGPT-like experience with
  * thinking indicators, tool call progress, and streamed content.
  * 
- * React Native Compatibility:
- * - Uses text() fallback when ReadableStream is not available
- * - Implements progressive text parsing for SSE events
- * - Handles connection timeouts and errors gracefully
+ * Uses react-native-fetch-sse for proper SSE support in React Native,
+ * as the standard fetch API doesn't support streaming in RN.
  */
 
 import { useCallback, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { fetchSSE, type SSEEvent } from "react-native-fetch-sse";
 import { BACKEND_URL } from "@/config";
 import { authClient } from "@/lib/authClient";
 
@@ -91,87 +89,19 @@ const initialStreamingState: StreamingState = {
   assistantMessageId: null,
 };
 
-// Streaming timeout in milliseconds (2 minutes)
-const STREAMING_TIMEOUT = 120000;
-
-// ============================================================================
-// SSE Parser
-// ============================================================================
-
-interface SSEEvent {
-  event: string;
-  data: string;
-}
-
-interface ParseResult {
-  events: SSEEvent[];
-  remaining: string;
-}
-
-/**
- * Parse SSE events from a text chunk
- * SSE format: event: <event_name>\ndata: <json_data>\n\n
- * Returns both parsed events and any remaining unparsed text
- */
-function parseSSEEvents(text: string): ParseResult {
-  const events: SSEEvent[] = [];
-  
-  // Split by double newline to get complete events
-  const parts = text.split("\n\n");
-  
-  // The last part might be incomplete, so we return it as remaining
-  const remaining = parts.pop() || "";
-  
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    
-    const lines = part.split("\n");
-    let currentEvent = "";
-    let currentData = "";
-    
-    for (const line of lines) {
-      if (line.startsWith("event:")) {
-        currentEvent = line.slice(6).trim();
-      } else if (line.startsWith("data:")) {
-        // Handle data that might have "data: " or "data:"
-        currentData = line.slice(5).trim();
-        // If there's a leading space after "data:", remove it
-        if (line.charAt(5) === " ") {
-          currentData = line.slice(6);
-        }
-      }
-    }
-    
-    if (currentEvent && currentData) {
-      events.push({ event: currentEvent, data: currentData });
-    }
-  }
-  
-  return { events, remaining };
-}
-
-/**
- * Check if ReadableStream is supported (may not be in React Native)
- */
-function supportsReadableStream(): boolean {
-  try {
-    return typeof ReadableStream !== "undefined" && 
-           typeof Response !== "undefined" && 
-           typeof Response.prototype.body !== "undefined";
-  } catch {
-    return false;
-  }
-}
-
 // ============================================================================
 // Hook
 // ============================================================================
 
 export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
   const [streamingState, setStreamingState] = useState<StreamingState>(initialStreamingState);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const isAbortedRef = useRef(false);
   const accumulatedContentRef = useRef<string>("");
   const accumulatedThinkingRef = useRef<string>("");
+  const callbacksRef = useRef(callbacks);
+  
+  // Keep callbacks ref updated
+  callbacksRef.current = callbacks;
 
   /**
    * Reset streaming state
@@ -186,10 +116,8 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
    * Stop streaming and abort the connection
    */
   const stopStreaming = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    console.log("[Streaming] Stopping stream...");
+    isAbortedRef.current = true;
     setStreamingState((prev) => ({
       ...prev,
       isStreaming: false,
@@ -199,179 +127,177 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
   }, []);
 
   /**
-   * Process a single SSE event
+   * Process an SSE event
    */
-  const processEvent = useCallback((event: SSEEvent, callbacksRef: StreamingCallbacks | undefined) => {
-    try {
-      const data = JSON.parse(event.data);
-      
-      switch (event.event) {
-        case "connected":
-          console.log("[Streaming] Connected:", data);
-          break;
+  const processEvent = useCallback((eventType: string, data: any) => {
+    // Skip if aborted
+    if (isAbortedRef.current) return;
+    
+    const cbs = callbacksRef.current;
+    
+    switch (eventType) {
+      case "connected":
+        console.log("[Streaming] Connected:", data);
+        break;
 
-        case "user_message":
-          console.log("[Streaming] User message saved:", data.id);
+      case "user_message":
+        console.log("[Streaming] User message saved:", data.id);
+        setStreamingState((prev) => ({
+          ...prev,
+          userMessageId: data.id,
+        }));
+        cbs?.onUserMessage?.(data as UserMessage);
+        break;
+
+      case "reasoning_effort":
+        console.log("[Streaming] Reasoning effort:", data.effort);
+        setStreamingState((prev) => ({
+          ...prev,
+          reasoningEffort: data.effort,
+        }));
+        break;
+
+      case "thinking_start":
+        console.log("[Streaming] Thinking started");
+        accumulatedThinkingRef.current = "";
+        setStreamingState((prev) => ({
+          ...prev,
+          isThinking: true,
+          thinkingContent: "",
+        }));
+        cbs?.onThinkingStart?.();
+        break;
+
+      case "thinking_delta":
+        if (data.content) {
+          accumulatedThinkingRef.current += data.content;
           setStreamingState((prev) => ({
             ...prev,
-            userMessageId: data.id,
+            thinkingContent: accumulatedThinkingRef.current,
           }));
-          callbacksRef?.onUserMessage?.(data as UserMessage);
-          break;
+          cbs?.onThinkingDelta?.(data.content);
+        }
+        break;
 
-        case "reasoning_effort":
-          console.log("[Streaming] Reasoning effort:", data.effort);
+      case "thinking_end":
+        console.log("[Streaming] Thinking ended");
+        setStreamingState((prev) => ({
+          ...prev,
+          isThinking: false,
+          thinkingContent: data.content || accumulatedThinkingRef.current,
+        }));
+        cbs?.onThinkingEnd?.(data.content || accumulatedThinkingRef.current);
+        break;
+
+      case "tool_call_start":
+        console.log("[Streaming] Tool call started:", data.toolName);
+        setStreamingState((prev) => ({
+          ...prev,
+          currentToolCall: {
+            name: data.toolName,
+            status: "starting",
+          },
+        }));
+        cbs?.onToolCallStart?.(data.toolName, data.toolInput);
+        break;
+
+      case "tool_call_progress":
+        setStreamingState((prev) => ({
+          ...prev,
+          currentToolCall: prev.currentToolCall
+            ? { ...prev.currentToolCall, status: "in_progress" }
+            : null,
+        }));
+        cbs?.onToolCallProgress?.(data);
+        break;
+
+      case "tool_call_end":
+        console.log("[Streaming] Tool call ended:", data.toolName);
+        setStreamingState((prev) => ({
+          ...prev,
+          currentToolCall: prev.currentToolCall
+            ? { ...prev.currentToolCall, status: "completed", sources: data.sources }
+            : null,
+        }));
+        cbs?.onToolCallEnd?.(data.toolName, data.sources);
+        // Clear tool call after a brief delay to show completion
+        setTimeout(() => {
           setStreamingState((prev) => ({
             ...prev,
-            reasoningEffort: data.effort,
-          }));
-          break;
-
-        case "thinking_start":
-          console.log("[Streaming] Thinking started");
-          accumulatedThinkingRef.current = "";
-          setStreamingState((prev) => ({
-            ...prev,
-            isThinking: true,
-            thinkingContent: "",
-          }));
-          callbacksRef?.onThinkingStart?.();
-          break;
-
-        case "thinking_delta":
-          if (data.content) {
-            accumulatedThinkingRef.current += data.content;
-            setStreamingState((prev) => ({
-              ...prev,
-              thinkingContent: accumulatedThinkingRef.current,
-            }));
-            callbacksRef?.onThinkingDelta?.(data.content);
-          }
-          break;
-
-        case "thinking_end":
-          console.log("[Streaming] Thinking ended");
-          setStreamingState((prev) => ({
-            ...prev,
-            isThinking: false,
-            thinkingContent: data.content || accumulatedThinkingRef.current,
-          }));
-          callbacksRef?.onThinkingEnd?.(data.content || accumulatedThinkingRef.current);
-          break;
-
-        case "tool_call_start":
-          console.log("[Streaming] Tool call started:", data.toolName);
-          setStreamingState((prev) => ({
-            ...prev,
-            currentToolCall: {
-              name: data.toolName,
-              status: "starting",
-            },
-          }));
-          callbacksRef?.onToolCallStart?.(data.toolName, data.toolInput);
-          break;
-
-        case "tool_call_progress":
-          setStreamingState((prev) => ({
-            ...prev,
-            currentToolCall: prev.currentToolCall
-              ? { ...prev.currentToolCall, status: "in_progress" }
-              : null,
-          }));
-          callbacksRef?.onToolCallProgress?.(data);
-          break;
-
-        case "tool_call_end":
-          console.log("[Streaming] Tool call ended:", data.toolName);
-          setStreamingState((prev) => ({
-            ...prev,
-            currentToolCall: prev.currentToolCall
-              ? { ...prev.currentToolCall, status: "completed", sources: data.sources }
-              : null,
-          }));
-          callbacksRef?.onToolCallEnd?.(data.toolName, data.sources);
-          // Clear tool call after a brief delay to show completion
-          setTimeout(() => {
-            setStreamingState((prev) => ({
-              ...prev,
-              currentToolCall: null,
-            }));
-          }, 500);
-          break;
-
-        case "content_delta":
-          if (data.content) {
-            accumulatedContentRef.current += data.content;
-            setStreamingState((prev) => ({
-              ...prev,
-              content: accumulatedContentRef.current,
-            }));
-            callbacksRef?.onContentDelta?.(data.content, accumulatedContentRef.current);
-          }
-          break;
-
-        case "content_end":
-          console.log("[Streaming] Content ended, length:", data.content?.length);
-          setStreamingState((prev) => ({
-            ...prev,
-            content: data.content || accumulatedContentRef.current,
-          }));
-          callbacksRef?.onContentEnd?.(data.content || accumulatedContentRef.current);
-          break;
-
-        case "image_generated":
-          console.log("[Streaming] Image generated:", data.imageId);
-          callbacksRef?.onImageGenerated?.(data.imageId);
-          break;
-
-        case "assistant_message":
-          console.log("[Streaming] Assistant message saved:", data.id);
-          setStreamingState((prev) => ({
-            ...prev,
-            assistantMessageId: data.id,
-            messageId: data.id,
-          }));
-          callbacksRef?.onAssistantMessage?.(data as AssistantMessage);
-          break;
-
-        case "done":
-          console.log("[Streaming] Stream completed successfully");
-          setStreamingState((prev) => ({
-            ...prev,
-            isStreaming: false,
-            isThinking: false,
             currentToolCall: null,
           }));
-          callbacksRef?.onDone?.(data.updatedTitle);
-          return true; // Signal completion
+        }, 500);
+        break;
 
-        case "error":
-          console.error("[Streaming] Error event:", data.error);
+      case "content_delta":
+        if (data.content) {
+          accumulatedContentRef.current += data.content;
           setStreamingState((prev) => ({
             ...prev,
-            isStreaming: false,
-            isThinking: false,
-            currentToolCall: null,
-            error: data.error,
+            content: accumulatedContentRef.current,
           }));
-          callbacksRef?.onError?.(data.error);
-          return true; // Signal completion (with error)
+          cbs?.onContentDelta?.(data.content, accumulatedContentRef.current);
+        }
+        break;
 
-        case "ping":
-          // Keep-alive ping, ignore
-          break;
+      case "content_end":
+        console.log("[Streaming] Content ended, length:", data.content?.length);
+        setStreamingState((prev) => ({
+          ...prev,
+          content: data.content || accumulatedContentRef.current,
+        }));
+        cbs?.onContentEnd?.(data.content || accumulatedContentRef.current);
+        break;
 
-        default:
-          console.log("[Streaming] Unknown event:", event.event, data);
-      }
-    } catch (parseError) {
-      console.warn("[Streaming] Failed to parse event data:", event.data, parseError);
+      case "image_generated":
+        console.log("[Streaming] Image generated:", data.imageId);
+        cbs?.onImageGenerated?.(data.imageId);
+        break;
+
+      case "assistant_message":
+        console.log("[Streaming] Assistant message saved:", data.id);
+        setStreamingState((prev) => ({
+          ...prev,
+          assistantMessageId: data.id,
+          messageId: data.id,
+        }));
+        cbs?.onAssistantMessage?.(data as AssistantMessage);
+        break;
+
+      case "done":
+        console.log("[Streaming] Stream completed successfully");
+        setStreamingState((prev) => ({
+          ...prev,
+          isStreaming: false,
+          isThinking: false,
+          currentToolCall: null,
+        }));
+        cbs?.onDone?.(data.updatedTitle);
+        break;
+
+      case "error":
+        console.error("[Streaming] Error event:", data.error);
+        setStreamingState((prev) => ({
+          ...prev,
+          isStreaming: false,
+          isThinking: false,
+          currentToolCall: null,
+          error: data.error,
+        }));
+        cbs?.onError?.(data.error);
+        break;
+
+      case "ping":
+        // Keep-alive ping, ignore
+        break;
+
+      default:
+        console.log("[Streaming] Unknown event:", eventType, data);
     }
-    return false; // Not complete yet
   }, []);
 
   /**
-   * Start streaming a message
+   * Start streaming a message using react-native-fetch-sse
    */
   const startStreaming = useCallback(
     async (
@@ -383,11 +309,9 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         aiFriendId?: string;
       }
     ) => {
-      // Abort any existing stream
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
+      // Reset abort flag
+      isAbortedRef.current = false;
+      
       // Reset state
       accumulatedContentRef.current = "";
       accumulatedThinkingRef.current = "";
@@ -396,18 +320,6 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         isStreaming: true,
       });
 
-      // Create new abort controller with timeout
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-      
-      // Set a timeout to abort if streaming takes too long
-      const timeoutId = setTimeout(() => {
-        console.log("[Streaming] Timeout reached, aborting...");
-        abortController.abort();
-      }, STREAMING_TIMEOUT);
-
-      let streamCompleted = false;
-
       try {
         // Get auth token
         const token = await authClient.getToken();
@@ -415,121 +327,84 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         // Build request URL
         const url = `${BACKEND_URL}/api/personal-chats/${conversationId}/messages/stream`;
         
-        console.log("[Streaming] Starting stream to:", url);
-        console.log("[Streaming] Platform:", Platform.OS, "ReadableStream supported:", supportsReadableStream());
+        console.log("[Streaming] Starting SSE stream to:", url);
 
-        // Make fetch request
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Use react-native-fetch-sse for proper SSE support in React Native
+        await fetchSSE(
+          url,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "text/event-stream",
+              "Cache-Control": "no-cache",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              userId,
+              content,
+              imageUrl: options?.imageUrl,
+              aiFriendId: options?.aiFriendId,
+            }),
           },
-          body: JSON.stringify({
-            userId,
-            content,
-            imageUrl: options?.imageUrl,
-            aiFriendId: options?.aiFriendId,
-          }),
-          signal: abortController.signal,
-          // @ts-ignore - React Native specific option
-          reactNative: { textStreaming: true },
-        });
-
-        if (!response.ok) {
-          // Try to get error text, but handle cases where body might not be readable
-          let errorText = `HTTP ${response.status}`;
-          try {
-            const text = await response.text();
-            // Only include first 100 chars to avoid huge error messages
-            errorText = `HTTP ${response.status}: ${text.substring(0, 100)}`;
-          } catch {
-            // Ignore if we can't read the body
-          }
-          throw new Error(errorText);
-        }
-
-        // Check if we can use ReadableStream (may not work in React Native)
-        const canUseStream = response.body && typeof response.body.getReader === "function";
-        
-        if (canUseStream) {
-          // Use streaming approach (works in modern environments)
-          console.log("[Streaming] Using ReadableStream approach");
-          const reader = response.body!.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) {
-              console.log("[Streaming] Stream ended");
-              // Process any remaining buffer content before exiting
-              if (buffer.trim()) {
-                const { events } = parseSSEEvents(buffer + "\n\n");
-                for (const event of events) {
-                  if (processEvent(event, callbacks)) {
-                    streamCompleted = true;
-                  }
+          {
+            shouldParseJsonWhenOnMsg: true,
+            onStart: () => {
+              console.log("[Streaming] SSE connection starting...");
+            },
+            onMessage: (event: SSEEvent) => {
+              // Skip if aborted
+              if (isAbortedRef.current) return;
+              
+              // Handle SSE event
+              const eventType = event.event || "message";
+              const data = event.data || {};
+              
+              console.log("[Streaming] Received event:", eventType);
+              processEvent(eventType, data);
+            },
+            onError: (error, meta) => {
+              // Skip if aborted
+              if (isAbortedRef.current) return;
+              
+              console.error("[Streaming] SSE error:", error, meta);
+              const errorMessage = error instanceof Error 
+                ? error.message 
+                : `HTTP ${meta?.status || "error"}: ${meta?.statusText || "Unknown error"}`;
+              
+              setStreamingState((prev) => ({
+                ...prev,
+                isStreaming: false,
+                isThinking: false,
+                currentToolCall: null,
+                error: errorMessage,
+              }));
+              callbacksRef.current?.onError?.(errorMessage);
+            },
+            onEnd: () => {
+              console.log("[Streaming] SSE connection ended");
+              // Mark streaming as complete if not already done by a "done" event
+              setStreamingState((prev) => {
+                if (prev.isStreaming) {
+                  console.log("[Streaming] Stream ended without done event, marking complete");
+                  return {
+                    ...prev,
+                    isStreaming: false,
+                    isThinking: false,
+                    currentToolCall: null,
+                  };
                 }
-              }
-              break;
-            }
-
-            // Decode the chunk and add to buffer
-            buffer += decoder.decode(value, { stream: true });
-            
-            // Parse SSE events from buffer and get remaining unparsed text
-            const { events, remaining } = parseSSEEvents(buffer);
-            buffer = remaining;
-
-            // Process each event
-            for (const event of events) {
-              if (processEvent(event, callbacks)) {
-                streamCompleted = true;
-              }
-            }
+                return prev;
+              });
+            },
           }
-        } else {
-          // Fallback: Read entire response as text and parse events
-          // This is less ideal but works in React Native
-          console.log("[Streaming] Using text fallback approach");
-          const text = await response.text();
-          console.log("[Streaming] Received text response, length:", text.length);
-          
-          const { events } = parseSSEEvents(text + "\n\n");
-          console.log("[Streaming] Parsed", events.length, "events from response");
-          
-          for (const event of events) {
-            if (processEvent(event, callbacks)) {
-              streamCompleted = true;
-            }
-          }
-        }
+        );
         
-        // If stream ended without a "done" event, mark as complete
-        if (!streamCompleted) {
-          console.log("[Streaming] Stream ended without done event, marking complete");
-          setStreamingState((prev) => ({
-            ...prev,
-            isStreaming: false,
-            isThinking: false,
-            currentToolCall: null,
-          }));
-        }
+        console.log("[Streaming] fetchSSE completed");
+        
       } catch (error: any) {
-        if (error.name === "AbortError") {
-          console.log("[Streaming] Request aborted");
-          setStreamingState((prev) => ({
-            ...prev,
-            isStreaming: false,
-            isThinking: false,
-            currentToolCall: null,
-          }));
-          // Don't call onError for intentional aborts, but still call onStreamingComplete
+        if (isAbortedRef.current) {
+          console.log("[Streaming] Request was aborted");
           return;
         }
         
@@ -542,22 +417,14 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
           currentToolCall: null,
           error: errorMessage,
         }));
-        callbacks?.onError?.(errorMessage);
+        callbacksRef.current?.onError?.(errorMessage);
       } finally {
-        // Clear timeout
-        clearTimeout(timeoutId);
-        
-        if (abortControllerRef.current === abortController) {
-          abortControllerRef.current = null;
-        }
-        
         // Always call onStreamingComplete so the caller can refetch data
-        // This ensures we get any saved messages even if streaming failed
         console.log("[Streaming] Calling onStreamingComplete");
-        callbacks?.onStreamingComplete?.();
+        callbacksRef.current?.onStreamingComplete?.();
       }
     },
-    [callbacks, processEvent]
+    [processEvent]
   );
 
   return {
@@ -570,4 +437,3 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
 }
 
 export default usePersonalChatStreaming;
-
