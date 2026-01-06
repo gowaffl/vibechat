@@ -5,12 +5,11 @@
  * in personal chat conversations. Provides ChatGPT-like experience with
  * thinking indicators, tool call progress, and streamed content.
  * 
- * Uses react-native-fetch-sse for proper SSE support in React Native,
+ * Uses XMLHttpRequest with onprogress for proper SSE support in React Native,
  * as the standard fetch API doesn't support streaming in RN.
  */
 
 import { useCallback, useRef, useState } from "react";
-import { fetchSSE, type SSEEvent } from "react-native-fetch-sse";
 import { BACKEND_URL } from "@/config";
 import { authClient } from "@/lib/authClient";
 
@@ -90,14 +89,62 @@ const initialStreamingState: StreamingState = {
 };
 
 // ============================================================================
+// SSE Parser
+// ============================================================================
+
+interface SSEEvent {
+  event: string;
+  data: string;
+}
+
+/**
+ * Parse SSE events from a chunk of text
+ * Returns parsed events and any remaining incomplete data
+ */
+function parseSSEChunk(buffer: string): { events: SSEEvent[]; remaining: string } {
+  const events: SSEEvent[] = [];
+  
+  // Split by double newline (SSE event separator)
+  const parts = buffer.split("\n\n");
+  
+  // The last part might be incomplete, keep it in buffer
+  const remaining = parts.pop() || "";
+  
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    
+    const lines = part.split("\n");
+    let eventType = "message";
+    let eventData = "";
+    
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventType = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        eventData = line.slice(5).trim();
+      }
+    }
+    
+    if (eventData) {
+      events.push({ event: eventType, data: eventData });
+    }
+  }
+  
+  return { events, remaining };
+}
+
+// ============================================================================
 // Hook
 // ============================================================================
 
 export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
   const [streamingState, setStreamingState] = useState<StreamingState>(initialStreamingState);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
   const isAbortedRef = useRef(false);
   const accumulatedContentRef = useRef<string>("");
   const accumulatedThinkingRef = useRef<string>("");
+  const sseBufferRef = useRef<string>("");
+  const processedLengthRef = useRef<number>(0);
   const callbacksRef = useRef(callbacks);
   
   // Keep callbacks ref updated
@@ -110,6 +157,8 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
     setStreamingState(initialStreamingState);
     accumulatedContentRef.current = "";
     accumulatedThinkingRef.current = "";
+    sseBufferRef.current = "";
+    processedLengthRef.current = 0;
   }, []);
 
   /**
@@ -118,6 +167,12 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
   const stopStreaming = useCallback(() => {
     console.log("[Streaming] Stopping stream...");
     isAbortedRef.current = true;
+    
+    if (xhrRef.current) {
+      xhrRef.current.abort();
+      xhrRef.current = null;
+    }
+    
     setStreamingState((prev) => ({
       ...prev,
       isStreaming: false,
@@ -129,11 +184,20 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
   /**
    * Process an SSE event
    */
-  const processEvent = useCallback((eventType: string, data: any) => {
+  const processEvent = useCallback((eventType: string, dataStr: string) => {
     // Skip if aborted
     if (isAbortedRef.current) return;
     
     const cbs = callbacksRef.current;
+    
+    // Parse data
+    let data: any = {};
+    try {
+      data = JSON.parse(dataStr);
+    } catch (e) {
+      console.warn("[Streaming] Failed to parse event data:", dataStr);
+      return;
+    }
     
     switch (eventType) {
       case "connected":
@@ -297,7 +361,30 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
   }, []);
 
   /**
-   * Start streaming a message using react-native-fetch-sse
+   * Process new data from XHR response
+   */
+  const processNewData = useCallback((responseText: string) => {
+    // Get only the new data since last processing
+    const newData = responseText.substring(processedLengthRef.current);
+    processedLengthRef.current = responseText.length;
+    
+    if (!newData) return;
+    
+    // Add new data to buffer
+    sseBufferRef.current += newData;
+    
+    // Parse events from buffer
+    const { events, remaining } = parseSSEChunk(sseBufferRef.current);
+    sseBufferRef.current = remaining;
+    
+    // Process each event
+    for (const event of events) {
+      processEvent(event.event, event.data);
+    }
+  }, [processEvent]);
+
+  /**
+   * Start streaming a message using XMLHttpRequest
    */
   const startStreaming = useCallback(
     async (
@@ -309,12 +396,20 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         aiFriendId?: string;
       }
     ) => {
+      // Abort any existing request
+      if (xhrRef.current) {
+        xhrRef.current.abort();
+        xhrRef.current = null;
+      }
+      
       // Reset abort flag
       isAbortedRef.current = false;
       
       // Reset state
       accumulatedContentRef.current = "";
       accumulatedThinkingRef.current = "";
+      sseBufferRef.current = "";
+      processedLengthRef.current = 0;
       setStreamingState({
         ...initialStreamingState,
         isStreaming: true,
@@ -327,80 +422,122 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         // Build request URL
         const url = `${BACKEND_URL}/api/personal-chats/${conversationId}/messages/stream`;
         
-        console.log("[Streaming] Starting SSE stream to:", url);
+        console.log("[Streaming] Starting XHR stream to:", url);
 
-        // Use react-native-fetch-sse for proper SSE support in React Native
-        await fetchSSE(
-          url,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "text/event-stream",
-              "Cache-Control": "no-cache",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              userId,
-              content,
-              imageUrl: options?.imageUrl,
-              aiFriendId: options?.aiFriendId,
-            }),
-          },
-          {
-            shouldParseJsonWhenOnMsg: true,
-            onStart: () => {
-              console.log("[Streaming] SSE connection starting...");
-            },
-            onMessage: (event: SSEEvent) => {
-              // Skip if aborted
-              if (isAbortedRef.current) return;
-              
-              // Handle SSE event
-              const eventType = event.event || "message";
-              const data = event.data || {};
-              
-              console.log("[Streaming] Received event:", eventType);
-              processEvent(eventType, data);
-            },
-            onError: (error, meta) => {
-              // Skip if aborted
-              if (isAbortedRef.current) return;
-              
-              console.error("[Streaming] SSE error:", error, meta);
-              const errorMessage = error instanceof Error 
-                ? error.message 
-                : `HTTP ${meta?.status || "error"}: ${meta?.statusText || "Unknown error"}`;
-              
-              setStreamingState((prev) => ({
-                ...prev,
-                isStreaming: false,
-                isThinking: false,
-                currentToolCall: null,
-                error: errorMessage,
-              }));
-              callbacksRef.current?.onError?.(errorMessage);
-            },
-            onEnd: () => {
-              console.log("[Streaming] SSE connection ended");
-              // Mark streaming as complete if not already done by a "done" event
-              setStreamingState((prev) => {
-                if (prev.isStreaming) {
-                  console.log("[Streaming] Stream ended without done event, marking complete");
-                  return {
-                    ...prev,
-                    isStreaming: false,
-                    isThinking: false,
-                    currentToolCall: null,
-                  };
-                }
-                return prev;
-              });
-            },
-          }
-        );
+        // Create XMLHttpRequest
+        const xhr = new XMLHttpRequest();
+        xhrRef.current = xhr;
         
-        console.log("[Streaming] fetchSSE completed");
+        xhr.open("POST", url, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.setRequestHeader("Accept", "text/event-stream");
+        xhr.setRequestHeader("Cache-Control", "no-cache");
+        if (token) {
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        }
+        
+        // Handle progress - this is called as data streams in
+        xhr.onprogress = () => {
+          if (isAbortedRef.current) return;
+          processNewData(xhr.responseText);
+        };
+        
+        // Handle completion
+        xhr.onload = () => {
+          console.log("[Streaming] XHR completed, status:", xhr.status);
+          
+          if (isAbortedRef.current) return;
+          
+          // Process any remaining data
+          if (xhr.responseText) {
+            processNewData(xhr.responseText);
+          }
+          
+          // Check for HTTP errors
+          if (xhr.status !== 200) {
+            console.error("[Streaming] HTTP error:", xhr.status, xhr.statusText);
+            const errorMessage = `HTTP ${xhr.status}: ${xhr.statusText}`;
+            setStreamingState((prev) => ({
+              ...prev,
+              isStreaming: false,
+              isThinking: false,
+              currentToolCall: null,
+              error: errorMessage,
+            }));
+            callbacksRef.current?.onError?.(errorMessage);
+          } else {
+            // Mark streaming as complete if not already done by a "done" event
+            setStreamingState((prev) => {
+              if (prev.isStreaming) {
+                console.log("[Streaming] XHR completed without done event, marking complete");
+                return {
+                  ...prev,
+                  isStreaming: false,
+                  isThinking: false,
+                  currentToolCall: null,
+                };
+              }
+              return prev;
+            });
+          }
+          
+          // Always call onStreamingComplete
+          console.log("[Streaming] Calling onStreamingComplete");
+          callbacksRef.current?.onStreamingComplete?.();
+        };
+        
+        // Handle errors
+        xhr.onerror = () => {
+          if (isAbortedRef.current) return;
+          
+          console.error("[Streaming] XHR error");
+          const errorMessage = "Network error - connection failed";
+          setStreamingState((prev) => ({
+            ...prev,
+            isStreaming: false,
+            isThinking: false,
+            currentToolCall: null,
+            error: errorMessage,
+          }));
+          callbacksRef.current?.onError?.(errorMessage);
+          callbacksRef.current?.onStreamingComplete?.();
+        };
+        
+        // Handle timeout
+        xhr.ontimeout = () => {
+          if (isAbortedRef.current) return;
+          
+          console.error("[Streaming] XHR timeout");
+          const errorMessage = "Request timed out";
+          setStreamingState((prev) => ({
+            ...prev,
+            isStreaming: false,
+            isThinking: false,
+            currentToolCall: null,
+            error: errorMessage,
+          }));
+          callbacksRef.current?.onError?.(errorMessage);
+          callbacksRef.current?.onStreamingComplete?.();
+        };
+        
+        // Handle abort
+        xhr.onabort = () => {
+          console.log("[Streaming] XHR aborted");
+          callbacksRef.current?.onStreamingComplete?.();
+        };
+        
+        // Set timeout (2 minutes - enough for long AI responses)
+        xhr.timeout = 120000;
+        
+        // Send the request
+        xhr.send(JSON.stringify({
+          userId,
+          content,
+          imageUrl: options?.imageUrl,
+          aiFriendId: options?.aiFriendId,
+        }));
+        
+        console.log("[Streaming] XHR request sent");
         
       } catch (error: any) {
         if (isAbortedRef.current) {
@@ -418,13 +555,10 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
           error: errorMessage,
         }));
         callbacksRef.current?.onError?.(errorMessage);
-      } finally {
-        // Always call onStreamingComplete so the caller can refetch data
-        console.log("[Streaming] Calling onStreamingComplete");
         callbacksRef.current?.onStreamingComplete?.();
       }
     },
-    [processEvent]
+    [processNewData]
   );
 
   return {
