@@ -91,6 +91,13 @@ interface StreamingState {
   isStreaming: boolean;
   content: string;
   messageId: string | null;
+  isThinking: boolean;
+  thinkingContent: string;
+  currentToolCall: {
+    name: string;
+    status: "starting" | "in_progress" | "completed";
+  } | null;
+  reasoningEffort: "none" | "low" | "medium" | "high" | null;
 }
 
 // Typing indicator component
@@ -172,6 +179,95 @@ function SearchingIndicator({ isDark, colors }: { isDark: boolean; colors: any }
   );
 }
 
+// Thinking indicator component - shows when AI is reasoning
+function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; colors: any; content: string }) {
+  const pulseOpacity = useSharedValue(0.6);
+  
+  useEffect(() => {
+    pulseOpacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 800, easing: Easing.ease }),
+        withTiming(0.6, { duration: 800, easing: Easing.ease })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: pulseOpacity.value,
+  }));
+
+  return (
+    <Reanimated.View
+      entering={FadeInUp.duration(300)}
+      exiting={FadeOut.duration(200)}
+      style={[styles.thinkingContainer, { backgroundColor: isDark ? "rgba(168,85,247,0.15)" : "rgba(168,85,247,0.1)" }]}
+    >
+      <Reanimated.View style={[styles.thinkingHeader, animatedStyle]}>
+        <Sparkles size={14} color="#A855F7" />
+        <Text style={[styles.thinkingLabel, { color: "#A855F7" }]}>Thinking...</Text>
+      </Reanimated.View>
+      {content ? (
+        <Text 
+          style={[styles.thinkingContent, { color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)" }]}
+          numberOfLines={3}
+        >
+          {content}
+        </Text>
+      ) : null}
+    </Reanimated.View>
+  );
+}
+
+// Tool call indicator component - shows which tool is being used
+function ToolCallIndicator({ toolName, isDark, colors }: { toolName: string; isDark: boolean; colors: any }) {
+  const getToolInfo = () => {
+    switch (toolName) {
+      case "web_search":
+        return { icon: Globe, label: "Searching the web", color: "#6366F1" };
+      case "image_generation":
+        return { icon: ImagePlus, label: "Generating image", color: "#10B981" };
+      default:
+        return { icon: Sparkles, label: `Using ${toolName}`, color: "#F59E0B" };
+    }
+  };
+
+  const { icon: Icon, label, color } = getToolInfo();
+  const bgColor = isDark ? `${color}20` : `${color}15`;
+
+  return (
+    <Reanimated.View
+      entering={FadeInUp.duration(300)}
+      exiting={FadeOut.duration(200)}
+      style={[styles.toolCallContainer, { backgroundColor: bgColor }]}
+    >
+      <ActivityIndicator size="small" color={color} style={styles.toolCallSpinner} />
+      <Icon size={14} color={color} />
+      <Text style={[styles.toolCallText, { color }]}>{label}</Text>
+    </Reanimated.View>
+  );
+}
+
+// Streaming content preview component
+function StreamingContentPreview({ content, isDark, colors }: { content: string; isDark: boolean; colors: any }) {
+  if (!content) return null;
+  
+  return (
+    <Reanimated.View
+      entering={FadeIn.duration(200)}
+      style={[styles.streamingPreviewContainer, { backgroundColor: isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.9)" }]}
+    >
+      <Text 
+        style={[styles.streamingPreviewText, { color: colors.text }]}
+        numberOfLines={10}
+      >
+        {content}
+      </Text>
+    </Reanimated.View>
+  );
+}
+
 export default function PersonalChatScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProp>();
@@ -198,7 +294,12 @@ export default function PersonalChatScreen() {
     isStreaming: false,
     content: "",
     messageId: null,
+    isThinking: false,
+    thinkingContent: "",
+    currentToolCall: null,
+    reasoningEffort: null,
   });
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
 
   // Refs
@@ -348,7 +449,212 @@ export default function PersonalChatScreen() {
     return result;
   }, [messages]);
 
-  // Send message mutation
+  // Send message with SSE streaming
+  const sendStreamingMessage = useCallback(async (content: string, images: string[]) => {
+    // Initialize streaming state
+    setStreaming({
+      isStreaming: true,
+      content: "",
+      messageId: null,
+      isThinking: false,
+      thinkingContent: "",
+      currentToolCall: null,
+      reasoningEffort: null,
+    });
+
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // If no conversation exists, create one first
+      let activeConversationId = conversationId;
+
+      if (!activeConversationId) {
+        const createResponse = await api.post<{ success: boolean; conversation: PersonalConversation }>(
+          "/api/personal-chats",
+          {
+            userId: user?.id,
+            aiFriendId: selectedAgent?.id,
+          }
+        );
+        if (createResponse.success) {
+          activeConversationId = createResponse.conversation.id;
+          setConversationId(activeConversationId);
+        } else {
+          throw new Error("Failed to create conversation");
+        }
+      }
+
+      // Use fetch with streaming for SSE
+      const response = await fetch(
+        `${BACKEND_URL}/api/personal-chats/${activeConversationId}/messages/stream`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            content,
+            imageUrl: images.length > 0 ? images[0] : undefined,
+          }),
+          signal: abortControllerRef.current.signal,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No reader available");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process SSE events
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            // Event type is on the next data line
+            continue;
+          }
+          
+          if (line.startsWith("data: ")) {
+            const eventData = line.slice(6);
+            
+            // Find the event type from the previous line in the original buffer
+            // SSE format: event: <type>\ndata: <json>
+            const eventMatch = buffer.match(/event: (\w+)/);
+            
+            try {
+              const data = JSON.parse(eventData);
+              
+              // Handle different event types based on what comes in the data
+              // The server sends SSE in format: event: <type>\ndata: <json>
+              handleStreamEvent(data, line);
+            } catch (e) {
+              console.log("[PersonalChat] Parse error:", e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        console.log("[PersonalChat] Stream aborted by user");
+      } else {
+        console.error("[PersonalChat] Streaming error:", error);
+        Alert.alert("Error", "Failed to send message. Please try again.");
+      }
+    } finally {
+      setStreaming(prev => ({
+        ...prev,
+        isStreaming: false,
+        isThinking: false,
+        currentToolCall: null,
+      }));
+      abortControllerRef.current = null;
+      
+      // Invalidate queries to refresh data
+      if (conversationId) {
+        queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversation(conversationId) });
+      }
+      queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversations(user?.id || "") });
+    }
+  }, [conversationId, user?.id, selectedAgent?.id, queryClient]);
+
+  // Handle individual SSE events
+  const handleStreamEvent = useCallback((data: any, rawLine: string) => {
+    // Extract event type from the raw SSE data
+    // Events are sent as: event: <type>\ndata: <json>
+    const eventTypeMatch = rawLine.match(/^event:\s*(\w+)/m);
+    
+    // If we have event type data in the data itself, use that
+    if (data.type) {
+      switch (data.type) {
+        case "thinking_start":
+          setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
+          break;
+        case "thinking_delta":
+          setStreaming(prev => ({ ...prev, thinkingContent: prev.thinkingContent + (data.content || "") }));
+          break;
+        case "thinking_end":
+          setStreaming(prev => ({ ...prev, isThinking: false }));
+          break;
+        case "tool_call_start":
+          setStreaming(prev => ({ 
+            ...prev, 
+            currentToolCall: { name: data.toolName, status: "starting" } 
+          }));
+          if (data.toolName === "web_search") {
+            setIsSearchingWeb(true);
+          }
+          break;
+        case "tool_call_end":
+          setStreaming(prev => ({ ...prev, currentToolCall: null }));
+          if (data.toolName === "web_search") {
+            setIsSearchingWeb(false);
+          }
+          break;
+        case "content_delta":
+          setStreaming(prev => ({ ...prev, content: prev.content + (data.content || "") }));
+          break;
+        case "reasoning_effort":
+          setStreaming(prev => ({ ...prev, reasoningEffort: data.effort }));
+          break;
+        case "error":
+          console.error("[PersonalChat] Server error:", data.error);
+          Alert.alert("Error", data.error || "An error occurred");
+          break;
+      }
+    }
+    
+    // Handle SSE event format (when event type comes in rawLine)
+    if (rawLine.includes("reasoning_effort")) {
+      setStreaming(prev => ({ ...prev, reasoningEffort: data.effort }));
+    } else if (rawLine.includes("thinking_start")) {
+      setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
+    } else if (rawLine.includes("thinking_delta")) {
+      setStreaming(prev => ({ ...prev, thinkingContent: prev.thinkingContent + (data.content || "") }));
+    } else if (rawLine.includes("thinking_end")) {
+      setStreaming(prev => ({ ...prev, isThinking: false }));
+    } else if (rawLine.includes("tool_call_start")) {
+      setStreaming(prev => ({ 
+        ...prev, 
+        currentToolCall: { name: data.toolName, status: "starting" } 
+      }));
+      if (data.toolName === "web_search") {
+        setIsSearchingWeb(true);
+      }
+    } else if (rawLine.includes("tool_call_end")) {
+      setStreaming(prev => ({ ...prev, currentToolCall: null }));
+      if (data.toolName === "web_search") {
+        setIsSearchingWeb(false);
+      }
+    } else if (rawLine.includes("content_delta")) {
+      setStreaming(prev => ({ ...prev, content: prev.content + (data.content || "") }));
+    } else if (rawLine.includes("image_generated")) {
+      // Image will be shown when the message is saved
+      console.log("[PersonalChat] Image generated:", data.imageId);
+    } else if (rawLine.includes("error")) {
+      console.error("[PersonalChat] Server error:", data.error);
+      Alert.alert("Error", data.error || "An error occurred");
+    }
+  }, []);
+
+  // Legacy mutation for fallback (non-streaming)
   const sendMessageMutation = useMutation({
     mutationFn: async ({ content, images }: { content: string; images: string[] }) => {
       // If no conversation exists, create one first
@@ -385,7 +691,15 @@ export default function PersonalChatScreen() {
     },
     onMutate: async ({ content, images }) => {
       // Optimistic update: Add pending user message
-      setStreaming({ isStreaming: true, content: "", messageId: null });
+      setStreaming({ 
+        isStreaming: true, 
+        content: "", 
+        messageId: null,
+        isThinking: false,
+        thinkingContent: "",
+        currentToolCall: null,
+        reasoningEffort: null,
+      });
     },
     onSuccess: (data) => {
       // Invalidate queries to refresh data
@@ -393,11 +707,27 @@ export default function PersonalChatScreen() {
         queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversation(conversationId) });
       }
       queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversations(user?.id || "") });
-      setStreaming({ isStreaming: false, content: "", messageId: null });
+      setStreaming({ 
+        isStreaming: false, 
+        content: "", 
+        messageId: null,
+        isThinking: false,
+        thinkingContent: "",
+        currentToolCall: null,
+        reasoningEffort: null,
+      });
     },
     onError: (error) => {
       console.error("Failed to send message:", error);
-      setStreaming({ isStreaming: false, content: "", messageId: null });
+      setStreaming({ 
+        isStreaming: false, 
+        content: "", 
+        messageId: null,
+        isThinking: false,
+        thinkingContent: "",
+        currentToolCall: null,
+        reasoningEffort: null,
+      });
       Alert.alert("Error", "Failed to send message. Please try again.");
     },
   });
@@ -419,20 +749,31 @@ export default function PersonalChatScreen() {
     // Scroll to bottom when sending to see the response
     isAtBottomRef.current = true;
 
-    sendMessageMutation.mutate({
-      content: trimmedText,
-      images: attachedImages,
-    });
+    // Use streaming by default for better UX
+    sendStreamingMessage(trimmedText, attachedImages);
 
     setInputText("");
     setAttachedImages([]);
-  }, [inputText, attachedImages, sendMessageMutation]);
+  }, [inputText, attachedImages, sendStreamingMessage]);
 
   // Handle stop generation
   const handleStopGeneration = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // TODO: Implement actual streaming cancellation via AbortController
-    setStreaming({ isStreaming: false, content: "", messageId: null });
+    // Cancel streaming via AbortController
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setStreaming({ 
+      isStreaming: false, 
+      content: "", 
+      messageId: null,
+      isThinking: false,
+      thinkingContent: "",
+      currentToolCall: null,
+      reasoningEffort: null,
+    });
+    setIsSearchingWeb(false);
   }, []);
 
   // Handle agent selection
@@ -901,8 +1242,37 @@ export default function PersonalChatScreen() {
             ListFooterComponent={
               streaming.isStreaming ? (
                 <View style={styles.streamingContainer}>
-                  {isSearchingWeb && <SearchingIndicator isDark={isDark} colors={colors} />}
-                  <TypingIndicator isDark={isDark} />
+                  {/* Show thinking indicator when AI is reasoning */}
+                  {streaming.isThinking && (
+                    <ThinkingIndicator 
+                      isDark={isDark} 
+                      colors={colors} 
+                      content={streaming.thinkingContent} 
+                    />
+                  )}
+                  
+                  {/* Show tool call indicator */}
+                  {streaming.currentToolCall && (
+                    <ToolCallIndicator 
+                      toolName={streaming.currentToolCall.name} 
+                      isDark={isDark} 
+                      colors={colors} 
+                    />
+                  )}
+                  
+                  {/* Show streaming content preview */}
+                  {streaming.content && (
+                    <StreamingContentPreview 
+                      content={streaming.content} 
+                      isDark={isDark} 
+                      colors={colors} 
+                    />
+                  )}
+                  
+                  {/* Show typing indicator when waiting for response */}
+                  {!streaming.content && !streaming.isThinking && !streaming.currentToolCall && (
+                    <TypingIndicator isDark={isDark} />
+                  )}
                 </View>
               ) : null
             }
@@ -1331,6 +1701,56 @@ const styles = StyleSheet.create({
   searchingText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  // Thinking indicator styles
+  thinkingContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  thinkingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  thinkingLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  thinkingContent: {
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  // Tool call indicator styles
+  toolCallContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  toolCallSpinner: {
+    marginRight: -4,
+  },
+  toolCallText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  // Streaming content preview styles
+  streamingPreviewContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  streamingPreviewText: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   dateDividerContainer: {
     flexDirection: "row",

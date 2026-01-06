@@ -1,9 +1,16 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { zValidator } from "@hono/zod-validator";
 import { db, executeWithRetry } from "../db";
 import { formatTimestamp, buildUpdateObject } from "../utils/supabase-helpers";
 import { openai } from "../env";
 import { executeGPT51Response } from "../services/gpt-responses";
+import { 
+  streamGPT51Response, 
+  buildPersonalChatSystemPrompt,
+  analyzePromptComplexity,
+  type StreamEvent 
+} from "../services/gpt-streaming-service";
 import { saveResponseImages } from "../services/image-storage";
 import { generateChatTitle } from "../services/title-generator";
 import {
@@ -746,6 +753,349 @@ If the user asks you to generate or create an image, use the image generation to
     console.error("[PersonalChats] Error processing message:", error);
     return c.json({ error: "Failed to process message" }, 500);
   }
+});
+
+// ============================================================================
+// STREAMING MESSAGE ENDPOINT
+// ============================================================================
+
+// POST /api/personal-chats/:conversationId/messages/stream - Send message with streaming response
+personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPersonalMessageRequestSchema), async (c) => {
+  const conversationId = c.req.param("conversationId");
+  const { userId, content, imageUrl: attachedImageUrl } = c.req.valid("json");
+
+  console.log("[PersonalChats] Streaming message request:", { conversationId, userId, contentLength: content?.length });
+
+  // Verify conversation exists and belongs to user
+  const { data: conversation, error: convError } = await db
+    .from("personal_conversation")
+    .select(`
+      id,
+      userId,
+      title,
+      aiFriendId,
+      ai_friend:aiFriendId (
+        id,
+        name,
+        personality,
+        tone,
+        color
+      )
+    `)
+    .eq("id", conversationId)
+    .eq("userId", userId)
+    .single();
+
+  if (convError || !conversation) {
+    console.error("[PersonalChats] Conversation not found:", convError);
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Get recent chat history for context
+  const { data: recentMessages } = await db
+    .from("personal_message")
+    .select("content, role")
+    .eq("conversationId", conversationId)
+    .order("createdAt", { ascending: false })
+    .limit(10);
+
+  const chatHistory = (recentMessages || []).reverse().map(msg => ({
+    role: msg.role as "user" | "assistant",
+    content: msg.content,
+  }));
+
+  // Save user message immediately
+  const { data: userMessage, error: userMsgError } = await db
+    .from("personal_message")
+    .insert({
+      conversationId,
+      content,
+      role: "user",
+      imageUrl: attachedImageUrl || null,
+    })
+    .select()
+    .single();
+
+  if (userMsgError) {
+    console.error("[PersonalChats] Error saving user message:", userMsgError);
+    return c.json({ error: "Failed to save message" }, 500);
+  }
+
+  // Track agent usage if AI friend is associated
+  const aiFriend = conversation.ai_friend as any;
+  if (aiFriend?.id) {
+    try {
+      const { data: existingUsage } = await db
+        .from("user_agent_usage")
+        .select("id, usageCount")
+        .eq("userId", userId)
+        .eq("aiFriendId", aiFriend.id)
+        .single();
+
+      if (existingUsage) {
+        await db
+          .from("user_agent_usage")
+          .update({
+            usageCount: existingUsage.usageCount + 1,
+            lastUsedAt: new Date().toISOString(),
+          })
+          .eq("id", existingUsage.id);
+      } else {
+        await db
+          .from("user_agent_usage")
+          .insert({
+            userId,
+            aiFriendId: aiFriend.id,
+            usageCount: 1,
+            lastUsedAt: new Date().toISOString(),
+          });
+      }
+    } catch (usageError) {
+      console.error("[PersonalChats] Error tracking agent usage:", usageError);
+    }
+  }
+
+  // Build system prompt
+  const systemPrompt = buildPersonalChatSystemPrompt(
+    aiFriend?.name || "AI Assistant",
+    aiFriend?.personality,
+    aiFriend?.tone,
+    chatHistory
+  );
+
+  // Build user prompt with context
+  let userPrompt = "";
+  for (const msg of chatHistory) {
+    const role = msg.role === "user" ? "User" : "Assistant";
+    userPrompt += `${role}: ${msg.content}\n\n`;
+  }
+  userPrompt += `User: ${content}`;
+  if (attachedImageUrl) {
+    userPrompt += `\n[User attached an image: ${attachedImageUrl}]`;
+  }
+
+  // Analyze prompt complexity for adaptive reasoning
+  const reasoningEffort = analyzePromptComplexity(content);
+  console.log("[PersonalChats] Adaptive reasoning effort:", reasoningEffort);
+
+  // Stream the response using SSE
+  return streamSSE(c, async (stream) => {
+    let fullContent = "";
+    let generatedImages: Array<{ id: string; base64: string }> = [];
+    let metadata: Record<string, any> = { toolsUsed: [] };
+
+    try {
+      // Send initial event with user message info
+      await stream.writeSSE({
+        event: "user_message",
+        data: JSON.stringify({
+          id: userMessage.id,
+          conversationId: userMessage.conversationId,
+          content: userMessage.content,
+          role: "user",
+          imageUrl: userMessage.imageUrl,
+          createdAt: formatTimestamp(userMessage.createdAt),
+        }),
+      });
+
+      // Send reasoning effort info
+      await stream.writeSSE({
+        event: "reasoning_effort",
+        data: JSON.stringify({ effort: reasoningEffort }),
+      });
+
+      // Stream GPT response
+      const responseStream = streamGPT51Response({
+        systemPrompt,
+        userPrompt,
+        tools: [
+          { type: "web_search" },
+          { type: "image_generation" },
+        ],
+        reasoningEffort,
+        temperature: 0.8,
+        maxTokens: 4096,
+      });
+
+      for await (const event of responseStream) {
+        switch (event.type) {
+          case "thinking_start":
+            await stream.writeSSE({
+              event: "thinking_start",
+              data: JSON.stringify({}),
+            });
+            break;
+
+          case "thinking_delta":
+            await stream.writeSSE({
+              event: "thinking_delta",
+              data: JSON.stringify({ content: event.data.content }),
+            });
+            break;
+
+          case "thinking_end":
+            await stream.writeSSE({
+              event: "thinking_end",
+              data: JSON.stringify({ content: event.data.content }),
+            });
+            break;
+
+          case "tool_call_start":
+            await stream.writeSSE({
+              event: "tool_call_start",
+              data: JSON.stringify({
+                toolName: event.data.toolName,
+                toolInput: event.data.toolInput,
+              }),
+            });
+            if (event.data.toolName && !metadata.toolsUsed.includes(event.data.toolName)) {
+              metadata.toolsUsed.push(event.data.toolName);
+            }
+            break;
+
+          case "tool_call_progress":
+            await stream.writeSSE({
+              event: "tool_call_progress",
+              data: JSON.stringify(event.data),
+            });
+            break;
+
+          case "tool_call_end":
+            await stream.writeSSE({
+              event: "tool_call_end",
+              data: JSON.stringify({
+                toolName: event.data.toolName,
+                sources: event.data.sources,
+              }),
+            });
+            break;
+
+          case "content_delta":
+            if (event.data.content) {
+              fullContent += event.data.content;
+              await stream.writeSSE({
+                event: "content_delta",
+                data: JSON.stringify({ content: event.data.content }),
+              });
+            }
+            break;
+
+          case "content_end":
+            await stream.writeSSE({
+              event: "content_end",
+              data: JSON.stringify({ content: fullContent }),
+            });
+            break;
+
+          case "image_generated":
+            if (event.data.imageBase64) {
+              generatedImages.push({
+                id: event.data.imageId || `img_${Date.now()}`,
+                base64: event.data.imageBase64,
+              });
+              await stream.writeSSE({
+                event: "image_generated",
+                data: JSON.stringify({ imageId: event.data.imageId }),
+              });
+            }
+            break;
+
+          case "error":
+            console.error("[PersonalChats] Streaming error:", event.data.error);
+            await stream.writeSSE({
+              event: "error",
+              data: JSON.stringify({ error: event.data.error }),
+            });
+            break;
+
+          case "done":
+            // Save the AI response to database
+            let generatedImageUrl: string | null = null;
+            
+            if (generatedImages.length > 0) {
+              try {
+                const savedImages = await saveResponseImages(generatedImages, conversationId);
+                if (savedImages.length > 0) {
+                  generatedImageUrl = savedImages[0];
+                  metadata.generatedImagePrompt = content;
+                }
+              } catch (imgError) {
+                console.error("[PersonalChats] Error saving images:", imgError);
+              }
+            }
+
+            // Save assistant message
+            const { data: assistantMessage, error: assistantMsgError } = await db
+              .from("personal_message")
+              .insert({
+                conversationId,
+                content: fullContent || "I apologize, but I couldn't generate a response.",
+                role: "assistant",
+                generatedImageUrl,
+                metadata: Object.keys(metadata).length > 0 ? metadata : null,
+              })
+              .select()
+              .single();
+
+            if (assistantMsgError) {
+              console.error("[PersonalChats] Error saving assistant message:", assistantMsgError);
+            }
+
+            // Update conversation lastMessageAt and potentially title
+            const updateData: Record<string, any> = {
+              lastMessageAt: new Date().toISOString(),
+            };
+
+            if (conversation.title === "New Conversation" && chatHistory.length === 0) {
+              try {
+                const generatedTitle = await generateChatTitle(content);
+                if (generatedTitle) {
+                  updateData.title = generatedTitle;
+                }
+              } catch (titleError) {
+                console.error("[PersonalChats] Error generating title:", titleError);
+                updateData.title = content.length > 30 ? content.substring(0, 30) + "..." : content;
+              }
+            }
+
+            await db
+              .from("personal_conversation")
+              .update(updateData)
+              .eq("id", conversationId);
+
+            // Send final message with assistant response
+            await stream.writeSSE({
+              event: "assistant_message",
+              data: JSON.stringify({
+                id: assistantMessage?.id,
+                conversationId,
+                content: fullContent,
+                role: "assistant",
+                generatedImageUrl,
+                metadata,
+                createdAt: assistantMessage?.createdAt ? formatTimestamp(assistantMessage.createdAt) : new Date().toISOString(),
+              }),
+            });
+
+            // Send completion event
+            await stream.writeSSE({
+              event: "done",
+              data: JSON.stringify({ 
+                success: true,
+                updatedTitle: updateData.title,
+              }),
+            });
+            break;
+        }
+      }
+    } catch (error: any) {
+      console.error("[PersonalChats] Streaming error:", error);
+      await stream.writeSSE({
+        event: "error",
+        data: JSON.stringify({ error: error?.message || "An error occurred" }),
+      });
+    }
+  });
 });
 
 // DELETE /api/personal-chats/:conversationId/messages/:messageId - Delete a single message
