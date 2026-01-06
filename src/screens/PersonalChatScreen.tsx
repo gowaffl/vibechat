@@ -417,25 +417,14 @@ export default function PersonalChatScreen() {
   // Get messages from conversation data
   const messages = conversationData?.messages ?? [];
 
-  // Load agent if specified or from conversation
+  // Load agent from conversation data (ai_friend is already included in the response)
   useEffect(() => {
-    const loadAgent = async () => {
-      const agentIdToLoad = initialAgentId || conversationData?.aiFriendId;
-      if (agentIdToLoad && !selectedAgent) {
-        try {
-          const response = await api.get<{ success: boolean; aiFriend: AIFriend }>(
-            `/api/ai-friends/${agentIdToLoad}`
-          );
-          if (response.success) {
-            setSelectedAgent(response.aiFriend);
-          }
-        } catch (error) {
-          console.error("Failed to load agent:", error);
-        }
-      }
-    };
-    loadAgent();
-  }, [initialAgentId, conversationData?.aiFriendId]);
+    // The conversation data includes the ai_friend object, so use that directly
+    const aiFriendFromConversation = (conversationData as any)?.ai_friend;
+    if (aiFriendFromConversation && !selectedAgent) {
+      setSelectedAgent(aiFriendFromConversation);
+    }
+  }, [conversationData, selectedAgent]);
 
   // Create messages list with date dividers
   const messagesWithDividers = useMemo(() => {
@@ -541,32 +530,36 @@ export default function PersonalChatScreen() {
         
         buffer += decoder.decode(value, { stream: true });
         
-        // Process SSE events
+        // Process SSE events - SSE format is:
+        // event: eventType\n
+        // data: {"json": "data"}\n\n
         const lines = buffer.split("\n");
         buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
+        let currentEventType = "";
+        
         for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            // Event type is on the next data line
+          const trimmedLine = line.trim();
+          
+          if (trimmedLine.startsWith("event: ")) {
+            // Store the event type for the next data line
+            currentEventType = trimmedLine.slice(7);
             continue;
           }
           
-          if (line.startsWith("data: ")) {
-            const eventData = line.slice(6);
-            
-            // Find the event type from the previous line in the original buffer
-            // SSE format: event: <type>\ndata: <json>
-            const eventMatch = buffer.match(/event: (\w+)/);
+          if (trimmedLine.startsWith("data: ")) {
+            const eventData = trimmedLine.slice(6);
             
             try {
               const data = JSON.parse(eventData);
-              
-              // Handle different event types based on what comes in the data
-              // The server sends SSE in format: event: <type>\ndata: <json>
-              handleStreamEvent(data, line);
+              // Add the event type to the data for handling
+              data._eventType = currentEventType;
+              handleStreamEvent(data, currentEventType);
             } catch (e) {
-              console.log("[PersonalChat] Parse error:", e);
+              console.log("[PersonalChat] Parse error:", e, eventData);
             }
+            // Reset event type after processing
+            currentEventType = "";
           }
         }
       }
@@ -624,81 +617,58 @@ export default function PersonalChatScreen() {
   }, [conversationId, user?.id, selectedAgent?.id, queryClient]);
 
   // Handle individual SSE events
-  const handleStreamEvent = useCallback((data: any, rawLine: string) => {
-    // Extract event type from the raw SSE data
-    // Events are sent as: event: <type>\ndata: <json>
-    const eventTypeMatch = rawLine.match(/^event:\s*(\w+)/m);
-    
-    // If we have event type data in the data itself, use that
-    if (data.type) {
-      switch (data.type) {
-        case "thinking_start":
-          setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
-          break;
-        case "thinking_delta":
-          setStreaming(prev => ({ ...prev, thinkingContent: prev.thinkingContent + (data.content || "") }));
-          break;
-        case "thinking_end":
-          setStreaming(prev => ({ ...prev, isThinking: false }));
-          break;
-        case "tool_call_start":
-          setStreaming(prev => ({ 
-            ...prev, 
-            currentToolCall: { name: data.toolName, status: "starting" } 
-          }));
-          if (data.toolName === "web_search") {
-            setIsSearchingWeb(true);
-          }
-          break;
-        case "tool_call_end":
-          setStreaming(prev => ({ ...prev, currentToolCall: null }));
-          if (data.toolName === "web_search") {
-            setIsSearchingWeb(false);
-          }
-          break;
-        case "content_delta":
-          setStreaming(prev => ({ ...prev, content: prev.content + (data.content || "") }));
-          break;
-        case "reasoning_effort":
-          setStreaming(prev => ({ ...prev, reasoningEffort: data.effort }));
-          break;
-        case "error":
-          console.error("[PersonalChat] Server error:", data.error);
-          Alert.alert("Error", data.error || "An error occurred");
-          break;
-      }
-    }
-    
-    // Handle SSE event format (when event type comes in rawLine)
-    if (rawLine.includes("reasoning_effort")) {
-      setStreaming(prev => ({ ...prev, reasoningEffort: data.effort }));
-    } else if (rawLine.includes("thinking_start")) {
-      setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
-    } else if (rawLine.includes("thinking_delta")) {
-      setStreaming(prev => ({ ...prev, thinkingContent: prev.thinkingContent + (data.content || "") }));
-    } else if (rawLine.includes("thinking_end")) {
-      setStreaming(prev => ({ ...prev, isThinking: false }));
-    } else if (rawLine.includes("tool_call_start")) {
-      setStreaming(prev => ({ 
-        ...prev, 
-        currentToolCall: { name: data.toolName, status: "starting" } 
-      }));
-      if (data.toolName === "web_search") {
-        setIsSearchingWeb(true);
-      }
-    } else if (rawLine.includes("tool_call_end")) {
-      setStreaming(prev => ({ ...prev, currentToolCall: null }));
-      if (data.toolName === "web_search") {
-        setIsSearchingWeb(false);
-      }
-    } else if (rawLine.includes("content_delta")) {
-      setStreaming(prev => ({ ...prev, content: prev.content + (data.content || "") }));
-    } else if (rawLine.includes("image_generated")) {
-      // Image will be shown when the message is saved
-      console.log("[PersonalChat] Image generated:", data.imageId);
-    } else if (rawLine.includes("error")) {
-      console.error("[PersonalChat] Server error:", data.error);
-      Alert.alert("Error", data.error || "An error occurred");
+  const handleStreamEvent = useCallback((data: any, eventType: string) => {
+    // Use the event type from the SSE "event:" line
+    switch (eventType) {
+      case "user_message":
+        // User message was saved, can ignore or log
+        console.log("[PersonalChat] User message saved:", data.id);
+        break;
+      case "reasoning_effort":
+        setStreaming(prev => ({ ...prev, reasoningEffort: data.effort }));
+        break;
+      case "thinking_start":
+        setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
+        break;
+      case "thinking_delta":
+        setStreaming(prev => ({ ...prev, thinkingContent: prev.thinkingContent + (data.content || "") }));
+        break;
+      case "thinking_end":
+        setStreaming(prev => ({ ...prev, isThinking: false }));
+        break;
+      case "tool_call_start":
+        setStreaming(prev => ({ 
+          ...prev, 
+          currentToolCall: { name: data.toolName, status: "starting" } 
+        }));
+        if (data.toolName === "web_search") {
+          setIsSearchingWeb(true);
+        }
+        break;
+      case "tool_call_end":
+        setStreaming(prev => ({ ...prev, currentToolCall: null }));
+        if (data.toolName === "web_search") {
+          setIsSearchingWeb(false);
+        }
+        break;
+      case "content_delta":
+        setStreaming(prev => ({ ...prev, content: prev.content + (data.content || "") }));
+        break;
+      case "image_generated":
+        console.log("[PersonalChat] Image generated:", data.imageId);
+        break;
+      case "done":
+        console.log("[PersonalChat] Stream complete");
+        break;
+      case "error":
+        console.error("[PersonalChat] Server error:", data.error);
+        Alert.alert("Error", data.error || "An error occurred");
+        break;
+      default:
+        // Log unknown event types for debugging
+        if (eventType) {
+          console.log("[PersonalChat] Unknown event type:", eventType, data);
+        }
     }
   }, []);
 
