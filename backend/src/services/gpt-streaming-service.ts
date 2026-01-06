@@ -230,6 +230,36 @@ export async function* streamGPT51Response(
             };
           }
           break;
+        
+        // Handle web search lifecycle events
+        case "response.web_search_call.in_progress":
+          console.log("[GPT-Streaming] Web search in progress");
+          yield { 
+            type: "tool_call_progress", 
+            data: { toolName: "web_search", status: "in_progress" } 
+          };
+          break;
+          
+        case "response.web_search_call.searching":
+          console.log("[GPT-Streaming] Web search searching");
+          yield { 
+            type: "tool_call_progress", 
+            data: { toolName: "web_search", status: "searching" } 
+          };
+          break;
+          
+        case "response.web_search_call.completed":
+          console.log("[GPT-Streaming] Web search completed");
+          const searchResults = (event as any).item || (event as any);
+          yield { 
+            type: "tool_call_end", 
+            data: { 
+              toolName: "web_search",
+              sources: searchResults?.action?.sources || searchResults?.sources
+            } 
+          };
+          currentToolCall = null;
+          break;
           
         case "response.output_item.done":
           const doneItem = (event as any).item;
@@ -238,14 +268,17 @@ export async function* streamGPT51Response(
             yield { type: "thinking_end", data: { content: currentThinking } };
             currentThinking = "";
           } else if (doneItem?.type === "web_search_call") {
-            yield { 
-              type: "tool_call_end", 
-              data: { 
-                toolName: "web_search",
-                sources: doneItem.action?.sources 
-              } 
-            };
-            currentToolCall = null;
+            // Only emit tool_call_end if not already handled by web_search_call.completed
+            if (currentToolCall?.name === "web_search") {
+              yield { 
+                type: "tool_call_end", 
+                data: { 
+                  toolName: "web_search",
+                  sources: doneItem.action?.sources 
+                } 
+              };
+              currentToolCall = null;
+            }
           } else if (doneItem?.type === "image_generation_call") {
             if (doneItem.result) {
               yield { 
@@ -298,9 +331,9 @@ export async function* streamGPT51Response(
           break;
           
         default:
-          // Log unknown event types for debugging
-          if (eventType) {
-            console.log("[GPT-Streaming] Unknown event type:", eventType);
+          // Log unknown event types for debugging (ignore common events)
+          if (eventType && !eventType.startsWith("rate_limits")) {
+            console.log("[GPT-Streaming] Unhandled event type:", eventType);
           }
       }
     }

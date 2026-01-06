@@ -92,35 +92,51 @@ interface SSEEvent {
   data: string;
 }
 
+interface ParseResult {
+  events: SSEEvent[];
+  remaining: string;
+}
+
 /**
  * Parse SSE events from a text chunk
  * SSE format: event: <event_name>\ndata: <json_data>\n\n
+ * Returns both parsed events and any remaining unparsed text
  */
-function parseSSEEvents(text: string): SSEEvent[] {
+function parseSSEEvents(text: string): ParseResult {
   const events: SSEEvent[] = [];
-  const lines = text.split("\n");
   
-  let currentEvent = "";
-  let currentData = "";
+  // Split by double newline to get complete events
+  const parts = text.split("\n\n");
   
-  for (const line of lines) {
-    if (line.startsWith("event: ")) {
-      currentEvent = line.slice(7).trim();
-    } else if (line.startsWith("data: ")) {
-      currentData = line.slice(6);
-    } else if (line === "" && currentEvent && currentData) {
+  // The last part might be incomplete, so we return it as remaining
+  const remaining = parts.pop() || "";
+  
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    
+    const lines = part.split("\n");
+    let currentEvent = "";
+    let currentData = "";
+    
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        currentEvent = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        // Handle data that might have "data: " or "data:"
+        currentData = line.slice(5).trim();
+        // If there's a leading space after "data:", remove it
+        if (line.charAt(5) === " ") {
+          currentData = line.slice(6);
+        }
+      }
+    }
+    
+    if (currentEvent && currentData) {
       events.push({ event: currentEvent, data: currentData });
-      currentEvent = "";
-      currentData = "";
     }
   }
   
-  // Handle case where buffer ends without trailing newline
-  if (currentEvent && currentData) {
-    events.push({ event: currentEvent, data: currentData });
-  }
-  
-  return events;
+  return { events, remaining };
 }
 
 // ============================================================================
@@ -234,20 +250,37 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
           
           if (done) {
             console.log("[Streaming] Stream ended");
+            // Process any remaining buffer content before exiting
+            if (buffer.trim()) {
+              const { events } = parseSSEEvents(buffer + "\n\n"); // Add terminator
+              for (const event of events) {
+                try {
+                  const data = JSON.parse(event.data);
+                  console.log("[Streaming] Final event:", event.event);
+                  // Process the event (simplified - done event handling)
+                  if (event.event === "done") {
+                    setStreamingState((prev) => ({
+                      ...prev,
+                      isStreaming: false,
+                      isThinking: false,
+                      currentToolCall: null,
+                    }));
+                    callbacks?.onDone?.(data.updatedTitle);
+                  }
+                } catch (e) {
+                  console.warn("[Streaming] Failed to parse final event:", e);
+                }
+              }
+            }
             break;
           }
 
           // Decode the chunk and add to buffer
           buffer += decoder.decode(value, { stream: true });
           
-          // Parse SSE events from buffer
-          const events = parseSSEEvents(buffer);
-          
-          // Keep any incomplete event in the buffer
-          const lastNewlineIndex = buffer.lastIndexOf("\n\n");
-          if (lastNewlineIndex !== -1) {
-            buffer = buffer.slice(lastNewlineIndex + 2);
-          }
+          // Parse SSE events from buffer and get remaining unparsed text
+          const { events, remaining } = parseSSEEvents(buffer);
+          buffer = remaining; // Keep only the unparsed portion
 
           // Process each event
           for (const event of events) {
