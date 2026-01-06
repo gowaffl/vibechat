@@ -74,6 +74,7 @@ import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { personalChatsKeys, useAllUserAgents } from "@/hooks/usePersonalChats";
+import { usePersonalChatStreaming, type StreamingState as StreamingHookState } from "@/hooks/usePersonalChatStreaming";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { AIFriend, PersonalConversation, PersonalMessage, PersonalMessageMetadata } from "@/shared/contracts";
 
@@ -87,7 +88,7 @@ type RouteProp = RootStackScreenProps<"PersonalChat">["route"];
 // Message item for the list - can be a regular message or a date divider
 type MessageListItem = PersonalMessage | { id: string; isDateDivider: true; date: Date };
 
-// Streaming message state
+// Enhanced streaming message state for ChatGPT-like experience
 interface StreamingState {
   isStreaming: boolean;
   content: string;
@@ -97,8 +98,20 @@ interface StreamingState {
   currentToolCall: {
     name: string;
     status: "starting" | "in_progress" | "completed";
+    sources?: Array<{ title: string; url: string }>;
   } | null;
   reasoningEffort: "none" | "low" | "medium" | "high" | null;
+  error: string | null;
+  userMessageId: string | null;
+  assistantMessageId: string | null;
+}
+
+// Optimistic user message for immediate display while streaming
+interface OptimisticUserMessage {
+  id: string;
+  content: string;
+  imageUrl?: string | null;
+  createdAt: Date;
 }
 
 // Typing indicator component
@@ -180,10 +193,11 @@ function SearchingIndicator({ isDark, colors }: { isDark: boolean; colors: any }
   );
 }
 
-// Thinking indicator component - shows when AI is reasoning
+// Thinking indicator component - shows when AI is reasoning (ChatGPT-like expandable)
 function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; colors: any; content: string }) {
   const pulseOpacity = useSharedValue(0.6);
   const isMounted = useRef(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   
   useEffect(() => {
     isMounted.current = true;
@@ -220,32 +234,91 @@ function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; color
       exiting={FadeOut.duration(200)}
       style={[styles.thinkingContainer, { backgroundColor: isDark ? "rgba(168,85,247,0.15)" : "rgba(168,85,247,0.1)" }]}
     >
-      <Reanimated.View style={[styles.thinkingHeader, animatedStyle]}>
-        <Sparkles size={14} color="#A855F7" />
-        <Text style={[styles.thinkingLabel, { color: "#A855F7" }]}>Thinking...</Text>
-      </Reanimated.View>
-      {content ? (
+      <Pressable 
+        onPress={() => content && setIsExpanded(!isExpanded)}
+        style={styles.thinkingHeader}
+      >
+        <Reanimated.View style={[{ flexDirection: "row", alignItems: "center", gap: 6 }, animatedStyle]}>
+          <Sparkles size={14} color="#A855F7" />
+          <Text style={[styles.thinkingLabel, { color: "#A855F7" }]}>
+            {content ? "Thinking" : "Thinking..."}
+          </Text>
+          {content && (
+            <Text style={{ color: "#A855F7", fontSize: 12 }}>
+              {isExpanded ? "▼" : "▶"}
+            </Text>
+          )}
+        </Reanimated.View>
+      </Pressable>
+      {content && isExpanded ? (
+        <Reanimated.View entering={FadeIn.duration(200)}>
+          <Text 
+            style={[styles.thinkingContent, { color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)" }]}
+          >
+            {content}
+          </Text>
+        </Reanimated.View>
+      ) : content && !isExpanded ? (
         <Text 
-          style={[styles.thinkingContent, { color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)" }]}
-          numberOfLines={3}
+          style={[styles.thinkingContent, { color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.4)", fontSize: 11 }]}
+          numberOfLines={1}
         >
-          {content}
+          {content.length > 60 ? content.substring(0, 60) + "..." : content}
         </Text>
       ) : null}
     </Reanimated.View>
   );
 }
 
-// Tool call indicator component - shows which tool is being used
-function ToolCallIndicator({ toolName, isDark, colors }: { toolName: string; isDark: boolean; colors: any }) {
+// Tool call indicator component - shows which tool is being used (ChatGPT-like)
+function ToolCallIndicator({ 
+  toolName, 
+  isDark, 
+  colors, 
+  status = "in_progress" 
+}: { 
+  toolName: string; 
+  isDark: boolean; 
+  colors: any;
+  status?: "starting" | "in_progress" | "completed";
+}) {
+  const progressWidth = useSharedValue(0);
+  
+  useEffect(() => {
+    // Animate progress bar
+    if (status === "starting") {
+      progressWidth.value = withTiming(0.3, { duration: 300 });
+    } else if (status === "in_progress") {
+      progressWidth.value = withRepeat(
+        withSequence(
+          withTiming(0.7, { duration: 1000 }),
+          withTiming(0.4, { duration: 1000 })
+        ),
+        -1,
+        true
+      );
+    } else if (status === "completed") {
+      cancelAnimation(progressWidth);
+      progressWidth.value = withTiming(1, { duration: 300 });
+    }
+    
+    return () => {
+      cancelAnimation(progressWidth);
+    };
+  }, [status]);
+
+  const progressStyle = useAnimatedStyle(() => ({
+    width: `${progressWidth.value * 100}%`,
+  }));
+
   const getToolInfo = () => {
     switch (toolName) {
       case "web_search":
-        return { icon: Globe, label: "Searching the web", color: "#6366F1" };
+        return { icon: Globe, label: status === "completed" ? "Web search complete" : "Searching the web...", color: "#6366F1" };
       case "image_generation":
-        return { icon: ImagePlus, label: "Generating image", color: "#10B981" };
+        return { icon: ImagePlus, label: status === "completed" ? "Image generated" : "Generating image...", color: "#10B981" };
       default:
-        return { icon: Sparkles, label: `Using ${toolName}`, color: "#F59E0B" };
+        return { icon: Sparkles, label: status === "completed" ? `${toolName} complete` : `Using ${toolName}...`, color: "#F59E0B" };
     }
   };
 
@@ -258,28 +331,112 @@ function ToolCallIndicator({ toolName, isDark, colors }: { toolName: string; isD
       exiting={FadeOut.duration(200)}
       style={[styles.toolCallContainer, { backgroundColor: bgColor }]}
     >
-      <ActivityIndicator size="small" color={color} style={styles.toolCallSpinner} />
-      <Icon size={14} color={color} />
-      <Text style={[styles.toolCallText, { color }]}>{label}</Text>
+      <View style={styles.toolCallHeader}>
+        {status !== "completed" ? (
+          <ActivityIndicator size="small" color={color} style={styles.toolCallSpinner} />
+        ) : (
+          <View style={[styles.toolCallCheckmark, { backgroundColor: color }]}>
+            <Text style={{ color: "#fff", fontSize: 10, fontWeight: "bold" }}>✓</Text>
+          </View>
+        )}
+        <Icon size={14} color={color} />
+        <Text style={[styles.toolCallText, { color }]}>{label}</Text>
+      </View>
+      {/* Progress bar */}
+      {status !== "completed" && (
+        <View style={[styles.toolCallProgressBar, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }]}>
+          <Reanimated.View style={[styles.toolCallProgressFill, { backgroundColor: color }, progressStyle]} />
+        </View>
+      )}
     </Reanimated.View>
   );
 }
 
-// Streaming content preview component
+// Streaming content preview component - ChatGPT-like live Markdown rendering with cursor
 function StreamingContentPreview({ content, isDark, colors }: { content: string; isDark: boolean; colors: any }) {
+  const cursorOpacity = useSharedValue(1);
+  
+  useEffect(() => {
+    // Blinking cursor animation
+    cursorOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0, { duration: 400 }),
+        withTiming(1, { duration: 400 })
+      ),
+      -1,
+      false
+    );
+    
+    return () => {
+      cancelAnimation(cursorOpacity);
+    };
+  }, []);
+
+  const cursorStyle = useAnimatedStyle(() => ({
+    opacity: cursorOpacity.value,
+  }));
+  
   if (!content) return null;
   
   return (
     <Reanimated.View
       entering={FadeIn.duration(200)}
-      style={[styles.streamingPreviewContainer, { backgroundColor: isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.9)" }]}
+      layout={Layout.springify()}
+      style={styles.streamingContentContainer}
     >
-      <Text 
-        style={[styles.streamingPreviewText, { color: colors.text }]}
-        numberOfLines={10}
+      {/* Render streaming content with Markdown */}
+      <Markdown
+        style={{
+          body: { color: colors.text, fontSize: 16, lineHeight: 24 },
+          heading1: { color: colors.text, fontSize: 24, fontWeight: "bold", marginTop: 16, marginBottom: 8 },
+          heading2: { color: colors.text, fontSize: 20, fontWeight: "bold", marginTop: 14, marginBottom: 6 },
+          heading3: { color: colors.text, fontSize: 18, fontWeight: "bold", marginTop: 12, marginBottom: 4 },
+          strong: { fontWeight: "bold", color: colors.text },
+          em: { fontStyle: "italic", color: colors.text },
+          link: { color: "#6366f1", textDecorationLine: "underline" },
+          blockquote: {
+            backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+            borderLeftWidth: 3,
+            borderLeftColor: "#6366f1",
+            paddingLeft: 12,
+            paddingVertical: 8,
+            marginVertical: 8,
+          },
+          code_inline: {
+            backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+            color: "#6366f1",
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+            fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+          },
+          code_block: {
+            backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)",
+            color: colors.text,
+            padding: 12,
+            borderRadius: 8,
+            marginVertical: 8,
+            fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+          },
+          fence: {
+            backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)",
+            color: colors.text,
+            padding: 12,
+            borderRadius: 8,
+            marginVertical: 8,
+            fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+          },
+          bullet_list: { marginVertical: 8 },
+          ordered_list: { marginVertical: 8 },
+          list_item: { marginVertical: 4 },
+          paragraph: { color: colors.text, fontSize: 16, lineHeight: 24, marginVertical: 4 },
+          text: { color: colors.text, fontSize: 16 },
+        }}
       >
         {content}
-      </Text>
+      </Markdown>
+      {/* Blinking cursor */}
+      <Reanimated.View style={[styles.streamingCursor, cursorStyle, { backgroundColor: colors.text }]} />
     </Reanimated.View>
   );
 }
@@ -317,8 +474,12 @@ export default function PersonalChatScreen() {
     thinkingContent: "",
     currentToolCall: null,
     reasoningEffort: null,
+    error: null,
+    userMessageId: null,
+    assistantMessageId: null,
   });
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
+  const [optimisticUserMessage, setOptimisticUserMessage] = useState<OptimisticUserMessage | null>(null);
 
   // Refs
   const isInputFocused = useRef(false);
@@ -440,10 +601,8 @@ export default function PersonalChatScreen() {
     }
   }, [conversationData]);
 
-  // Create messages list with date dividers
+  // Create messages list with date dividers and optimistic user message
   const messagesWithDividers = useMemo(() => {
-    if (messages.length === 0) return [];
-
     const result: MessageListItem[] = [];
     let lastDate: string | null = null;
 
@@ -465,23 +624,172 @@ export default function PersonalChatScreen() {
       result.push(msg);
     });
 
+    // Add optimistic user message if present (for immediate display while streaming)
+    if (optimisticUserMessage) {
+      const optimisticDate = optimisticUserMessage.createdAt.toDateString();
+      if (optimisticDate !== lastDate) {
+        result.push({
+          id: `divider-${optimisticDate}`,
+          isDateDivider: true,
+          date: optimisticUserMessage.createdAt,
+        });
+      }
+      // Create a PersonalMessage-like object for the optimistic message
+      result.push({
+        id: optimisticUserMessage.id,
+        conversationId: conversationId || "",
+        content: optimisticUserMessage.content,
+        role: "user",
+        imageUrl: optimisticUserMessage.imageUrl || null,
+        generatedImageUrl: null,
+        metadata: optimisticUserMessage.imageUrl ? { attachedImageUrls: [optimisticUserMessage.imageUrl] } : {},
+        createdAt: optimisticUserMessage.createdAt.toISOString(),
+      } as PersonalMessage);
+    }
+
     return result;
-  }, [messages]);
+  }, [messages, optimisticUserMessage, conversationId]);
 
-  // Send message using non-streaming endpoint (SSE has issues with Render's proxy)
-  // Shows thinking animation while waiting for response
+  // Streaming hook for real-time AI responses
+  const { startStreaming, stopStreaming: stopStreamingHook } = usePersonalChatStreaming({
+    onUserMessage: (message) => {
+      console.log("[PersonalChat] User message confirmed:", message.id);
+      // Clear optimistic message once confirmed
+      setOptimisticUserMessage(null);
+      setStreaming((prev) => ({ ...prev, userMessageId: message.id }));
+    },
+    onThinkingStart: () => {
+      console.log("[PersonalChat] Thinking started");
+      setStreaming((prev) => ({ 
+        ...prev, 
+        isThinking: true, 
+        thinkingContent: "" 
+      }));
+    },
+    onThinkingDelta: (content) => {
+      setStreaming((prev) => ({ 
+        ...prev, 
+        thinkingContent: prev.thinkingContent + content 
+      }));
+    },
+    onThinkingEnd: (content) => {
+      console.log("[PersonalChat] Thinking ended");
+      setStreaming((prev) => ({ 
+        ...prev, 
+        isThinking: false, 
+        thinkingContent: content 
+      }));
+    },
+    onToolCallStart: (toolName, toolInput) => {
+      console.log("[PersonalChat] Tool call started:", toolName);
+      setStreaming((prev) => ({ 
+        ...prev, 
+        currentToolCall: { name: toolName, status: "starting" } 
+      }));
+      if (toolName === "web_search") {
+        setIsSearchingWeb(true);
+      }
+    },
+    onToolCallProgress: (data) => {
+      setStreaming((prev) => ({
+        ...prev,
+        currentToolCall: prev.currentToolCall 
+          ? { ...prev.currentToolCall, status: "in_progress" }
+          : null,
+      }));
+    },
+    onToolCallEnd: (toolName, sources) => {
+      console.log("[PersonalChat] Tool call ended:", toolName, sources?.length, "sources");
+      setStreaming((prev) => ({
+        ...prev,
+        currentToolCall: prev.currentToolCall 
+          ? { ...prev.currentToolCall, status: "completed", sources }
+          : null,
+      }));
+      if (toolName === "web_search") {
+        setIsSearchingWeb(false);
+      }
+      // Clear tool call after brief delay to show completion
+      setTimeout(() => {
+        setStreaming((prev) => ({ ...prev, currentToolCall: null }));
+      }, 500);
+    },
+    onContentDelta: (delta, accumulated) => {
+      setStreaming((prev) => ({ ...prev, content: accumulated }));
+      // Auto-scroll to bottom when content is streaming
+      if (isAtBottomRef.current) {
+        requestAnimationFrame(() => {
+          try {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          } catch (e) {
+            // Ignore scroll errors
+          }
+        });
+      }
+    },
+    onContentEnd: (content) => {
+      console.log("[PersonalChat] Content ended, length:", content.length);
+      setStreaming((prev) => ({ ...prev, content }));
+    },
+    onImageGenerated: (imageId) => {
+      console.log("[PersonalChat] Image generated:", imageId);
+    },
+    onAssistantMessage: (message) => {
+      console.log("[PersonalChat] Assistant message saved:", message.id);
+      setStreaming((prev) => ({ ...prev, assistantMessageId: message.id, messageId: message.id }));
+    },
+    onDone: async (updatedTitle) => {
+      console.log("[PersonalChat] Stream completed, title:", updatedTitle);
+      // Clear streaming state
+      setStreaming({
+        isStreaming: false,
+        content: "",
+        messageId: null,
+        isThinking: false,
+        thinkingContent: "",
+        currentToolCall: null,
+        reasoningEffort: null,
+        error: null,
+        userMessageId: null,
+        assistantMessageId: null,
+      });
+      setOptimisticUserMessage(null);
+      
+      // Refetch conversation to get saved messages
+      if (conversationId) {
+        await queryClient.invalidateQueries({ 
+          queryKey: personalChatsKeys.conversation(conversationId) 
+        });
+      }
+      await queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.conversations(user?.id || "") 
+      });
+      
+      // Scroll to bottom
+      requestAnimationFrame(() => {
+        try {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        } catch (e) {
+          // Ignore scroll errors
+        }
+      });
+    },
+    onError: (error) => {
+      console.error("[PersonalChat] Streaming error:", error);
+      setStreaming((prev) => ({ 
+        ...prev, 
+        isStreaming: false, 
+        isThinking: false, 
+        currentToolCall: null,
+        error 
+      }));
+      setOptimisticUserMessage(null);
+      Alert.alert("Error", error || "Failed to get AI response. Please try again.");
+    },
+  });
+
+  // Send message using SSE streaming for real-time ChatGPT-like experience
   const sendMessage = useCallback(async (content: string, images: string[]) => {
-    // Initialize thinking state
-    setStreaming({
-      isStreaming: true,
-      content: "",
-      messageId: null,
-      isThinking: true,
-      thinkingContent: "",
-      currentToolCall: null,
-      reasoningEffort: null,
-    });
-
     // Track the active conversation ID (may be created during request)
     let activeConversationId = conversationId;
 
@@ -503,51 +811,54 @@ export default function PersonalChatScreen() {
         }
       }
 
-      console.log("[PersonalChat] Sending message to:", activeConversationId);
+      console.log("[PersonalChat] Starting streaming message to:", activeConversationId);
 
-      // Use non-streaming endpoint - more reliable with Render's proxy
-      const response = await api.post<{
-        userMessage: PersonalMessage;
-        assistantMessage: PersonalMessage;
-      }>(
-        `/api/personal-chats/${activeConversationId}/messages`,
+      // Create optimistic user message for immediate display
+      const optimisticId = `optimistic-${Date.now()}`;
+      setOptimisticUserMessage({
+        id: optimisticId,
+        content,
+        imageUrl: images.length > 0 ? images[0] : null,
+        createdAt: new Date(),
+      });
+
+      // Initialize streaming state
+      setStreaming({
+        isStreaming: true,
+        content: "",
+        messageId: null,
+        isThinking: true,
+        thinkingContent: "",
+        currentToolCall: null,
+        reasoningEffort: null,
+        error: null,
+        userMessageId: null,
+        assistantMessageId: null,
+      });
+
+      // Scroll to bottom when sending
+      isAtBottomRef.current = true;
+      requestAnimationFrame(() => {
+        try {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        } catch (e) {
+          // Ignore scroll errors
+        }
+      });
+
+      // Start SSE streaming
+      await startStreaming(
+        activeConversationId,
+        user?.id || "",
+        content,
         {
-          userId: user?.id,
-          content,
           imageUrl: images.length > 0 ? images[0] : undefined,
           aiFriendId: selectedAgent?.id,
         }
       );
 
-      console.log("[PersonalChat] Response received:", response.assistantMessage?.id);
-
-      // Refetch to show the new messages
-      if (activeConversationId) {
-        await queryClient.invalidateQueries({ 
-          queryKey: personalChatsKeys.conversation(activeConversationId) 
-        });
-        await queryClient.refetchQueries({ 
-          queryKey: personalChatsKeys.conversation(activeConversationId) 
-        });
-      }
-      await queryClient.invalidateQueries({ 
-        queryKey: personalChatsKeys.conversations(user?.id || "") 
-      });
-
-      // Scroll to bottom
-      try {
-        requestAnimationFrame(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        });
-      } catch (scrollError) {
-        console.error("[PersonalChat] Scroll error:", scrollError);
-      }
-
     } catch (error: any) {
       console.error("[PersonalChat] Message error:", error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
-    } finally {
-      // Clear thinking state
       setStreaming({
         isStreaming: false,
         content: "",
@@ -556,9 +867,14 @@ export default function PersonalChatScreen() {
         thinkingContent: "",
         currentToolCall: null,
         reasoningEffort: null,
+        error: error?.message || "Failed to send message",
+        userMessageId: null,
+        assistantMessageId: null,
       });
+      setOptimisticUserMessage(null);
+      Alert.alert("Error", "Failed to send message. Please try again.");
     }
-  }, [conversationId, user?.id, selectedAgent?.id, queryClient]);
+  }, [conversationId, user?.id, selectedAgent?.id, queryClient, startStreaming]);
 
   // Scroll to bottom helper - wrapped in try/catch to prevent crashes
   const scrollToBottom = useCallback((animated = true) => {
@@ -590,9 +906,11 @@ export default function PersonalChatScreen() {
     setAttachedImages([]);
   }, [inputText, attachedImages, sendMessage]);
 
-  // Handle stop generation (currently just clears UI state - API request can't be cancelled)
+  // Handle stop generation - aborts the SSE stream and clears UI state
   const handleStopGeneration = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Stop the SSE stream
+    stopStreamingHook();
     // Clear the streaming UI state
     setStreaming({ 
       isStreaming: false, 
@@ -602,9 +920,13 @@ export default function PersonalChatScreen() {
       thinkingContent: "",
       currentToolCall: null,
       reasoningEffort: null,
+      error: null,
+      userMessageId: null,
+      assistantMessageId: null,
     });
+    setOptimisticUserMessage(null);
     setIsSearchingWeb(false);
-  }, []);
+  }, [stopStreamingHook]);
 
   // Handle agent selection
   const handleAgentSelect = useCallback(async (agent: AIFriend | null) => {
@@ -1091,7 +1413,10 @@ export default function PersonalChatScreen() {
             }}
             ListFooterComponent={
               streaming.isStreaming ? (
-                <View style={styles.streamingContainer}>
+                <Reanimated.View 
+                  entering={FadeIn.duration(200)}
+                  style={styles.streamingContainer}
+                >
                   {/* Show thinking indicator when AI is reasoning */}
                   {streaming.isThinking && (
                     <ThinkingIndicator 
@@ -1106,11 +1431,12 @@ export default function PersonalChatScreen() {
                     <ToolCallIndicator 
                       toolName={streaming.currentToolCall.name} 
                       isDark={isDark} 
-                      colors={colors} 
+                      colors={colors}
+                      status={streaming.currentToolCall.status}
                     />
                   )}
                   
-                  {/* Show streaming content preview */}
+                  {/* Show streaming content with live Markdown rendering */}
                   {streaming.content && (
                     <StreamingContentPreview 
                       content={streaming.content} 
@@ -1119,11 +1445,16 @@ export default function PersonalChatScreen() {
                     />
                   )}
                   
-                  {/* Show typing indicator when waiting for response */}
+                  {/* Show typing indicator only when waiting for first content */}
                   {!streaming.content && !streaming.isThinking && !streaming.currentToolCall && (
-                    <TypingIndicator isDark={isDark} />
+                    <View style={styles.typingIndicatorContainer}>
+                      <TypingIndicator isDark={isDark} />
+                      <Text style={[styles.typingIndicatorText, { color: colors.textSecondary }]}>
+                        Preparing response...
+                      </Text>
+                    </View>
                   )}
-                </View>
+                </Reanimated.View>
               ) : null
             }
           />
@@ -1575,21 +1906,42 @@ const styles = StyleSheet.create({
   },
   // Tool call indicator styles
   toolCallContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 16,
     alignSelf: "flex-start",
     marginBottom: 8,
+    minWidth: 200,
+  },
+  toolCallHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   toolCallSpinner: {
+    marginRight: -4,
+  },
+  toolCallCheckmark: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: -4,
   },
   toolCallText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  toolCallProgressBar: {
+    height: 3,
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  toolCallProgressFill: {
+    height: "100%",
+    borderRadius: 2,
   },
   // Streaming content preview styles
   streamingPreviewContainer: {
@@ -1601,6 +1953,28 @@ const styles = StyleSheet.create({
   streamingPreviewText: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  // Enhanced streaming content container (ChatGPT-like)
+  streamingContentContainer: {
+    marginVertical: 8,
+    paddingRight: 40,
+  },
+  streamingCursor: {
+    width: 2,
+    height: 18,
+    marginLeft: 2,
+    borderRadius: 1,
+  },
+  // Typing indicator container
+  typingIndicatorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  typingIndicatorText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   dateDividerContainer: {
     flexDirection: "row",
