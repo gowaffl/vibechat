@@ -4,12 +4,11 @@
  * Features:
  * - Full-width AI responses with rich Markdown rendering (no bubble)
  * - User messages in right-aligned bubbles
- * - Agent selector dropdown in header
+ * - Agent selector dropdown in header (persists with conversation)
  * - Conversation history drawer (swipe from left)
  * - Image attachments and generation
  * - Web search capability
- * - Streaming AI responses with thinking/tool call indicators
- *   (Uses XMLHttpRequest with onprogress for React Native SSE support)
+ * - Animated "thinking" indicator while AI processes
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
@@ -430,12 +429,13 @@ export default function PersonalChatScreen() {
     }
   }, [initialAgentId, allAgents, conversationId]);
 
-  // Load agent from conversation data (ai_friend is already included in the response)
+  // Load agent from conversation data (aiFriend is included in the response)
   // Always sync the selected agent with the conversation's agent when conversation loads
   useEffect(() => {
-    // The conversation data includes the ai_friend object, so use that directly
-    const aiFriendFromConversation = (conversationData as any)?.ai_friend;
+    // The conversation data includes the aiFriend object (camelCase from backend)
+    const aiFriendFromConversation = conversationData?.aiFriend;
     if (aiFriendFromConversation) {
+      console.log("[PersonalChat] Setting agent from conversation:", aiFriendFromConversation.name);
       setSelectedAgent(aiFriendFromConversation);
     }
   }, [conversationData]);
@@ -468,18 +468,15 @@ export default function PersonalChatScreen() {
     return result;
   }, [messages]);
 
-  // Reference to XMLHttpRequest for abort functionality
-  const xhrRef = useRef<XMLHttpRequest | null>(null);
-
-  // Send message with SSE streaming using XMLHttpRequest
-  // React Native's fetch doesn't support streaming, so we use XHR with onprogress
+  // Send message using non-streaming endpoint (SSE has issues with Render's proxy)
+  // Shows thinking animation while waiting for response
   const sendMessage = useCallback(async (content: string, images: string[]) => {
-    // Initialize streaming state
+    // Initialize thinking state
     setStreaming({
       isStreaming: true,
       content: "",
       messageId: null,
-      isThinking: true, // Start with thinking indicator
+      isThinking: true,
       thinkingContent: "",
       currentToolCall: null,
       reasoningEffort: null,
@@ -506,84 +503,25 @@ export default function PersonalChatScreen() {
         }
       }
 
-      console.log("[PersonalChat] Starting SSE stream to:", activeConversationId);
+      console.log("[PersonalChat] Sending message to:", activeConversationId);
 
-      // Use XMLHttpRequest for streaming (React Native fetch doesn't support streaming)
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhrRef.current = xhr;
-        
-        let receivedLength = 0;
-        let buffer = "";
-        let currentEventType = "";
-
-        xhr.open("POST", `${BACKEND_URL}/api/personal-chats/${activeConversationId}/messages/stream`, true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.setRequestHeader("Accept", "text/event-stream");
-
-        // Process SSE chunks as they arrive
-        xhr.onprogress = () => {
-          const newData = xhr.responseText.slice(receivedLength);
-          receivedLength = xhr.responseText.length;
-          buffer += newData;
-
-          // Process complete SSE events
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            
-            if (trimmedLine === "") continue;
-            
-            if (trimmedLine.startsWith("event: ")) {
-              currentEventType = trimmedLine.slice(7);
-              continue;
-            }
-            
-            if (trimmedLine.startsWith("data: ")) {
-              const eventData = trimmedLine.slice(6);
-              
-              try {
-                const data = JSON.parse(eventData);
-                handleSSEEvent(currentEventType, data);
-              } catch (e) {
-                // Ignore parse errors (might be partial data)
-              }
-              currentEventType = "";
-            }
-          }
-        };
-
-        xhr.onload = () => {
-          console.log("[PersonalChat] Stream completed, status:", xhr.status);
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`HTTP error: ${xhr.status}`));
-          }
-        };
-
-        xhr.onerror = () => {
-          console.error("[PersonalChat] XHR error");
-          reject(new Error("Network error"));
-        };
-
-        xhr.onabort = () => {
-          console.log("[PersonalChat] Stream aborted by user");
-          resolve();
-        };
-
-        // Send the request
-        xhr.send(JSON.stringify({
+      // Use non-streaming endpoint - more reliable with Render's proxy
+      const response = await api.post<{
+        userMessage: PersonalMessage;
+        assistantMessage: PersonalMessage;
+      }>(
+        `/api/personal-chats/${activeConversationId}/messages`,
+        {
           userId: user?.id,
           content,
           imageUrl: images.length > 0 ? images[0] : undefined,
           aiFriendId: selectedAgent?.id,
-        }));
-      });
+        }
+      );
 
-      // After stream completes, refetch to ensure data consistency
+      console.log("[PersonalChat] Response received:", response.assistantMessage?.id);
+
+      // Refetch to show the new messages
       if (activeConversationId) {
         await queryClient.invalidateQueries({ 
           queryKey: personalChatsKeys.conversation(activeConversationId) 
@@ -606,13 +544,10 @@ export default function PersonalChatScreen() {
       }
 
     } catch (error: any) {
-      console.error("[PersonalChat] Streaming error:", error);
+      console.error("[PersonalChat] Message error:", error);
       Alert.alert("Error", "Failed to send message. Please try again.");
     } finally {
-      // Cleanup
-      xhrRef.current = null;
-      
-      // Clear streaming state
+      // Clear thinking state
       setStreaming({
         isStreaming: false,
         content: "",
@@ -624,76 +559,6 @@ export default function PersonalChatScreen() {
       });
     }
   }, [conversationId, user?.id, selectedAgent?.id, queryClient]);
-
-  // Handle individual SSE events
-  const handleSSEEvent = useCallback((eventType: string, data: any) => {
-    switch (eventType) {
-      case "connected":
-        console.log("[PersonalChat] SSE connected");
-        break;
-      case "ping":
-        // Keep-alive, ignore
-        break;
-      case "user_message":
-        console.log("[PersonalChat] User message saved:", data.id);
-        break;
-      case "reasoning_effort":
-        setStreaming(prev => ({ ...prev, reasoningEffort: data.effort }));
-        break;
-      case "thinking_start":
-        setStreaming(prev => ({ ...prev, isThinking: true, thinkingContent: "" }));
-        break;
-      case "thinking_delta":
-        setStreaming(prev => ({ 
-          ...prev, 
-          thinkingContent: prev.thinkingContent + (data.content || "") 
-        }));
-        break;
-      case "thinking_end":
-        setStreaming(prev => ({ ...prev, isThinking: false }));
-        break;
-      case "tool_call_start":
-        setStreaming(prev => ({ 
-          ...prev, 
-          currentToolCall: { name: data.toolName, status: "starting" } 
-        }));
-        if (data.toolName === "web_search") {
-          setIsSearchingWeb(true);
-        }
-        break;
-      case "tool_call_end":
-        setStreaming(prev => ({ ...prev, currentToolCall: null }));
-        if (data.toolName === "web_search") {
-          setIsSearchingWeb(false);
-        }
-        break;
-      case "content_delta":
-        setStreaming(prev => ({ 
-          ...prev, 
-          isThinking: false, // Content started, stop thinking
-          content: prev.content + (data.content || "") 
-        }));
-        break;
-      case "image_generated":
-        console.log("[PersonalChat] Image generated:", data.imageId);
-        break;
-      case "assistant_message":
-        console.log("[PersonalChat] Assistant message saved:", data.id);
-        setStreaming(prev => ({ ...prev, messageId: data.id }));
-        break;
-      case "done":
-        console.log("[PersonalChat] Stream complete");
-        break;
-      case "error":
-        console.error("[PersonalChat] Server error:", data.error);
-        Alert.alert("Error", data.error || "An error occurred");
-        break;
-      default:
-        if (eventType) {
-          console.log("[PersonalChat] Unknown event:", eventType, data);
-        }
-    }
-  }, []);
 
   // Scroll to bottom helper - wrapped in try/catch to prevent crashes
   const scrollToBottom = useCallback((animated = true) => {
@@ -725,14 +590,10 @@ export default function PersonalChatScreen() {
     setAttachedImages([]);
   }, [inputText, attachedImages, sendMessage]);
 
-  // Handle stop generation
+  // Handle stop generation (currently just clears UI state - API request can't be cancelled)
   const handleStopGeneration = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // Cancel streaming via XMLHttpRequest abort
-    if (xhrRef.current) {
-      xhrRef.current.abort();
-      xhrRef.current = null;
-    }
+    // Clear the streaming UI state
     setStreaming({ 
       isStreaming: false, 
       content: "", 
