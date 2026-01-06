@@ -1693,6 +1693,7 @@ export const sendPersonalMessageRequestSchema = z.object({
   userId: z.string(),
   content: z.string(),
   imageUrl: z.string().optional(), // User-attached image
+  aiFriendId: z.string().optional(), // Allow overriding the agent per message
 });
 export type SendPersonalMessageRequest = z.infer<typeof sendPersonalMessageRequestSchema>;
 export const sendPersonalMessageResponseSchema = z.object({

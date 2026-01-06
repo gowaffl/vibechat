@@ -516,6 +516,7 @@ export default function PersonalChatScreen() {
             userId: user?.id,
             content,
             imageUrl: images.length > 0 ? images[0] : undefined,
+            aiFriendId: selectedAgent?.id, // Send the selected agent for persona
           }),
           signal: abortControllerRef.current.signal,
         }
@@ -779,11 +780,17 @@ export default function PersonalChatScreen() {
     },
   });
 
-  // Scroll to bottom helper
+  // Scroll to bottom helper - wrapped in try/catch to prevent crashes
   const scrollToBottom = useCallback((animated = true) => {
-    flatListRef.current?.scrollToEnd({ animated });
-    isAtBottomRef.current = true;
-  }, []);
+    try {
+      if (flatListRef.current && messagesWithDividers.length > 0) {
+        flatListRef.current.scrollToEnd({ animated });
+      }
+      isAtBottomRef.current = true;
+    } catch (error) {
+      console.log("[PersonalChat] Scroll error (non-critical):", error);
+    }
+  }, [messagesWithDividers.length]);
 
   // Handle send message
   const handleSend = useCallback(() => {
@@ -1276,7 +1283,14 @@ export default function PersonalChatScreen() {
               // Only auto-scroll if user is already at the bottom
               if (isAtBottomRef.current) {
                 requestAnimationFrame(() => {
-                  flatListRef.current?.scrollToEnd({ animated: true });
+                  try {
+                    if (flatListRef.current && messagesWithDividers.length > 0) {
+                      flatListRef.current.scrollToEnd({ animated: true });
+                    }
+                  } catch (error) {
+                    // Ignore scroll errors - they're non-critical
+                    console.log("[PersonalChat] onContentSizeChange scroll error:", error);
+                  }
                 });
               }
             }}

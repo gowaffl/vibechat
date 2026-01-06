@@ -762,9 +762,14 @@ If the user asks you to generate or create an image, use the image generation to
 // POST /api/personal-chats/:conversationId/messages/stream - Send message with streaming response
 personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPersonalMessageRequestSchema), async (c) => {
   const conversationId = c.req.param("conversationId");
-  const { userId, content, imageUrl: attachedImageUrl } = c.req.valid("json");
+  const { userId, content, imageUrl: attachedImageUrl, aiFriendId: requestedAiFriendId } = c.req.valid("json");
 
-  console.log("[PersonalChats] Streaming message request:", { conversationId, userId, contentLength: content?.length });
+  console.log("[PersonalChats] Streaming message request:", { 
+    conversationId, 
+    userId, 
+    contentLength: content?.length,
+    requestedAiFriendId 
+  });
 
   // Verify conversation exists and belongs to user
   const { data: conversation, error: convError } = await db
@@ -789,6 +794,41 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
   if (convError || !conversation) {
     console.error("[PersonalChats] Conversation not found:", convError);
     return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Determine which AI friend to use - prefer requestedAiFriendId over conversation's
+  let aiFriend = conversation.ai_friend as any;
+  const effectiveAiFriendId = requestedAiFriendId || conversation.aiFriendId;
+
+  // If a different AI friend is requested, fetch it
+  if (requestedAiFriendId && requestedAiFriendId !== conversation.aiFriendId) {
+    const { data: requestedAiFriend, error: aiFriendError } = await db
+      .from("ai_friend")
+      .select("id, name, personality, tone, color")
+      .eq("id", requestedAiFriendId)
+      .single();
+
+    if (!aiFriendError && requestedAiFriend) {
+      aiFriend = requestedAiFriend;
+      console.log("[PersonalChats] Using requested AI friend:", requestedAiFriend.name);
+      
+      // Update conversation's aiFriendId for future messages
+      await db
+        .from("personal_conversation")
+        .update({ aiFriendId: requestedAiFriendId })
+        .eq("id", conversationId);
+    }
+  }
+
+  // Log the AI friend being used
+  if (aiFriend) {
+    console.log("[PersonalChats] AI Friend for response:", { 
+      name: aiFriend.name, 
+      personality: aiFriend.personality?.substring(0, 50),
+      tone: aiFriend.tone 
+    });
+  } else {
+    console.log("[PersonalChats] No AI friend selected, using default AI Assistant");
   }
 
   // Get recent chat history for context
@@ -822,7 +862,6 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
   }
 
   // Track agent usage if AI friend is associated
-  const aiFriend = conversation.ai_friend as any;
   if (aiFriend?.id) {
     try {
       const { data: existingUsage } = await db
