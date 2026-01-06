@@ -462,12 +462,12 @@ async function executeAIResponse(
     .join("\n");
 
   // Generate response
+  // Note: gpt-5.1 does not support temperature parameter
   const result = await executeGPT51Response({
     systemPrompt: `${systemPrompt}\n\nThis response is triggered by a workflow named "${workflow.name}".`,
     userPrompt: `Recent conversation:\n${context}\n\nTrigger message: ${triggerContent}\n\nRespond naturally as ${aiFriend.name}.`,
     tools: [],
     reasoningEffort: "none",
-    temperature: 0.9,
     maxTokens: 1024,
   });
 

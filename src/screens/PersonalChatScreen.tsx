@@ -42,6 +42,7 @@ import Reanimated, {
   withRepeat,
   withSequence,
   Easing,
+  cancelAnimation,
 } from "react-native-reanimated";
 import {
   Send,
@@ -182,28 +183,34 @@ function SearchingIndicator({ isDark, colors }: { isDark: boolean; colors: any }
 // Thinking indicator component - shows when AI is reasoning
 function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; colors: any; content: string }) {
   const pulseOpacity = useSharedValue(0.6);
+  const isMounted = useRef(true);
   
   useEffect(() => {
-    // Start animation
-    pulseOpacity.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 800, easing: Easing.ease }),
-        withTiming(0.6, { duration: 800, easing: Easing.ease })
-      ),
-      -1,
-      false
-    );
+    isMounted.current = true;
     
-    // Cleanup on unmount - cancel animation
+    // Start animation only if mounted
+    if (isMounted.current) {
+      pulseOpacity.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 800, easing: Easing.ease }),
+          withTiming(0.6, { duration: 800, easing: Easing.ease })
+        ),
+        -1,
+        false
+      );
+    }
+    
+    // Cleanup on unmount - cancel animation safely
     return () => {
-      pulseOpacity.value = 0.6;
+      isMounted.current = false;
+      cancelAnimation(pulseOpacity);
     };
-  }, [pulseOpacity]);
+  }, []);
 
   const animatedStyle = useAnimatedStyle(() => {
     'worklet';
     return {
-      opacity: pulseOpacity.value,
+      opacity: pulseOpacity.value ?? 0.6,
     };
   });
 

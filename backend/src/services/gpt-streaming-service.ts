@@ -15,8 +15,8 @@ export interface StreamingOptions {
   userPrompt: string;
   tools?: OpenAI.Responses.Tool[];
   reasoningEffort?: ReasoningEffort;
-  temperature?: number;
   maxTokens?: number;
+  // Note: gpt-5.1 does not support temperature parameter
 }
 
 export type StreamEventType = 
@@ -162,7 +162,6 @@ export async function* streamGPT51Response(
     userPrompt,
     tools,
     reasoningEffort = "none",
-    temperature = 1,
     maxTokens = 4096,
   } = options;
   
@@ -181,12 +180,12 @@ export async function* streamGPT51Response(
       : undefined;
     
     // Create streaming response
+    // Note: gpt-5.1 does not support temperature parameter
     const stream = await openai.responses.create({
       model: "gpt-5.1",
       instructions: systemPrompt,
       input: userPrompt,
       tools,
-      temperature,
       max_output_tokens: maxTokens,
       reasoning: reasoningConfig,
       stream: true,

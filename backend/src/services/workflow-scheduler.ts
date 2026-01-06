@@ -421,12 +421,12 @@ async function executeCustomAction(action: ScheduledAction): Promise<{ success: 
       .limit(1)
       .single();
 
+    // Note: gpt-5.1 does not support temperature parameter
     const result = await executeGPT51Response({
       systemPrompt: `You are ${aiFriend?.name || "AI Assistant"} in a group chat. ${aiFriend?.personality || ""} Keep responses natural and conversational.`,
       userPrompt: config.prompt || "Say something interesting to the group.",
       tools: [],
       reasoningEffort: "none",
-      temperature: 0.9,
       maxTokens: 500,
     });
 

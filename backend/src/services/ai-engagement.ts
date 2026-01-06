@@ -284,7 +284,7 @@ Respond naturally to what's happening in the conversation. Keep it brief and rea
       userPrompt: userInput,
       tools,
       reasoningEffort: "none",
-      temperature: 1,
+      // Note: gpt-5.1 does not support temperature parameter
       maxTokens: 2048,
     });
 

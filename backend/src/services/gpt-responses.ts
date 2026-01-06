@@ -20,8 +20,8 @@ export interface CreateResponseOptions {
   userPrompt: string;
   tools?: OpenAI.Responses.Tool[];
   reasoningEffort?: ReasoningEffort;
-  temperature?: number;
   maxTokens?: number;
+  // Note: gpt-5.1 does not support temperature parameter
 }
 
 export interface ResponseResult {
@@ -43,7 +43,6 @@ export async function executeGPT51Response(
     userPrompt,
     tools,
     reasoningEffort = "none", // Use "none" for hosted tools
-    temperature = 1,
     maxTokens = 4096,
   } = options;
 
@@ -57,12 +56,12 @@ export async function executeGPT51Response(
           }
         : undefined;
 
+    // Note: gpt-5.1 does not support temperature parameter
     const response = await openai.responses.create({
       model: "gpt-5.1",
       instructions: systemPrompt,
       input: userPrompt,
       tools,
-      temperature,
       max_output_tokens: maxTokens,
       reasoning: reasoningConfig,
       include: ["web_search_call.action.sources", "code_interpreter_call.outputs"],

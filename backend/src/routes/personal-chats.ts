@@ -655,7 +655,7 @@ If the user asks you to generate or create an image, use the image generation to
           { type: "image_generation" },
         ],
         reasoningEffort: "none", // Required for hosted tools
-        temperature: 0.8,
+        // Note: gpt-5.1 does not support temperature parameter
         maxTokens: 4096,
       });
 
@@ -913,7 +913,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           { type: "image_generation" },
         ],
         reasoningEffort,
-        temperature: 0.8,
+        // Note: gpt-5.1 does not support temperature parameter
         maxTokens: 4096,
       });
 

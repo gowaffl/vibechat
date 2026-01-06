@@ -42,14 +42,14 @@ Participants: ${participantNames}
 Transcription:
 ${truncatedTranscription}`;
 
+    // Note: gpt-5-nano only supports default temperature (1) and uses max_completion_tokens
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano", // As requested by the user
+      model: "gpt-5-nano",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 500,
-      temperature: 0.7,
+      max_completion_tokens: 500,
     });
 
     const summary = response.choices[0]?.message?.content?.trim();
@@ -75,6 +75,7 @@ export async function generateVibeCallOneLiner(
   transcription: string
 ): Promise<string> {
   try {
+    // Note: gpt-5-nano only supports default temperature (1) and uses max_completion_tokens
     const response = await openai.chat.completions.create({
       model: "gpt-5-nano",
       messages: [
@@ -87,8 +88,7 @@ export async function generateVibeCallOneLiner(
           content: `Summarize in one line: ${transcription.slice(0, 2000)}` 
         },
       ],
-      max_tokens: 50,
-      temperature: 0.5,
+      max_completion_tokens: 100,
     });
 
     return response.choices[0]?.message?.content?.trim() || "Vibe Call ended";
