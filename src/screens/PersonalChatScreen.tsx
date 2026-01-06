@@ -620,6 +620,13 @@ export default function PersonalChatScreen() {
   const handleStreamEvent = useCallback((data: any, eventType: string) => {
     // Use the event type from the SSE "event:" line
     switch (eventType) {
+      case "connected":
+        // Connection established, stream is ready
+        console.log("[PersonalChat] SSE connection established");
+        break;
+      case "ping":
+        // Keep-alive ping, ignore
+        break;
       case "user_message":
         // User message was saved, can ignore or log
         console.log("[PersonalChat] User message saved:", data.id);
@@ -657,8 +664,13 @@ export default function PersonalChatScreen() {
       case "image_generated":
         console.log("[PersonalChat] Image generated:", data.imageId);
         break;
+      case "assistant_message":
+        // Final assistant message - mark as complete with the message ID
+        console.log("[PersonalChat] Assistant message received:", data.id);
+        setStreaming(prev => ({ ...prev, messageId: data.id }));
+        break;
       case "done":
-        console.log("[PersonalChat] Stream complete");
+        console.log("[PersonalChat] Stream complete, success:", data.success);
         break;
       case "error":
         console.error("[PersonalChat] Server error:", data.error);

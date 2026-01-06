@@ -917,6 +917,11 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
   const reasoningEffort = analyzePromptComplexity(content);
   console.log("[PersonalChats] Adaptive reasoning effort:", reasoningEffort);
 
+  // Set SSE headers to prevent proxy buffering (important for Render, Cloudflare, Nginx, etc.)
+  c.header("Cache-Control", "no-cache, no-transform");
+  c.header("X-Accel-Buffering", "no");
+  c.header("Connection", "keep-alive");
+
   // Stream the response using SSE
   return streamSSE(c, async (stream) => {
     let fullContent = "";
@@ -924,6 +929,12 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     let metadata: Record<string, any> = { toolsUsed: [] };
 
     try {
+      // Send initial ping to establish connection immediately
+      await stream.writeSSE({
+        event: "connected",
+        data: JSON.stringify({ status: "connected", conversationId }),
+      });
+
       // Send initial event with user message info
       await stream.writeSSE({
         event: "user_message",
@@ -942,6 +953,19 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         event: "reasoning_effort",
         data: JSON.stringify({ effort: reasoningEffort }),
       });
+
+      // Start a keep-alive interval to prevent proxy timeout (sends ping every 10 seconds)
+      const keepAliveInterval = setInterval(async () => {
+        try {
+          await stream.writeSSE({
+            event: "ping",
+            data: JSON.stringify({ timestamp: Date.now() }),
+          });
+        } catch (e) {
+          // Stream might be closed, clear interval
+          clearInterval(keepAliveInterval);
+        }
+      }, 10000);
 
       // Stream GPT response
       const responseStream = streamGPT51Response({
@@ -1127,7 +1151,12 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             break;
         }
       }
+
+      // Clear the keep-alive interval when streaming completes
+      clearInterval(keepAliveInterval);
     } catch (error: any) {
+      // Clear the keep-alive interval on error
+      clearInterval(keepAliveInterval);
       console.error("[PersonalChats] Streaming error:", error);
       await stream.writeSSE({
         event: "error",
