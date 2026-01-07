@@ -24,6 +24,8 @@ import {
   Dimensions,
   Alert,
   Animated,
+  NativeSyntheticEvent,
+  TextInputContentSizeChangeEventData,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { FlashList } from "@shopify/flash-list";
@@ -467,6 +469,7 @@ export default function PersonalChatScreen() {
   // Fetch all agents to resolve initialAgentId if provided
   const { data: allAgents = [] } = useAllUserAgents();
   const [inputText, setInputText] = useState("");
+  const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
@@ -567,6 +570,19 @@ export default function PersonalChatScreen() {
     [isAIMessage]
   );
 
+  // Handle input content size change - allows input to grow up to 5 lines
+  const handleInputContentSizeChange = useCallback(
+    (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+      const { height } = event.nativeEvent.contentSize;
+      const clampedHeight = Math.min(
+        MAX_INPUT_HEIGHT,
+        Math.max(MIN_INPUT_HEIGHT, height)
+      );
+      setInputHeight(clampedHeight);
+    },
+    []
+  );
+
   // Refs
   const flatListRef = useRef<FlashList<MessageListItem>>(null);
   const isAtBottomRef = useRef(true); // Track if user is at bottom of list
@@ -633,26 +649,33 @@ export default function PersonalChatScreen() {
     });
 
     // Add optimistic user message if present (for immediate display while streaming)
+    // Only add if it doesn't already exist in the real messages (prevent duplicates)
     if (optimisticUserMessage) {
-      const optimisticDate = optimisticUserMessage.createdAt.toDateString();
-      if (optimisticDate !== lastDate) {
+      const alreadyExists = messages.some(
+        (msg) => msg.role === "user" && msg.content === optimisticUserMessage.content
+      );
+      
+      if (!alreadyExists) {
+        const optimisticDate = optimisticUserMessage.createdAt.toDateString();
+        if (optimisticDate !== lastDate) {
+          result.push({
+            id: `divider-${optimisticDate}`,
+            isDateDivider: true,
+            date: optimisticUserMessage.createdAt,
+          });
+        }
+        // Create a PersonalMessage-like object for the optimistic message
         result.push({
-          id: `divider-${optimisticDate}`,
-          isDateDivider: true,
-          date: optimisticUserMessage.createdAt,
-        });
+          id: optimisticUserMessage.id,
+          conversationId: conversationId || "",
+          content: optimisticUserMessage.content,
+          role: "user",
+          imageUrl: optimisticUserMessage.imageUrl || null,
+          generatedImageUrl: null,
+          metadata: optimisticUserMessage.imageUrl ? { attachedImageUrls: [optimisticUserMessage.imageUrl] } : {},
+          createdAt: optimisticUserMessage.createdAt.toISOString(),
+        } as PersonalMessage);
       }
-      // Create a PersonalMessage-like object for the optimistic message
-      result.push({
-        id: optimisticUserMessage.id,
-        conversationId: conversationId || "",
-        content: optimisticUserMessage.content,
-        role: "user",
-        imageUrl: optimisticUserMessage.imageUrl || null,
-        generatedImageUrl: null,
-        metadata: optimisticUserMessage.imageUrl ? { attachedImageUrls: [optimisticUserMessage.imageUrl] } : {},
-        createdAt: optimisticUserMessage.createdAt.toISOString(),
-      } as PersonalMessage);
     }
 
     return result;
@@ -662,9 +685,28 @@ export default function PersonalChatScreen() {
   const { startStreaming, stopStreaming: stopStreamingHook } = usePersonalChatStreaming({
     onUserMessage: (message) => {
       console.log("[PersonalChat] User message confirmed:", message.id);
-      // Clear optimistic message once confirmed
-      setOptimisticUserMessage(null);
+      // Don't clear optimistic message yet - keep it visible until streaming completes
+      // This prevents the message from disappearing during streaming
       setStreaming((prev) => ({ ...prev, userMessageId: message.id }));
+      
+      // Update query cache directly with the saved user message (no refetch needed)
+      if (conversationId) {
+        queryClient.setQueryData(
+          personalChatsKeys.conversation(conversationId),
+          (old: any) => {
+            if (!old) return old;
+            // Add the confirmed user message to the messages array
+            const messageExists = old.messages?.some((m: any) => m.id === message.id);
+            if (!messageExists) {
+              return {
+                ...old,
+                messages: [...(old.messages || []), message],
+              };
+            }
+            return old;
+          }
+        );
+      }
     },
     onThinkingStart: () => {
       console.log("[PersonalChat] Thinking started");
@@ -745,42 +787,84 @@ export default function PersonalChatScreen() {
     onAssistantMessage: (message) => {
       console.log("[PersonalChat] Assistant message saved:", message.id);
       setStreaming((prev) => ({ ...prev, assistantMessageId: message.id, messageId: message.id }));
+      
+      // Update query cache directly with the saved assistant message (no refetch needed)
+      if (conversationId) {
+        queryClient.setQueryData(
+          personalChatsKeys.conversation(conversationId),
+          (old: any) => {
+            if (!old) return old;
+            // Add the confirmed assistant message to the messages array
+            const messageExists = old.messages?.some((m: any) => m.id === message.id);
+            if (!messageExists) {
+              return {
+                ...old,
+                messages: [...(old.messages || []), message],
+              };
+            }
+            return old;
+          }
+        );
+      }
     },
     onDone: async (updatedTitle) => {
       console.log("[PersonalChat] Stream completed, title:", updatedTitle);
-      // Clear streaming state
-      setStreaming({
-        isStreaming: false,
-        content: "",
-        messageId: null,
-        isThinking: false,
-        thinkingContent: "",
-        currentToolCall: null,
-        reasoningEffort: null,
-        error: null,
-        userMessageId: null,
-        assistantMessageId: null,
-      });
-      setOptimisticUserMessage(null);
       
-      // Refetch conversation to get saved messages
+      // Update conversation title in cache if provided
+      if (conversationId && updatedTitle) {
+        queryClient.setQueryData(
+          personalChatsKeys.conversation(conversationId),
+          (old: any) => {
+            if (!old) return old;
+            return { ...old, title: updatedTitle };
+          }
+        );
+      }
+      
+      // Silently invalidate in background to ensure fresh data (no refetch = no flash)
+      // This will be picked up on next render
       if (conversationId) {
-        await queryClient.invalidateQueries({ 
-          queryKey: personalChatsKeys.conversation(conversationId) 
+        queryClient.invalidateQueries({ 
+          queryKey: personalChatsKeys.conversation(conversationId),
+          refetchType: 'none', // Don't trigger immediate refetch
         });
       }
-      await queryClient.invalidateQueries({ 
-        queryKey: personalChatsKeys.conversations(user?.id || "") 
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.conversations(user?.id || ""),
+        refetchType: 'none', // Don't trigger immediate refetch
       });
       
-      // Scroll to bottom
-      requestAnimationFrame(() => {
-        try {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        } catch (e) {
-          // Ignore scroll errors
-        }
-      });
+      // Small delay to ensure cache updates have propagated and component has re-rendered
+      // with the final message before clearing streaming state
+      // This creates a smooth transition from streaming to final message
+      setTimeout(() => {
+        // Clear optimistic message now that streaming is done
+        // The real messages should already be in the cache from onUserMessage/onAssistantMessage
+        setOptimisticUserMessage(null);
+        
+        // Clear streaming state smoothly - triggers FadeOut animation
+        setStreaming({
+          isStreaming: false,
+          content: "",
+          messageId: null,
+          isThinking: false,
+          thinkingContent: "",
+          currentToolCall: null,
+          reasoningEffort: null,
+          error: null,
+          userMessageId: null,
+          assistantMessageId: null,
+        });
+        
+        // Scroll to bottom smoothly after transition
+        requestAnimationFrame(() => {
+          try {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          } catch (e) {
+            // Ignore scroll errors
+          }
+        });
+      }, 100); // Small delay for smooth transition
     },
     onError: (error) => {
       console.error("[PersonalChat] Streaming error:", error);
@@ -791,43 +875,40 @@ export default function PersonalChatScreen() {
         currentToolCall: null,
         error 
       }));
-      setOptimisticUserMessage(null);
+      // Don't clear optimistic message immediately - let onStreamingComplete handle it
+      // This prevents the message from flickering if it was already saved
+      
       // Don't show error alert for HTTP errors - the message may have been saved
-      // Just log and let onStreamingComplete handle the refetch
+      // Just log and let onStreamingComplete handle cleanup
       if (!error.includes("HTTP")) {
         Alert.alert("Error", error || "Failed to get AI response. Please try again.");
       }
     },
     // Always called when streaming finishes (success or error)
-    // This ensures we refetch conversation data to get any saved messages
+    // This ensures we have the latest data without causing a flash
     onStreamingComplete: async () => {
-      console.log("[PersonalChat] Streaming complete, refetching conversation data");
-      // Clear optimistic message
+      console.log("[PersonalChat] Streaming complete");
+      
+      // Clear optimistic message if not already cleared
       setOptimisticUserMessage(null);
       
-      // Refetch conversation to get any saved messages (even if streaming failed)
-      if (conversationId) {
-        try {
-          await queryClient.invalidateQueries({ 
-            queryKey: personalChatsKeys.conversation(conversationId) 
+      // For error cases or edge cases where messages weren't added to cache,
+      // do a background refetch after a delay to ensure we have latest data
+      // This won't cause a flash because the messages should already be visible
+      setTimeout(() => {
+        if (conversationId) {
+          queryClient.invalidateQueries({ 
+            queryKey: personalChatsKeys.conversation(conversationId),
+            refetchType: 'none', // Mark as stale but don't refetch immediately
           });
-          await queryClient.refetchQueries({ 
-            queryKey: personalChatsKeys.conversation(conversationId) 
-          });
-        } catch (e) {
-          console.log("[PersonalChat] Failed to refetch conversation:", e);
         }
-      }
-      // Also refresh the conversations list for updated titles
-      try {
-        await queryClient.invalidateQueries({ 
-          queryKey: personalChatsKeys.conversations(user?.id || "") 
+        queryClient.invalidateQueries({ 
+          queryKey: personalChatsKeys.conversations(user?.id || ""),
+          refetchType: 'none',
         });
-      } catch (e) {
-        console.log("[PersonalChat] Failed to refetch conversations list:", e);
-      }
+      }, 1000);
       
-      // Scroll to bottom to show any new messages
+      // Scroll to bottom smoothly
       requestAnimationFrame(() => {
         try {
           flatListRef.current?.scrollToEnd({ animated: true });
@@ -954,6 +1035,7 @@ export default function PersonalChatScreen() {
 
     setInputText("");
     setAttachedImages([]);
+    setInputHeight(MIN_INPUT_HEIGHT);
   }, [inputText, attachedImages, sendMessage]);
 
   // Handle stop generation - aborts the SSE stream and clears UI state
@@ -1465,6 +1547,7 @@ export default function PersonalChatScreen() {
               streaming.isStreaming ? (
                 <Reanimated.View 
                   entering={FadeIn.duration(200)}
+                  exiting={FadeOut.duration(150)}
                   style={styles.streamingContainer}
                 >
                   {/* Show thinking indicator when AI is reasoning */}
@@ -1559,7 +1642,7 @@ export default function PersonalChatScreen() {
           )}
 
           <View style={{ width: "100%", paddingHorizontal: 16 }}>
-            <Animated.View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
+            <Reanimated.View className="flex-row items-end gap-3">
                 {/* Image Generation Docked Pill */}
                 <View style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, alignItems: 'center', zIndex: 100, paddingBottom: 24 }} pointerEvents="box-none">
                     <ImageGenerationPill
@@ -1774,6 +1857,7 @@ export default function PersonalChatScreen() {
                             onBlur={() => {
                                 isInputFocused.current = false;
                             }}
+                            onContentSizeChange={handleInputContentSizeChange}
                             showSoftInputOnFocus={true}
                             caretHidden={false}
                         />
@@ -1833,7 +1917,7 @@ export default function PersonalChatScreen() {
                     </BlurView>
                     </Animated.View>
                 </Pressable>
-            </Animated.View>
+            </Reanimated.View>
           </View>
         </View>
       </KeyboardAvoidingView>

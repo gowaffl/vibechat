@@ -260,6 +260,55 @@ export async function* streamGPT51Response(
           };
           currentToolCall = null;
           break;
+        
+        // Handle image generation lifecycle events
+        case "response.image_generation_call.in_progress":
+          console.log("[GPT-Streaming] Image generation in progress");
+          yield { 
+            type: "tool_call_progress", 
+            data: { toolName: "image_generation", status: "in_progress" } 
+          };
+          break;
+          
+        case "response.image_generation_call.generating":
+          console.log("[GPT-Streaming] Image generation generating");
+          yield { 
+            type: "tool_call_progress", 
+            data: { toolName: "image_generation", status: "generating" } 
+          };
+          break;
+          
+        case "response.image_generation_call.partial_image":
+          console.log("[GPT-Streaming] Image generation partial image received");
+          // Just log for now - we'll wait for the final image in output_item.done
+          // This prevents partial/incomplete images from being saved
+          yield { 
+            type: "tool_call_progress", 
+            data: { toolName: "image_generation", status: "generating_preview" } 
+          };
+          break;
+          
+        case "response.image_generation_call.completed":
+          console.log("[GPT-Streaming] Image generation completed event");
+          const imageResult = (event as any).item || (event as any);
+          const imageData = imageResult?.result || imageResult?.image || imageResult?.data || imageResult?.output;
+          
+          if (imageData) {
+            console.log("[GPT-Streaming] Found completed image data");
+            yield { 
+              type: "image_generated", 
+              data: { 
+                imageBase64: imageData,
+                imageId: imageResult?.id || `img_${Date.now()}`
+              } 
+            };
+          } else {
+            console.error("[GPT-Streaming] No image data in completed event:", JSON.stringify(imageResult, null, 2));
+          }
+          
+          yield { type: "tool_call_end", data: { toolName: "image_generation" } };
+          currentToolCall = null;
+          break;
           
         case "response.output_item.done":
           const doneItem = (event as any).item;
@@ -280,15 +329,25 @@ export async function* streamGPT51Response(
               currentToolCall = null;
             }
           } else if (doneItem?.type === "image_generation_call") {
-            if (doneItem.result) {
+            console.log("[GPT-Streaming] Image generation done, checking for result...");
+            console.log("[GPT-Streaming] Done item keys:", Object.keys(doneItem || {}));
+            
+            // Try multiple possible field names for the image data
+            const imageData = doneItem.result || doneItem.image || doneItem.data || doneItem.output;
+            
+            if (imageData) {
+              console.log("[GPT-Streaming] Found image data, type:", typeof imageData);
               yield { 
                 type: "image_generated", 
                 data: { 
-                  imageBase64: doneItem.result,
-                  imageId: doneItem.id 
+                  imageBase64: imageData,
+                  imageId: doneItem.id || `img_${Date.now()}`
                 } 
               };
+            } else {
+              console.error("[GPT-Streaming] No image data found in doneItem:", JSON.stringify(doneItem, null, 2));
             }
+            
             yield { type: "tool_call_end", data: { toolName: "image_generation" } };
             currentToolCall = null;
           }

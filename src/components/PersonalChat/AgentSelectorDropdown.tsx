@@ -183,10 +183,6 @@ export default function AgentSelectorDropdown({
     onCreateNewAgent();
   }, [onCreateNewAgent]);
   
-  const getAgentEmoji = (agent: AIFriend) => {
-    return agent.avatar || "🤖";
-  };
-  
   const renderAgentItem = (agent: AIFriend, isSelected: boolean, showUsageIndicator?: boolean) => (
     <Pressable
       key={agent.id}
@@ -203,12 +199,6 @@ export default function AgentSelectorDropdown({
       ]}
     >
       <View style={styles.agentItemLeft}>
-        <View style={[
-          styles.agentAvatar,
-          { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }
-        ]}>
-          <Text style={styles.agentAvatarEmoji}>{getAgentEmoji(agent)}</Text>
-        </View>
         <View style={styles.agentItemInfo}>
           <Text
             style={[
@@ -379,13 +369,6 @@ export default function AgentSelectorDropdown({
                         ]}
                       >
                         <View style={styles.agentItemLeft}>
-                          <View style={[styles.agentAvatar, { backgroundColor: "rgba(99,102,241,0.15)" }]}>
-                            <Image
-                              source={require("../../../assets/vibechat icon main.png")}
-                              style={{ width: 28, height: 28, borderRadius: 14 }}
-                              contentFit="cover"
-                            />
-                          </View>
                           <View style={styles.agentItemInfo}>
                             <Text style={[styles.agentItemName, { color: colors.text }]}>
                               VibeChat AI
@@ -606,17 +589,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 12,
-  },
-  agentAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  agentAvatarEmoji: {
-    fontSize: 22,
   },
   agentItemInfo: {
     flex: 1,

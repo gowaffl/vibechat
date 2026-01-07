@@ -124,22 +124,6 @@ const ConversationItem = React.memo(({
             />
             
             <View style={styles.itemContent}>
-              {/* Agent Avatar or VibeChat Icon */}
-              <View
-                style={[
-                  styles.avatar,
-                  {
-                    backgroundColor: item.aiFriend?.color || "rgba(99, 102, 241, 0.15)",
-                  },
-                ]}
-              >
-                <Image
-                  source={require("../../../assets/vibechat icon main.png")}
-                  style={{ width: 28, height: 28, borderRadius: 14 }}
-                  contentFit="cover"
-                />
-              </View>
-
               {/* Content */}
               <View style={styles.textContainer}>
                 <View style={styles.titleRow}>
@@ -153,12 +137,6 @@ const ConversationItem = React.memo(({
                     {formatTime(item.lastMessageAt)}
                   </Text>
                 </View>
-                <Text
-                  style={[styles.subtitle, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                >
-                  {item.aiFriend?.name || "AI Assistant"}
-                </Text>
               </View>
 
               <ChevronRight size={18} color={colors.textSecondary} />
@@ -339,19 +317,11 @@ const styles = StyleSheet.create({
   itemContent: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
+    padding: 12,
     gap: 12,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
   },
   textContainer: {
     flex: 1,
-    gap: 4,
   },
   titleRow: {
     flexDirection: "row",
@@ -366,9 +336,6 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 13,
     marginLeft: 8,
-  },
-  subtitle: {
-    fontSize: 14,
   },
   deleteAction: {
     justifyContent: "center",
