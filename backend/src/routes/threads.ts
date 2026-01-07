@@ -648,8 +648,24 @@ threads.patch("/:threadId", zValidator("json", updateThreadRequestSchema), async
       return c.json({ error: "Thread not found" }, 404);
     }
 
-    if (thread.creatorId !== userId) {
-      return c.json({ error: "Only thread creator can update" }, 403);
+    // For shared threads, any chat member can edit
+    // For private threads, only the creator can edit
+    if (!thread.isShared && thread.creatorId !== userId) {
+      return c.json({ error: "Only thread creator can update private threads" }, 403);
+    }
+
+    // If thread is shared, verify user is a member of the chat
+    if (thread.isShared) {
+      const { data: membership } = await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", thread.chatId)
+        .eq("userId", userId)
+        .single();
+
+      if (!membership) {
+        return c.json({ error: "User not a member of this chat" }, 403);
+      }
     }
 
     // Stringify JSON fields if present
@@ -717,8 +733,24 @@ threads.delete("/:threadId", zValidator("query", deleteThreadRequestSchema), asy
       return c.json({ error: "Thread not found" }, 404);
     }
 
-    if (thread.creatorId !== userId) {
-      return c.json({ error: "Only thread creator can delete" }, 403);
+    // For shared threads, any chat member can delete
+    // For private threads, only the creator can delete
+    if (!thread.isShared && thread.creatorId !== userId) {
+      return c.json({ error: "Only thread creator can delete private threads" }, 403);
+    }
+
+    // If thread is shared, verify user is a member of the chat
+    if (thread.isShared) {
+      const { data: membership } = await db
+        .from("chat_member")
+        .select("*")
+        .eq("chatId", thread.chatId)
+        .eq("userId", userId)
+        .single();
+
+      if (!membership) {
+        return c.json({ error: "User not a member of this chat" }, 403);
+      }
     }
 
     // Delete thread and associated memberships

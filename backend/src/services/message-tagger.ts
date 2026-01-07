@@ -33,7 +33,8 @@ export async function tagMessage(messageId: string, content: string): Promise<vo
     console.log("[Message Tagger] Tagging message:", messageId, "Content length:", content.length);
 
     // Check for @thread mentions and create guaranteed thread tags
-    const threadMentionRegex = /@(\w+)/g;
+    // Updated regex to support hyphens, underscores, and other common characters in thread names
+    const threadMentionRegex = /@([\w-]+)/g;
     const threadMentions = Array.from(content.matchAll(threadMentionRegex))
       .map(match => match[1])
       .filter((m): m is string => m !== undefined)
