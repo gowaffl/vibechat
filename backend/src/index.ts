@@ -195,10 +195,15 @@ app.get("/health", (c) => {
 
 // Start the server
 console.log("⚙️  Starting server...");
-serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
+
+if (typeof Bun !== "undefined") {
+  Bun.serve({
+    fetch: app.fetch,
+    port: Number(env.PORT),
+  });
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log(`📍 Environment: ${env.NODE_ENV}`);
-  console.log(`🚀 Server is running on port ${env.PORT}`);
+  console.log(`🚀 Server is running on port ${env.PORT} (Bun Native)`);
   console.log(`🔗 Base URL: http://localhost:${env.PORT}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("\n📚 Available endpoints:");
@@ -245,4 +250,56 @@ serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
   startWorkflowService();
   console.log("⏰ Starting AI Workflow scheduler service...");
   startWorkflowScheduler();
-});
+} else {
+  serve({ fetch: app.fetch, port: Number(env.PORT) }, () => {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`📍 Environment: ${env.NODE_ENV}`);
+    console.log(`🚀 Server is running on port ${env.PORT} (Node Adapter)`);
+    console.log(`🔗 Base URL: http://localhost:${env.PORT}`);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("\n📚 Available endpoints:");
+    console.log("  🔐 Auth:     /api/auth/*");
+    console.log("  📤 Upload:   POST /api/upload/image");
+    console.log("  👥 Users:    GET/POST/PATCH /api/users");
+    console.log("  💬 Chats:    GET/POST/PATCH/DELETE /api/chats");
+    console.log("  🎟️  Invite:   GET/POST /api/invite/:token");
+    console.log("  💬 Messages: GET/POST /api/messages");
+    console.log("  🤖 AI:       POST /api/ai/chat");
+    console.log("  🖼️  Avatar:   POST /api/ai/generate-group-avatar");
+    console.log("  ⚙️  Settings: GET/PATCH /api/group-settings");
+    console.log("  👍 Reactions: POST/DELETE /api/reactions");
+    console.log("  ⚡ Commands: GET/POST/PATCH/DELETE /api/custom-commands");
+    console.log("  🔗 Link Preview: POST /api/link-preview/fetch");
+    console.log("  🔖 Bookmarks: GET/POST/DELETE /api/bookmarks");
+    console.log("  🔔 Notifications: POST /api/chats/:chatId/read-receipts");
+    console.log("  🔔 Unread Counts: GET /api/chats/unread-counts");
+    console.log("\n  🌟 AI Super Features:");
+    console.log("  🧵 Threads:  GET/POST/PATCH/DELETE /api/threads");
+    console.log("  📅 Events:   GET/POST/PATCH /api/events");
+    console.log("  🎨 Reactor:  POST /api/reactor/*");
+    console.log("  ⚡ Catch-Up: GET/POST /api/catchup");
+    console.log("  📊 Polls:    GET/POST/PATCH/DELETE /api/polls");
+    console.log("  🎙️  Vibe Call: GET/POST /api/voice-rooms");
+    console.log("  🔔 Webhooks: POST /api/webhooks/livekit");
+    console.log("\n  🤖 AI Mega Features:");
+    console.log("  🔄 Workflows: GET/POST/PATCH/DELETE /api/workflows");
+    console.log("  🌐 Community: GET/POST /api/community");
+    console.log("  🌍 AI-Native: POST /api/ai-native/translate|adjust-tone|context-card");
+    console.log("  💭 Personal: GET/POST/PATCH/DELETE /api/personal-chats");
+    console.log("\n  💚 Health:   GET /health");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // Daily avatar generation is manual only (via sparkle button in Group Settings)
+    // Limit resets at midnight Eastern time
+    // startAvatarCron(); // Disabled - manual generation only
+
+    // Start AI engagement polling service
+    startAIEngagementService();
+    
+    // Start AI Workflow Services
+    console.log("🔄 Starting AI Workflow trigger service...");
+    startWorkflowService();
+    console.log("⏰ Starting AI Workflow scheduler service...");
+    startWorkflowScheduler();
+  });
+}
