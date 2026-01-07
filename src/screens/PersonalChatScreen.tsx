@@ -786,6 +786,7 @@ export default function PersonalChatScreen() {
     },
     onAssistantMessage: (message) => {
       console.log("[PersonalChat] Assistant message saved:", message.id);
+      console.log("[PersonalChat] Assistant message has generatedImageUrl:", message.generatedImageUrl);
       setStreaming((prev) => ({ ...prev, assistantMessageId: message.id, messageId: message.id }));
       
       // Update query cache directly with the saved assistant message (no refetch needed)
@@ -797,6 +798,7 @@ export default function PersonalChatScreen() {
             // Add the confirmed assistant message to the messages array
             const messageExists = old.messages?.some((m: any) => m.id === message.id);
             if (!messageExists) {
+              console.log("[PersonalChat] Adding assistant message to cache with image:", message.generatedImageUrl);
               return {
                 ...old,
                 messages: [...(old.messages || []), message],
@@ -1397,16 +1399,18 @@ export default function PersonalChatScreen() {
           </Markdown>
 
           {/* Generated image preview */}
-          {metadata?.generatedImagePrompt && (
+          {message.generatedImageUrl && (
             <View style={styles.generatedImageContainer}>
               <Image
-                source={{ uri: message.content }}
+                source={{ uri: message.generatedImageUrl }}
                 style={styles.generatedImage}
                 contentFit="cover"
               />
-              <Text style={[styles.generatedImageCaption, { color: colors.textSecondary }]}>
-                "{metadata.generatedImagePrompt}"
-              </Text>
+              {metadata?.generatedImagePrompt && (
+                <Text style={[styles.generatedImageCaption, { color: colors.textSecondary }]}>
+                  "{metadata.generatedImagePrompt}"
+                </Text>
+              )}
             </View>
           )}
 

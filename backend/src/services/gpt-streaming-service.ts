@@ -397,7 +397,9 @@ export async function* streamGPT51Response(
       }
     }
     
+    console.log("[GPT-Streaming] Stream loop completed, yielding done event");
     yield { type: "done", data: {} };
+    console.log("[GPT-Streaming] Done event yielded");
     
   } catch (error: any) {
     console.error("[GPT-Streaming] Error:", error);

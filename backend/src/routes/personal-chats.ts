@@ -1081,15 +1081,21 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             break;
 
           case "done":
+            console.log("[PersonalChats] Received done event, saving message...");
+            console.log("[PersonalChats] Generated images count:", generatedImages.length);
+            console.log("[PersonalChats] Full content length:", fullContent.length);
+            
             // Save the AI response to database
             let generatedImageUrl: string | null = null;
             
             if (generatedImages.length > 0) {
+              console.log("[PersonalChats] Saving generated images to storage...");
               try {
                 const savedImages = await saveResponseImages(generatedImages, conversationId);
+                console.log("[PersonalChats] Images saved, URLs:", savedImages);
                 if (savedImages.length > 0) {
                   generatedImageUrl = savedImages[0];
-                  metadata.generatedImagePrompt = content;
+                  metadata.generatedImagePrompt = fullContent;
                 }
               } catch (imgError) {
                 console.error("[PersonalChats] Error saving images:", imgError);
