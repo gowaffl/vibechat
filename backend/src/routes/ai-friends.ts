@@ -67,6 +67,7 @@ aiFriends.get("/:chatId", zValidator("query", getAIFriendsRequestSchema), async 
         engagementPercent: friend.engagementPercent,
         color: friend.color,
         sortOrder: friend.sortOrder,
+        createdBy: friend.createdBy,
         createdAt: formatTimestamp(friend.createdAt),
         updatedAt: formatTimestamp(friend.updatedAt),
       }))
@@ -151,6 +152,7 @@ aiFriends.post("/", zValidator("json", createAIFriendRequestSchema), async (c) =
         engagementPercent: data.engagementPercent || null,
         color: assignedColor,
         sortOrder: nextSortOrder,
+        createdBy: data.userId, // Track who created this agent
       })
       .select()
       .single();
@@ -170,6 +172,7 @@ aiFriends.post("/", zValidator("json", createAIFriendRequestSchema), async (c) =
       engagementPercent: newFriend.engagementPercent,
       color: newFriend.color,
       sortOrder: newFriend.sortOrder,
+      createdBy: newFriend.createdBy,
       createdAt: formatTimestamp(newFriend.createdAt),
       updatedAt: formatTimestamp(newFriend.updatedAt),
     });
@@ -244,6 +247,7 @@ aiFriends.patch("/:id", zValidator("json", updateAIFriendRequestSchema), async (
         engagementPercent: aiFriend.engagementPercent,
         color: aiFriend.color,
         sortOrder: aiFriend.sortOrder,
+        createdBy: aiFriend.createdBy,
         createdAt: formatTimestamp(aiFriend.createdAt),
         updatedAt: formatTimestamp(aiFriend.updatedAt),
       });
@@ -272,6 +276,7 @@ aiFriends.patch("/:id", zValidator("json", updateAIFriendRequestSchema), async (
       engagementPercent: updated.engagementPercent,
       color: updated.color,
       sortOrder: updated.sortOrder,
+      createdBy: updated.createdBy,
       createdAt: formatTimestamp(updated.createdAt),
       updatedAt: formatTimestamp(updated.updatedAt),
     });

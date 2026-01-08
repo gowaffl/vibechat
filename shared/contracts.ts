@@ -895,6 +895,7 @@ export const aiFriendSchema = z.object({
   engagementPercent: z.number().int().min(0).max(100).nullable(),
   color: z.string(),
   sortOrder: z.number().int(),
+  createdBy: z.string().nullable(), // User ID of the creator
   createdAt: z.string(),
   updatedAt: z.string(),
 });

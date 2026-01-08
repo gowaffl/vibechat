@@ -9,8 +9,8 @@ import {
   Dimensions,
   ScrollView,
   LayoutRectangle,
+  Alert,
 } from "react-native";
-import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
@@ -26,17 +26,17 @@ import Animated, {
 } from "react-native-reanimated";
 import {
   ChevronDown,
-  Sparkles,
   Plus,
   Check,
-  TrendingUp,
-  Users,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import { useTopAgents, useAllUserAgents } from "@/hooks/usePersonalChats";
+import { useUser } from "@/contexts/UserContext";
+import { useTopAgents, useAllUserAgents, personalChatsKeys } from "@/hooks/usePersonalChats";
+import { api } from "@/lib/api";
 import type { AIFriend } from "@/shared/contracts";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -64,6 +64,8 @@ export default function AgentSelectorDropdown({
   onCreateNewAgent,
 }: AgentSelectorDropdownProps) {
   const { isDark, colors } = useTheme();
+  const { user } = useUser();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const [isOpen, setIsOpen] = useState(false);
   const [showAllAgents, setShowAllAgents] = useState(false);
@@ -183,17 +185,67 @@ export default function AgentSelectorDropdown({
     onCreateNewAgent();
   }, [onCreateNewAgent]);
   
-  const renderAgentItem = (agent: AIFriend, isSelected: boolean, showUsageIndicator?: boolean) => (
+  const handleDeleteAgent = useCallback(async (agent: AIFriend) => {
+    if (!user?.id) return;
+    
+    // Show confirmation dialog
+    Alert.alert(
+      "Delete Agent",
+      `Are you sure you want to delete "${agent.name}"? This action cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              
+              // Call delete API
+              await api.delete(`/api/ai-friends/${agent.id}`, {
+                userId: user.id,
+              });
+              
+              // If the deleted agent was selected, clear selection
+              if (selectedAgent?.id === agent.id) {
+                onAgentSelect(null);
+              }
+              
+              // Refresh agents list
+              queryClient.invalidateQueries({ queryKey: personalChatsKeys.allAgents(user.id) });
+            } catch (error: any) {
+              console.error("Failed to delete agent:", error);
+              Alert.alert("Error", error?.message || "Failed to delete agent");
+            }
+          },
+        },
+      ]
+    );
+  }, [user?.id, selectedAgent, onAgentSelect, queryClient]);
+  
+  const handleAgentLongPress = useCallback((agent: AIFriend) => {
+    // Only show delete option if the user created this agent
+    if (agent.createdBy === user?.id) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      handleDeleteAgent(agent);
+    }
+  }, [user?.id, handleDeleteAgent]);
+  
+  const renderAgentItem = (agent: AIFriend, isSelected: boolean) => (
     <Pressable
       key={agent.id}
       onPress={() => handleSelectAgent(agent)}
+      onLongPress={() => handleAgentLongPress(agent)}
       style={({ pressed }) => [
         styles.agentItem,
         {
-          backgroundColor: pressed
-            ? isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
-            : isSelected
-            ? isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)"
+          backgroundColor: isSelected
+            ? isDark ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.1)"
+            : pressed
+            ? isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)"
             : "transparent",
         },
       ]}
@@ -204,7 +256,7 @@ export default function AgentSelectorDropdown({
             style={[
               styles.agentItemName,
               { color: colors.text },
-              isSelected && { color: "#6366f1" },
+              isSelected && { color: colors.primary, fontWeight: "700" },
             ]}
             numberOfLines={1}
           >
@@ -212,7 +264,11 @@ export default function AgentSelectorDropdown({
           </Text>
           {agent.personality && (
             <Text
-              style={[styles.agentItemPersonality, { color: colors.textSecondary }]}
+              style={[
+                styles.agentItemPersonality, 
+                { color: colors.textSecondary },
+                isSelected && { color: colors.primary, opacity: 0.8 }
+              ]}
               numberOfLines={1}
             >
               {agent.personality}
@@ -220,21 +276,11 @@ export default function AgentSelectorDropdown({
           )}
         </View>
       </View>
-      <View style={styles.agentItemRight}>
-        {showUsageIndicator && topAgents.some(a => a.id === agent.id) && (
-          <View style={[styles.usageIndicator, { backgroundColor: "rgba(99,102,241,0.15)" }]}>
-            <TrendingUp size={10} color="#6366f1" />
-          </View>
-        )}
-        {isSelected && (
-          <Check size={18} color="#6366f1" strokeWidth={3} />
-        )}
-      </View>
     </Pressable>
   );
   
   const displayName = selectedAgent?.name || "VibeChat AI";
-  const displayEmoji = selectedAgent?.avatar || "✨";
+  const displayEmoji = "✨";
   
   // Calculate dropdown position
   const dropdownTop = triggerLayout 
@@ -344,59 +390,42 @@ export default function AgentSelectorDropdown({
                     bounces={false}
                   >
                     {/* Default VibeChat AI Option */}
-                    <View style={styles.section}>
-                      <View style={styles.sectionHeader}>
-                        <Image
-                          source={require("../../../assets/vibechat icon main.png")}
-                          style={styles.sectionIcon}
-                          contentFit="cover"
-                        />
-                        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-                          DEFAULT
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() => handleSelectAgent(null)}
-                        style={({ pressed }) => [
-                          styles.agentItem,
-                          {
-                            backgroundColor: pressed
-                              ? isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
-                              : !selectedAgent
-                              ? isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)"
-                              : "transparent",
-                          },
-                        ]}
-                      >
-                        <View style={styles.agentItemLeft}>
-                          <View style={styles.agentItemInfo}>
-                            <Text style={[styles.agentItemName, { color: colors.text }]}>
-                              VibeChat AI
-                            </Text>
-                            <Text style={[styles.agentItemPersonality, { color: colors.textSecondary }]}>
-                              Your personal AI assistant
-                            </Text>
-                          </View>
-                        </View>
-                        {!selectedAgent && (
-                          <Check size={18} color="#6366f1" strokeWidth={3} />
-                        )}
-                      </Pressable>
-                    </View>
-                    
-                    {/* Frequently Used / Recent Agents */}
-                    {displayedTopAgents.length > 0 && (
-                      <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                          <TrendingUp size={12} color={colors.textSecondary} />
-                          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-                            {topAgents.length > 0 ? "MOST USED" : "RECENT"}
+                    <Pressable
+                      onPress={() => handleSelectAgent(null)}
+                      style={({ pressed }) => [
+                        styles.agentItem,
+                        {
+                          backgroundColor: !selectedAgent
+                            ? isDark ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.1)"
+                            : pressed
+                            ? isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)"
+                            : "transparent",
+                        },
+                      ]}
+                    >
+                      <View style={styles.agentItemLeft}>
+                        <View style={styles.agentItemInfo}>
+                          <Text style={[
+                            styles.agentItemName, 
+                            { color: colors.text },
+                            !selectedAgent && { color: colors.primary, fontWeight: "700" }
+                          ]}>
+                            VibeChat AI
+                          </Text>
+                          <Text style={[
+                            styles.agentItemPersonality, 
+                            { color: colors.textSecondary },
+                            !selectedAgent && { color: colors.primary, opacity: 0.8 }
+                          ]}>
+                            Your personal AI assistant
                           </Text>
                         </View>
-                        {displayedTopAgents.map((agent) =>
-                          renderAgentItem(agent, selectedAgent?.id === agent.id, true)
-                        )}
                       </View>
+                    </Pressable>
+                    
+                    {/* Frequently Used / Recent Agents */}
+                    {displayedTopAgents.map((agent) =>
+                      renderAgentItem(agent, selectedAgent?.id === agent.id)
                     )}
                     
                     {/* More Agents Button */}
@@ -407,60 +436,45 @@ export default function AgentSelectorDropdown({
                           styles.moreAgentsButton,
                           {
                             backgroundColor: pressed
-                              ? isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
-                              : isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.02)",
+                              ? isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"
+                              : "transparent",
                           },
                         ]}
                       >
-                        <View style={styles.moreAgentsContent}>
-                          <Users size={18} color={colors.textSecondary} />
-                          <Text style={[styles.moreAgentsText, { color: colors.text }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={[styles.moreAgentsText, { color: colors.textSecondary }]}>
                             More Agents
                           </Text>
-                          <View style={[styles.countBadge, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }]}>
-                            <Text style={[styles.countBadgeText, { color: colors.textSecondary }]}>
-                              {otherAgents.length}
-                            </Text>
-                          </View>
+                          <Text style={[styles.moreAgentsCount, { color: colors.textSecondary, opacity: 0.7 }]}>
+                            ({otherAgents.length})
+                          </Text>
                         </View>
                         <ChevronDown size={16} color={colors.textSecondary} />
                       </Pressable>
                     )}
                     
                     {/* Expanded All Agents List */}
-                    {showAllAgents && otherAgents.length > 0 && (
-                      <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                          <Users size={12} color={colors.textSecondary} />
-                          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-                            ALL AGENTS
-                          </Text>
-                        </View>
-                        {otherAgents.map((agent) =>
-                          renderAgentItem(agent, selectedAgent?.id === agent.id)
-                        )}
-                      </View>
+                    {showAllAgents && otherAgents.map((agent) =>
+                      renderAgentItem(agent, selectedAgent?.id === agent.id)
                     )}
                     
                     {/* Create New Agent Button */}
-                    <View style={styles.createSection}>
-                      <Pressable
-                        onPress={handleCreateNew}
-                        style={({ pressed }) => [
-                          styles.createButton,
-                          {
-                            backgroundColor: pressed
-                              ? isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.15)"
-                              : isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)",
-                          },
-                        ]}
-                      >
-                        <View style={styles.createButtonIcon}>
-                          <Plus size={18} color="#6366f1" strokeWidth={2.5} />
-                        </View>
-                        <Text style={styles.createButtonText}>Create New Agent</Text>
-                      </Pressable>
-                    </View>
+                    <Pressable
+                      onPress={handleCreateNew}
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        {
+                          backgroundColor: pressed
+                            ? isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"
+                            : "transparent",
+                        },
+                      ]}
+                    >
+                      <View style={styles.createButtonContent}>
+                        <Plus size={20} color={colors.primary} />
+                        <Text style={[styles.createButtonText, { color: colors.primary }]}>Create New Agent</Text>
+                      </View>
+                    </Pressable>
                   </ScrollView>
                 </Animated.View>
               </LinearGradient>
@@ -555,35 +569,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 16,
-  },
-  section: {
-    marginTop: 14,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-    paddingHorizontal: 8,
-  },
-  sectionIcon: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    gap: 12,
   },
   agentItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    marginBottom: 4,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 12,
+    borderBottomWidth: 0,
+    backgroundColor: "transparent",
   },
   agentItemLeft: {
     flexDirection: "row",
@@ -601,68 +598,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  agentItemRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  usageIndicator: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
   moreAgentsButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    marginTop: 14,
-  },
-  moreAgentsContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 12,
   },
   moreAgentsText: {
     fontSize: 15,
     fontWeight: "600",
   },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  countBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  createSection: {
-    marginTop: 18,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(128,128,128,0.15)",
-    paddingTop: 14,
+  moreAgentsCount: {
+    fontSize: 15,
+    fontWeight: "400",
+    marginLeft: 6,
   },
   createButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginTop: 4,
+    borderRadius: 12,
+  },
+  createButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
-    gap: 8,
-  },
-  createButtonIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(99,102,241,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   createButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#6366f1",
+    marginLeft: 12,
   },
 });

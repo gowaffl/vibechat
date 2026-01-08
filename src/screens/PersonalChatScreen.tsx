@@ -45,6 +45,7 @@ import Reanimated, {
   withSequence,
   Easing,
   cancelAnimation,
+  interpolate,
 } from "react-native-reanimated";
 import {
   Send,
@@ -80,6 +81,7 @@ import { personalChatsKeys, useAllUserAgents } from "@/hooks/usePersonalChats";
 import { usePersonalChatStreaming, type StreamingState as StreamingHookState } from "@/hooks/usePersonalChatStreaming";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { AIFriend, PersonalConversation, PersonalMessage, PersonalMessageMetadata } from "@/shared/contracts";
+import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MIN_INPUT_HEIGHT = 40;
@@ -107,6 +109,7 @@ interface StreamingState {
   error: string | null;
   userMessageId: string | null;
   assistantMessageId: string | null;
+  generatedImageUrl: string | null;
 }
 
 // Optimistic user message for immediate display while streaming
@@ -276,6 +279,60 @@ function ThinkingIndicator({ isDark, colors, content }: { isDark: boolean; color
           {content.length > 60 ? content.substring(0, 60) + "..." : content}
         </Text>
       ) : null}
+    </Reanimated.View>
+  );
+}
+
+// Image Generation Loading Component with shimmer
+function ImageGenerationShimmer({ isDark, colors }: { isDark: boolean; colors: any }) {
+  const shimmerAnimation = useSharedValue(0);
+  
+  useEffect(() => {
+    shimmerAnimation.value = withRepeat(
+      withTiming(1, { duration: 1500, easing: Easing.ease }),
+      -1,
+      false
+    );
+    
+    return () => {
+      cancelAnimation(shimmerAnimation);
+    };
+  }, []);
+  
+  const shimmerStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      opacity: interpolate(shimmerAnimation.value, [0, 0.5, 1], [0.3, 0.6, 0.3]),
+    };
+  });
+  
+  return (
+    <Reanimated.View 
+      entering={FadeInUp.duration(300)}
+      exiting={FadeOut.duration(200)}
+      style={[styles.imageGenerationContainer, { 
+        backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.08)",
+        borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)",
+      }]}
+    >
+      <Reanimated.View style={[styles.imageGenerationPlaceholder, shimmerStyle]}>
+        <LinearGradient
+          colors={isDark 
+            ? ['#1a1a2e', '#252540', '#1a1a2e']
+            : ['#e8e8f5', '#f5f5fa', '#e8e8f5']
+          }
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.imageGenerationContent}>
+          <Sparkles size={24} color="#6366f1" strokeWidth={2} />
+          <ShimmeringText
+            text="Creating image..."
+            style={[styles.imageGenerationText, { color: "#6366f1" }]}
+            shimmerColor={isDark ? "#a5a6ff" : "#6366f1"}
+            duration={1500}
+          />
+        </View>
+      </Reanimated.View>
     </Reanimated.View>
   );
 }
@@ -488,9 +545,12 @@ export default function PersonalChatScreen() {
     error: null,
     userMessageId: null,
     assistantMessageId: null,
+    generatedImageUrl: null,
   });
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [optimisticUserMessage, setOptimisticUserMessage] = useState<OptimisticUserMessage | null>(null);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   // Refs
   const isInputFocused = useRef(false);
@@ -783,11 +843,17 @@ export default function PersonalChatScreen() {
     },
     onImageGenerated: (imageId) => {
       console.log("[PersonalChat] Image generated:", imageId);
+      // Image will be included in the assistant message
     },
     onAssistantMessage: (message) => {
       console.log("[PersonalChat] Assistant message saved:", message.id);
       console.log("[PersonalChat] Assistant message has generatedImageUrl:", message.generatedImageUrl);
-      setStreaming((prev) => ({ ...prev, assistantMessageId: message.id, messageId: message.id }));
+      setStreaming((prev) => ({ 
+        ...prev, 
+        assistantMessageId: message.id, 
+        messageId: message.id,
+        generatedImageUrl: message.generatedImageUrl || null,
+      }));
       
       // Update query cache directly with the saved assistant message (no refetch needed)
       if (conversationId) {
@@ -894,9 +960,9 @@ export default function PersonalChatScreen() {
       // Clear optimistic message if not already cleared
       setOptimisticUserMessage(null);
       
-      // For error cases or edge cases where messages weren't added to cache,
-      // do a background refetch after a delay to ensure we have latest data
-      // This won't cause a flash because the messages should already be visible
+      // Refetch conversations list to get updated title immediately
+      // This updates both the chat list page and conversation history drawer
+      // Small delay ensures backend has finished writing the title
       setTimeout(() => {
         if (conversationId) {
           queryClient.invalidateQueries({ 
@@ -906,9 +972,9 @@ export default function PersonalChatScreen() {
         }
         queryClient.invalidateQueries({ 
           queryKey: personalChatsKeys.conversations(user?.id || ""),
-          refetchType: 'none',
+          refetchType: 'active', // Refetch active queries to show updated title
         });
-      }, 1000);
+      }, 300);
       
       // Scroll to bottom smoothly
       requestAnimationFrame(() => {
@@ -1174,28 +1240,75 @@ export default function PersonalChatScreen() {
     engagementPercent?: number
   ) => {
     try {
-      // Create agent in a temporary chat context or globally
-      // For personal chats, we might want to create agents without a specific chat
-      // This is a simplified version - you may need to adjust based on your requirements
+      if (!user?.id) {
+        Alert.alert("Error", "User not logged in");
+        return;
+      }
+
+      // Get user's chats - we need a chatId to create an AI friend
+      // Personal AI friends are still tied to a chat, but can be used across all personal conversations
+      const chatsResponse = await api.get<Array<{ id: string; name: string }>>(
+        `/api/chats?userId=${user.id}`
+      );
+
+      // If user has no chats, we need to create one first or show an error
+      if (!chatsResponse || chatsResponse.length === 0) {
+        Alert.alert(
+          "No Chats Available",
+          "You need to be a member of at least one group chat to create an AI friend. AI friends can be used in both group chats and personal chats."
+        );
+        return;
+      }
+
+      // Use the first available chat (the AI friend can still be used in personal chats)
+      const chatId = chatsResponse[0].id;
+
       const response = await api.post<{ success: boolean; aiFriend: AIFriend }>("/api/ai-friends", {
+        chatId,
+        userId: user.id,
         name,
         personality,
         tone,
         engagementMode,
         engagementPercent,
-        chatId: "personal", // Special chat ID for personal agents
       });
       
       if (response.success) {
-        setSelectedAgent(response.aiFriend);
+        const newAgent = response.aiFriend;
+        
+        // Set the newly created agent as the active agent
+        setSelectedAgent(newAgent);
+        
+        // If we have an existing conversation, update it to use the new agent
+        if (conversationId) {
+          try {
+            await api.patch(`/api/personal-chats/${conversationId}`, {
+              userId: user.id,
+              aiFriendId: newAgent.id,
+            });
+            // Invalidate the conversation query to refresh data
+            queryClient.invalidateQueries({ queryKey: personalChatsKeys.conversation(conversationId) });
+          } catch (error) {
+            console.error("Failed to update conversation agent:", error);
+            // Don't show an error to user - this is non-critical
+          }
+        }
+        
+        // Close the modal
         setShowCreateAgentModal(false);
+        
+        // Haptic feedback
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        // Invalidate agents query to refresh the list
+        queryClient.invalidateQueries({ queryKey: personalChatsKeys.allAgents(user.id) });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create agent:", error);
-      Alert.alert("Error", "Failed to create agent");
+      const errorMessage = error?.message || "Failed to create agent. Please try again.";
+      Alert.alert("Error", errorMessage);
     }
-  }, []);
+  }, [user?.id, conversationId, queryClient]);
 
   // Handle opening attachments menu
 
@@ -1400,7 +1513,14 @@ export default function PersonalChatScreen() {
 
           {/* Generated image preview */}
           {message.generatedImageUrl && (
-            <View style={styles.generatedImageContainer}>
+            <Pressable 
+              style={styles.generatedImageContainer}
+              onPress={() => {
+                setSelectedImageUrl(message.generatedImageUrl);
+                setImageViewerVisible(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
               <Image
                 source={{ uri: message.generatedImageUrl }}
                 style={styles.generatedImage}
@@ -1411,7 +1531,7 @@ export default function PersonalChatScreen() {
                   "{metadata.generatedImagePrompt}"
                 </Text>
               )}
-            </View>
+            </Pressable>
           )}
 
           <Text style={[styles.messageTime, { color: colors.textTertiary }]}>
@@ -1564,13 +1684,40 @@ export default function PersonalChatScreen() {
                   )}
                   
                   {/* Show tool call indicator */}
-                  {streaming.currentToolCall && (
+                  {streaming.currentToolCall && streaming.currentToolCall.name !== "image_generation" && (
                     <ToolCallIndicator 
                       toolName={streaming.currentToolCall.name} 
                       isDark={isDark} 
                       colors={colors}
                       status={streaming.currentToolCall.status}
                     />
+                  )}
+                  
+                  {/* Show image generation shimmer */}
+                  {streaming.currentToolCall && streaming.currentToolCall.name === "image_generation" && !streaming.generatedImageUrl && (
+                    <ImageGenerationShimmer isDark={isDark} colors={colors} />
+                  )}
+                  
+                  {/* Show generated image */}
+                  {streaming.generatedImageUrl && (
+                    <Reanimated.View
+                      entering={FadeInUp.duration(300).springify()}
+                      style={styles.generatedImageContainer}
+                    >
+                      <Pressable
+                        onPress={() => {
+                          setSelectedImageUrl(streaming.generatedImageUrl);
+                          setImageViewerVisible(true);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                      >
+                        <Image
+                          source={{ uri: streaming.generatedImageUrl }}
+                          style={styles.generatedImage}
+                          contentFit="cover"
+                        />
+                      </Pressable>
+                    </Reanimated.View>
                   )}
                   
                   {/* Show streaming content with live Markdown rendering */}
@@ -1969,6 +2116,16 @@ export default function PersonalChatScreen() {
         onAccept={handleAcceptGeneratedImage}
         onEdit={handleGenerateImage}
       />
+      
+      {/* Image Viewer Modal */}
+      <ZoomableImageViewer
+        visible={imageViewerVisible}
+        imageUrl={selectedImageUrl || ""}
+        onClose={() => {
+          setImageViewerVisible(false);
+          setSelectedImageUrl(null);
+        }}
+      />
     </View>
   );
 }
@@ -2195,6 +2352,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: "italic",
     marginTop: 4,
+  },
+  imageGenerationContainer: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  imageGenerationPlaceholder: {
+    width: "100%",
+    height: 200,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageGenerationContent: {
+    alignItems: "center",
+    gap: 12,
+  },
+  imageGenerationText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
   messageTime: {
     fontSize: 11,

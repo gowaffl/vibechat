@@ -353,6 +353,17 @@ CREATE INDEX IF NOT EXISTS personal_conversation_ai_friend_idx ON personal_conve
 CREATE INDEX IF NOT EXISTS personal_message_conversation_idx ON personal_message("conversationId");
 CREATE INDEX IF NOT EXISTS personal_message_created_at_idx ON personal_message("createdAt" DESC);
 
+-- ============================================================================
+-- AI FRIEND CREATOR TRACKING (2026-01-08)
+-- ============================================================================
+-- Add createdBy column to track who created each AI friend
+-- Enables creator-only deletion in personal chat agents list
+ALTER TABLE public.ai_friend ADD COLUMN IF NOT EXISTS "createdBy" text;
+ALTER TABLE public.ai_friend 
+  ADD CONSTRAINT IF NOT EXISTS ai_friend_createdBy_fkey 
+  FOREIGN KEY ("createdBy") REFERENCES public."user"(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_ai_friend_created_by ON public.ai_friend("createdBy");
+
 -- Indexes for user_agent_usage
 CREATE INDEX IF NOT EXISTS user_agent_usage_user_idx ON user_agent_usage("userId");
 CREATE INDEX IF NOT EXISTS user_agent_usage_count_idx ON user_agent_usage("usageCount" DESC);

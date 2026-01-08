@@ -1191,11 +1191,14 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             }
 
             // Save assistant message
+            // If we have an image but no content, provide a simple message
+            const messageContent = fullContent || (generatedImageUrl ? "Here's the image you requested:" : "I apologize, but I couldn't generate a response.");
+            
             const { data: assistantMessage, error: assistantMsgError } = await db
               .from("personal_message")
               .insert({
                 conversationId,
-                content: fullContent || "I apologize, but I couldn't generate a response.",
+                content: messageContent,
                 role: "assistant",
                 generatedImageUrl,
                 metadata: Object.keys(metadata).length > 0 ? metadata : null,
