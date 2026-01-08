@@ -13,6 +13,13 @@ import {
 } from "../services/gpt-streaming-service";
 import { saveResponseImages } from "../services/image-storage";
 import { generateChatTitle } from "../services/title-generator";
+import { 
+  checkContentSafety, 
+  getUserAgeContext, 
+  filterAIOutput, 
+  getSafetySystemPrompt,
+  logSafetyEvent 
+} from "../services/content-safety";
 import {
   getPersonalConversationsRequestSchema,
   createPersonalConversationRequestSchema,
@@ -566,6 +573,38 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
       return c.json({ error: "Conversation not found" }, 404);
     }
 
+    // ============================================================================
+    // CONTENT SAFETY CHECK - Same as group chat
+    // ============================================================================
+    console.log("[PersonalChats] Running content safety check for user:", userId);
+    
+    const userAgeContext = await getUserAgeContext(userId);
+    const safetyResult = await checkContentSafety({
+      userMessage: content,
+      userId,
+      chatId: conversationId, // Use conversationId as chatId for logging
+      isMinor: userAgeContext.isMinor,
+    });
+
+    // Handle crisis situation (CRIT-2)
+    if (safetyResult.crisisDetected && safetyResult.crisisResponse) {
+      console.log("[PersonalChats] Crisis detected, returning crisis resources");
+      return c.json({
+        crisis: true,
+        response: safetyResult.crisisResponse,
+      });
+    }
+
+    // Handle blocked content (CRIT-1)
+    if (safetyResult.isBlocked && safetyResult.blockReason) {
+      console.log("[PersonalChats] Content blocked:", safetyResult.flags);
+      return c.json({
+        blocked: true,
+        reason: safetyResult.blockReason,
+        flags: safetyResult.flags,
+      }, 400);
+    }
+
     // Get recent messages for context (last 20)
     const { data: recentMessages } = await db
       .from("personal_message")
@@ -599,31 +638,15 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
       await trackAgentUsageInternal(userId, conversation.aiFriendId);
     }
 
-    // Build system prompt
+    // Build system prompt with safety guidelines
     const aiFriend = conversation.ai_friend;
-    let systemPrompt = "You are a helpful AI assistant. ";
-    
-    if (aiFriend) {
-      systemPrompt = `You are ${aiFriend.name}. `;
-      if (aiFriend.personality) {
-        systemPrompt += `Your personality: ${aiFriend.personality}. `;
-      }
-      if (aiFriend.tone) {
-        systemPrompt += `Your tone is ${aiFriend.tone}. `;
-      }
-    }
-
-    systemPrompt += `
-You are having a private conversation with the user. Be helpful, engaging, and conversational.
-Format your responses using Markdown for better readability:
-- Use **bold** for emphasis
-- Use bullet points for lists
-- Use numbered lists for steps
-- Use code blocks for code
-- Use headers when organizing longer responses
-
-If the user asks about current events, news, or anything that requires up-to-date information, use web search.
-If the user asks you to generate or create an image, use the image generation tool.`;
+    const systemPrompt = buildPersonalChatSystemPrompt(
+      aiFriend?.name || "AI Assistant",
+      aiFriend?.personality,
+      aiFriend?.tone,
+      chatHistory.map(msg => ({ role: msg.role, content: msg.content })),
+      userAgeContext.isMinor // Pass isMinor flag for appropriate safety guidelines
+    );
 
     // Build conversation context
     let userPrompt = "";
@@ -660,6 +683,22 @@ If the user asks you to generate or create an image, use the image generation to
       });
 
       aiResponseContent = result.content;
+
+      // ============================================================================
+      // OUTPUT FILTERING - Same as group chat
+      // ============================================================================
+      if (aiResponseContent) {
+        const outputFilter = filterAIOutput(aiResponseContent);
+        if (outputFilter.wasModified) {
+          console.log("[PersonalChats] AI output was filtered for safety");
+          aiResponseContent = outputFilter.filtered;
+          logSafetyEvent("filtered", { 
+            chatId: conversationId, 
+            userId, 
+            flags: ["output_filtered_personal_chat"] 
+          });
+        }
+      }
 
       // If images were generated, save them
       if (result.images && result.images.length > 0) {
@@ -805,6 +844,38 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     return c.json({ error: "Conversation not found" }, 404);
   }
 
+  // ============================================================================
+  // CONTENT SAFETY CHECK - Same as group chat
+  // ============================================================================
+  console.log("[PersonalChats] [Streaming] Running content safety check for user:", userId);
+  
+  const userAgeContext = await getUserAgeContext(userId);
+  const safetyResult = await checkContentSafety({
+    userMessage: content,
+    userId,
+    chatId: conversationId, // Use conversationId as chatId for logging
+    isMinor: userAgeContext.isMinor,
+  });
+
+  // Handle crisis situation (CRIT-2)
+  if (safetyResult.crisisDetected && safetyResult.crisisResponse) {
+    console.log("[PersonalChats] [Streaming] Crisis detected, returning crisis resources");
+    return c.json({
+      crisis: true,
+      response: safetyResult.crisisResponse,
+    });
+  }
+
+  // Handle blocked content (CRIT-1)
+  if (safetyResult.isBlocked && safetyResult.blockReason) {
+    console.log("[PersonalChats] [Streaming] Content blocked:", safetyResult.flags);
+    return c.json({
+      blocked: true,
+      reason: safetyResult.blockReason,
+      flags: safetyResult.flags,
+    }, 400);
+  }
+
   // Determine which AI friend to use - prefer requestedAiFriendId over conversation's
   let aiFriend = conversation.ai_friend as any;
   const effectiveAiFriendId = requestedAiFriendId || conversation.aiFriendId;
@@ -903,12 +974,13 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     }
   }
 
-  // Build system prompt
+  // Build system prompt with safety guidelines
   const systemPrompt = buildPersonalChatSystemPrompt(
     aiFriend?.name || "AI Assistant",
     aiFriend?.personality,
     aiFriend?.tone,
-    chatHistory
+    chatHistory,
+    userAgeContext.isMinor // Pass isMinor flag for appropriate safety guidelines
   );
 
   // Build user prompt with context
@@ -1084,6 +1156,22 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             console.log("[PersonalChats] Received done event, saving message...");
             console.log("[PersonalChats] Generated images count:", generatedImages.length);
             console.log("[PersonalChats] Full content length:", fullContent.length);
+            
+            // ============================================================================
+            // OUTPUT FILTERING - Same as group chat
+            // ============================================================================
+            if (fullContent) {
+              const outputFilter = filterAIOutput(fullContent);
+              if (outputFilter.wasModified) {
+                console.log("[PersonalChats] [Streaming] AI output was filtered for safety");
+                fullContent = outputFilter.filtered;
+                logSafetyEvent("filtered", { 
+                  chatId: conversationId, 
+                  userId, 
+                  flags: ["output_filtered_personal_chat_streaming"] 
+                });
+              }
+            }
             
             // Save the AI response to database
             let generatedImageUrl: string | null = null;

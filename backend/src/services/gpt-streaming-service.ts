@@ -417,8 +417,14 @@ export function buildPersonalChatSystemPrompt(
   agentName: string,
   personality?: string,
   tone?: string,
-  chatHistory: Array<{ role: string; content: string }> = []
+  chatHistory: Array<{ role: string; content: string }> = [],
+  isMinor: boolean = false
 ): string {
+  // Import safety system prompt from content-safety service
+  // This adds the same safety guidelines used in group chat
+  const { getSafetySystemPrompt } = require("./content-safety");
+  const safetyPrompt = getSafetySystemPrompt(isMinor);
+  
   let prompt = `You are "${agentName}", having a private one-on-one conversation with the user.`;
   
   if (personality) {
@@ -428,6 +434,9 @@ export function buildPersonalChatSystemPrompt(
   if (tone) {
     prompt += `\n**Your Tone:** ${tone}`;
   }
+  
+  // Add safety guidelines at the start - CRITICAL for content moderation
+  prompt += `\n\n${safetyPrompt}\n`;
   
   prompt += `
 
