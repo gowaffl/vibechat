@@ -88,11 +88,12 @@ Only Suggest if confidence > 0.8.
 
 async function sendSuggestionMessage(chatId: string, suggestion: ProactiveSuggestion) {
   // Find an AI friend to send this, or use a system persona
-  // For now, we'll search for the first AI friend in the chat
+  // For now, we'll search for the first non-personal AI friend in the chat
   const { data: aiFriend } = await db
     .from("ai_friend")
     .select("id, name")
     .eq("chatId", chatId)
+    .or("isPersonal.is.null,isPersonal.eq.false")
     .limit(1)
     .single();
 

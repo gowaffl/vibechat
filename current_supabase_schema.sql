@@ -364,6 +364,23 @@ ALTER TABLE public.ai_friend
   FOREIGN KEY ("createdBy") REFERENCES public."user"(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_ai_friend_created_by ON public.ai_friend("createdBy");
 
+-- ============================================================================
+-- PERSONAL AI AGENTS (2026-01-09)
+-- ============================================================================
+-- Add isPersonal flag to distinguish personal AI agents from group chat agents
+-- Personal agents are created in personal chats and are only visible to their owner
+ALTER TABLE public.ai_friend ADD COLUMN IF NOT EXISTS "isPersonal" BOOLEAN DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_ai_friend_is_personal ON public.ai_friend("isPersonal");
+
+-- Add ownerUserId for personal agents - links personal agent to its owner
+-- For group chat agents, this will remain NULL (ownership is through chatId)
+ALTER TABLE public.ai_friend ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT REFERENCES public."user"(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_ai_friend_owner_user_id ON public.ai_friend("ownerUserId");
+
+-- Comments for documentation
+COMMENT ON COLUMN ai_friend."isPersonal" IS 'True if this is a personal AI agent created in personal chats, false for group chat agents';
+COMMENT ON COLUMN ai_friend."ownerUserId" IS 'For personal agents only: the user who owns this agent. NULL for group chat agents.';
+
 -- Indexes for user_agent_usage
 CREATE INDEX IF NOT EXISTS user_agent_usage_user_idx ON user_agent_usage("userId");
 CREATE INDEX IF NOT EXISTS user_agent_usage_count_idx ON user_agent_usage("usageCount" DESC);

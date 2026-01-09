@@ -253,7 +253,7 @@ personalChats.get("/top-agents", zValidator("query", getTopAgentsRequestSchema),
   }
 });
 
-// GET /api/personal-chats/all-agents - Get all agents available to user (from all their chats)
+// GET /api/personal-chats/all-agents - Get all agents available to user (from all their chats + personal agents)
 personalChats.get("/all-agents", zValidator("query", getAllUserAgentsRequestSchema), async (c) => {
   const { userId } = c.req.valid("query");
 
@@ -269,27 +269,56 @@ personalChats.get("/all-agents", zValidator("query", getAllUserAgentsRequestSche
       return c.json({ error: "Failed to fetch user chats" }, 500);
     }
 
-    if (!memberships || memberships.length === 0) {
-      return c.json([]);
+    const chatIds = memberships?.map((m) => m.chatId) || [];
+    const chatNames = new Map(memberships?.map((m) => [m.chatId, (m.chat as any)?.name || "Unknown Chat"]) || []);
+
+    // Get all non-personal AI friends from user's chats
+    let groupChatAgents: any[] = [];
+    if (chatIds.length > 0) {
+      const { data: aiFriends, error: friendsError } = await db
+        .from("ai_friend")
+        .select("*")
+        .in("chatId", chatIds)
+        .or("isPersonal.is.null,isPersonal.eq.false")
+        .order("name", { ascending: true });
+
+      if (friendsError) {
+        console.error("[PersonalChats] Error fetching AI friends:", friendsError);
+      } else {
+        groupChatAgents = aiFriends || [];
+      }
     }
 
-    const chatIds = memberships.map((m) => m.chatId);
-    const chatNames = new Map(memberships.map((m) => [m.chatId, (m.chat as any)?.name || "Unknown Chat"]));
-
-    // Get all AI friends from these chats
-    const { data: aiFriends, error: friendsError } = await db
+    // Get all personal agents owned by this user
+    const { data: personalAgents, error: personalError } = await db
       .from("ai_friend")
       .select("*")
-      .in("chatId", chatIds)
+      .eq("isPersonal", true)
+      .eq("ownerUserId", userId)
       .order("name", { ascending: true });
 
-    if (friendsError) {
-      console.error("[PersonalChats] Error fetching AI friends:", friendsError);
-      return c.json({ error: "Failed to fetch AI friends" }, 500);
+    if (personalError) {
+      console.error("[PersonalChats] Error fetching personal agents:", personalError);
     }
 
-    return c.json(
-      aiFriends.map((f) => ({
+    // Combine both lists
+    const allAgents = [
+      ...(personalAgents || []).map((f) => ({
+        id: f.id,
+        chatId: f.chatId,
+        name: f.name,
+        personality: f.personality,
+        tone: f.tone,
+        engagementMode: f.engagementMode,
+        engagementPercent: f.engagementPercent,
+        color: f.color,
+        sortOrder: f.sortOrder,
+        createdAt: formatTimestamp(f.createdAt),
+        updatedAt: formatTimestamp(f.updatedAt),
+        chatName: "Personal Agent",
+        isPersonal: true,
+      })),
+      ...groupChatAgents.map((f) => ({
         id: f.id,
         chatId: f.chatId,
         name: f.name,
@@ -302,11 +331,131 @@ personalChats.get("/all-agents", zValidator("query", getAllUserAgentsRequestSche
         createdAt: formatTimestamp(f.createdAt),
         updatedAt: formatTimestamp(f.updatedAt),
         chatName: chatNames.get(f.chatId) || "Unknown Chat",
-      }))
-    );
+        isPersonal: false,
+      })),
+    ];
+
+    return c.json(allAgents);
   } catch (error) {
     console.error("[PersonalChats] Error fetching all agents:", error);
     return c.json({ error: "Failed to fetch agents" }, 500);
+  }
+});
+
+// Color palette for personal AI agents
+const PERSONAL_AGENT_COLORS = [
+  "#34C759", // Green
+  "#007AFF", // Blue
+  "#FF9F0A", // Orange
+  "#AF52DE", // Purple
+  "#FF453A", // Red
+  "#FFD60A", // Yellow
+  "#64D2FF", // Cyan
+  "#FF375F", // Pink
+];
+
+// POST /api/personal-chats/create-agent - Create a new personal AI agent
+personalChats.post("/create-agent", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { userId, name, personality, tone, engagementMode, engagementPercent } = body;
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    if (!name) {
+      return c.json({ error: "name is required" }, 400);
+    }
+
+    // Verify user exists
+    const { data: user, error: userError } = await db
+      .from("user")
+      .select("id")
+      .eq("id", userId)
+      .single();
+
+    if (userError || !user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    // Get user's existing personal agents to determine color assignment
+    const { data: existingAgents } = await db
+      .from("ai_friend")
+      .select("color")
+      .eq("isPersonal", true)
+      .eq("ownerUserId", userId);
+
+    const usedColors = new Set((existingAgents || []).map((a) => a.color));
+    
+    // Find the first unused color, or cycle back to the beginning
+    let assignedColor = PERSONAL_AGENT_COLORS[0];
+    for (const color of PERSONAL_AGENT_COLORS) {
+      if (!usedColors.has(color)) {
+        assignedColor = color;
+        break;
+      }
+    }
+    // If all colors are used, use the next color in rotation
+    if (usedColors.size >= PERSONAL_AGENT_COLORS.length) {
+      assignedColor = PERSONAL_AGENT_COLORS[(existingAgents?.length || 0) % PERSONAL_AGENT_COLORS.length];
+    }
+
+    // Get user's first chat for the chatId (required field, but won't be used for personal agents)
+    // Personal agents need a chatId for database consistency, but isPersonal flag makes them invisible in group chats
+    const { data: memberships } = await db
+      .from("chat_member")
+      .select("chatId")
+      .eq("userId", userId)
+      .limit(1);
+
+    // Use a placeholder chatId if user has no chats (edge case)
+    const chatId = memberships?.[0]?.chatId || "personal-placeholder";
+
+    // Create the personal agent
+    const { data: newAgent, error: createError } = await db
+      .from("ai_friend")
+      .insert({
+        chatId,
+        name: name,
+        personality: personality || null,
+        tone: tone || null,
+        engagementMode: engagementMode || "on-call",
+        engagementPercent: engagementPercent || null,
+        color: assignedColor,
+        sortOrder: 0,
+        createdBy: userId,
+        isPersonal: true,
+        ownerUserId: userId,
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("[PersonalChats] Error creating personal agent:", createError);
+      return c.json({ error: "Failed to create personal agent" }, 500);
+    }
+
+    console.log("[PersonalChats] Created personal agent:", newAgent.id, "for user:", userId);
+
+    return c.json({
+      id: newAgent.id,
+      chatId: newAgent.chatId,
+      name: newAgent.name,
+      personality: newAgent.personality,
+      tone: newAgent.tone,
+      engagementMode: newAgent.engagementMode,
+      engagementPercent: newAgent.engagementPercent,
+      color: newAgent.color,
+      sortOrder: newAgent.sortOrder,
+      createdBy: newAgent.createdBy,
+      createdAt: formatTimestamp(newAgent.createdAt),
+      updatedAt: formatTimestamp(newAgent.updatedAt),
+      isPersonal: true,
+    });
+  } catch (error) {
+    console.error("[PersonalChats] Error creating personal agent:", error);
+    return c.json({ error: "Failed to create personal agent" }, 500);
   }
 });
 

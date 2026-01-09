@@ -490,11 +490,12 @@ app.post("/execute", async (c) => {
       },
     ];
 
-    // Get AI friend for this chat (for typing indicator)
+    // Get AI friend for this chat (for typing indicator) - exclude personal agents
     const { data: aiFriendForCommand } = await db
       .from("ai_friend")
       .select("id, name, color")
       .eq("chatId", chatId)
+      .or("isPersonal.is.null,isPersonal.eq.false")
       .order("sortOrder", { ascending: true })
       .limit(1)
       .single();

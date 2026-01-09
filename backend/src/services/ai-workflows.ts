@@ -425,11 +425,12 @@ async function executeAIResponse(
   }
 
   if (!aiFriend) {
-    // Get first AI friend for this chat
+    // Get first non-personal AI friend for this chat
     const { data } = await db
       .from("ai_friend")
       .select("*")
       .eq("chatId", workflow.chatId)
+      .or("isPersonal.is.null,isPersonal.eq.false")
       .order("sortOrder", { ascending: true })
       .limit(1)
       .single();
@@ -552,11 +553,12 @@ async function executeSummarize(
     return { success: false, error: "Failed to generate summary" };
   }
 
-  // Get AI friend for posting
+  // Get AI friend for posting (exclude personal agents)
   const { data: aiFriend } = await db
     .from("ai_friend")
     .select("id, name")
     .eq("chatId", workflow.chatId)
+    .or("isPersonal.is.null,isPersonal.eq.false")
     .order("sortOrder", { ascending: true })
     .limit(1)
     .single();

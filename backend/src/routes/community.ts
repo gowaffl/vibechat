@@ -630,11 +630,12 @@ app.post("/clone", zValidator("json", cloneItemSchema), async (c) => {
           continue; // Skip if already cloned
         }
 
-        // Get existing AI friends count for sort order and color
+        // Get existing AI friends count for sort order and color (exclude personal agents)
         const { data: existingFriends } = await db
           .from("ai_friend")
           .select("color")
-          .eq("chatId", chatId);
+          .eq("chatId", chatId)
+          .or("isPersonal.is.null,isPersonal.eq.false");
 
         const usedColors = new Set((existingFriends || []).map((f: any) => f.color));
         const colors = ["#34C759", "#007AFF", "#FF9F0A", "#AF52DE", "#FF453A", "#FFD60A", "#64D2FF", "#FF375F"];

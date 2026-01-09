@@ -45,10 +45,12 @@ aiFriends.get("/:chatId", zValidator("query", getAIFriendsRequestSchema), async 
     }
 
     // Get all AI friends for this chat, ordered by sortOrder
+    // IMPORTANT: Exclude personal agents (isPersonal = true) - those are only for personal chats
     const { data: friends, error } = await db
       .from("ai_friend")
       .select("*")
       .eq("chatId", chatId)
+      .or("isPersonal.is.null,isPersonal.eq.false")
       .order("sortOrder", { ascending: true });
 
     if (error) {

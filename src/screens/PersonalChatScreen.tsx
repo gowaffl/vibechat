@@ -1360,7 +1360,7 @@ export default function PersonalChatScreen() {
     }
   }, [generatedImageUrl]);
 
-  // Handle agent creation
+  // Handle agent creation - creates a PERSONAL agent (only visible to this user, not in group chats)
   const handleCreateAgent = useCallback(async (
     name: string,
     personality: string,
@@ -1377,27 +1377,9 @@ export default function PersonalChatScreen() {
       // Start loading state
       setIsCreatingAgent(true);
 
-      // Get user's chats - we need a chatId to create an AI friend
-      // Personal AI friends are still tied to a chat, but can be used across all personal conversations
-      const chatsResponse = await api.get<Array<{ id: string; name: string }>>(
-        `/api/chats?userId=${user.id}`
-      );
-
-      // If user has no chats, we need to create one first or show an error
-      if (!chatsResponse || chatsResponse.length === 0) {
-        setIsCreatingAgent(false);
-        Alert.alert(
-          "No Chats Available",
-          "You need to be a member of at least one group chat to create an AI friend. AI friends can be used in both group chats and personal chats."
-        );
-        return;
-      }
-
-      // Use the first available chat (the AI friend can still be used in personal chats)
-      const chatId = chatsResponse[0].id;
-
-      const response = await api.post<{ success: boolean; aiFriend: AIFriend }>("/api/ai-friends", {
-        chatId,
+      // Create a personal agent using the dedicated endpoint
+      // Personal agents are private to the user and won't appear in any group chats
+      const newAgent = await api.post<AIFriend>("/api/personal-chats/create-agent", {
         userId: user.id,
         name,
         personality,
@@ -1406,9 +1388,8 @@ export default function PersonalChatScreen() {
         engagementPercent,
       });
       
-      if (response.success) {
-        const newAgent = response.aiFriend;
-        
+      // Check if we got a valid agent response (has an id)
+      if (newAgent && newAgent.id) {
         // Set the newly created agent as the active agent
         setSelectedAgent(newAgent);
         

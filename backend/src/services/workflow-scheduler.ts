@@ -236,11 +236,12 @@ async function executeDailySummary(action: ScheduledAction): Promise<{ success: 
     return { success: false, error: "Failed to generate summary" };
   }
 
-  // Get AI friend for posting
+  // Get AI friend for posting (exclude personal agents)
   const { data: aiFriend } = await db
     .from("ai_friend")
     .select("id, name")
     .eq("chatId", action.chatId)
+    .or("isPersonal.is.null,isPersonal.eq.false")
     .order("sortOrder", { ascending: true })
     .limit(1)
     .single();
@@ -330,11 +331,12 @@ Messages:\n${messagesText.slice(0, 10000)}`, // Truncate if too long
     return { success: false, error: "Failed to generate recap" };
   }
 
-  // Get AI friend for posting
+  // Get AI friend for posting (exclude personal agents)
   const { data: aiFriend } = await db
     .from("ai_friend")
     .select("id, name")
     .eq("chatId", action.chatId)
+    .or("isPersonal.is.null,isPersonal.eq.false")
     .order("sortOrder", { ascending: true })
     .limit(1)
     .single();
@@ -362,11 +364,12 @@ async function executeReminder(action: ScheduledAction): Promise<{ success: bool
   const config = action.config || {};
   const message = config.message || "⏰ Reminder!";
 
-  // Get AI friend for posting
+  // Get AI friend for posting (exclude personal agents)
   const { data: aiFriend } = await db
     .from("ai_friend")
     .select("id, name")
     .eq("chatId", action.chatId)
+    .or("isPersonal.is.null,isPersonal.eq.false")
     .order("sortOrder", { ascending: true })
     .limit(1)
     .single();
@@ -412,11 +415,12 @@ async function executeCustomAction(action: ScheduledAction): Promise<{ success: 
   }
 
   if (config.type === "ai_prompt") {
-    // AI-generated response based on prompt
+    // AI-generated response based on prompt (exclude personal agents)
     const { data: aiFriend } = await db
       .from("ai_friend")
       .select("id, name, personality, tone")
       .eq("chatId", action.chatId)
+      .or("isPersonal.is.null,isPersonal.eq.false")
       .order("sortOrder", { ascending: true })
       .limit(1)
       .single();

@@ -116,6 +116,12 @@ async function generateAIResponse(chatId: string, triggerMessageId: string, aiFr
       return;
     }
 
+    // Skip auto-engagement for personal agents - they shouldn't auto-engage in group chats
+    if (aiFriend.isPersonal) {
+      console.log(`[AI Engagement] [${requestId}] Skipping personal agent ${aiFriend.name}`);
+      return;
+    }
+
     const chat = Array.isArray(aiFriend.chat) ? aiFriend.chat[0] : aiFriend.chat;
 
     // Fetch last 50 messages for context
@@ -403,11 +409,12 @@ async function handleNewMessage(payload: any) {
     return;
   }
 
-  // 2. Get AI Friends for this chat
+  // 2. Get AI Friends for this chat (exclude personal agents)
   const { data: aiFriends } = await db
     .from("ai_friend")
     .select("*")
     .eq("chatId", chatId)
+    .or("isPersonal.is.null,isPersonal.eq.false")
     .order("sortOrder", { ascending: true });
 
   if (!aiFriends || aiFriends.length === 0) return;

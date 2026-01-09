@@ -185,12 +185,18 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       if (aiFriend.chatId !== chatId) {
         return c.json({ error: "AI friend does not belong to this chat" }, 400);
       }
+
+      // If this is a personal agent, verify the requesting user is the owner
+      if (aiFriend.isPersonal && aiFriend.ownerUserId !== userId) {
+        return c.json({ error: "You do not have access to this personal agent" }, 403);
+      }
     } else {
-      // If no aiFriendId specified, use the first AI friend in the chat
+      // If no aiFriendId specified, use the first non-personal AI friend in the chat
       const { data: foundFriend } = await db
         .from("ai_friend")
         .select("*, chat:chat(*)")
         .eq("chatId", chatId)
+        .or("isPersonal.is.null,isPersonal.eq.false")
         .order("sortOrder", { ascending: true })
         .limit(1)
         .single();
@@ -1820,11 +1826,12 @@ ai.post("/tldr", zValidator("json", tldrRequestSchema), async (c) => {
       return `[${time}] ${user}: ${content}`;
     }).join("\n");
 
-    // Get an AI friend to "speak" as (for personality)
+    // Get an AI friend to "speak" as (for personality) - exclude personal agents
     const { data: aiFriend } = await db
       .from("ai_friend")
       .select("*")
       .eq("chatId", chatId)
+      .or("isPersonal.is.null,isPersonal.eq.false")
       .order("sortOrder", { ascending: true })
       .limit(1)
       .single();
