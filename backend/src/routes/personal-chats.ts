@@ -1265,12 +1265,29 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           data: JSON.stringify({ toolName: "image_generation", toolInput: content }),
         });
         
+        // Start a more frequent ping interval during image generation to keep XHR connection alive
+        // React Native XHR may not trigger onprogress if there's a long gap without data
+        const imageGenPingInterval = setInterval(async () => {
+          try {
+            console.log("[PersonalChats] [Image] Sending keep-alive ping during generation");
+            await stream.writeSSE({
+              event: "ping",
+              data: JSON.stringify({ timestamp: Date.now(), status: "generating" }),
+            });
+          } catch (e) {
+            clearInterval(imageGenPingInterval);
+          }
+        }, 2000); // Ping every 2 seconds during image generation
+
         try {
           const imageResult = await generateGeminiImage({
             prompt: content,
             numberOfImages: 1,
             aspectRatio: '1:1',
           });
+          
+          // Clear the frequent ping interval now that generation is complete
+          clearInterval(imageGenPingInterval);
           
           if (imageResult.images.length > 0) {
             const imageId = `img_${Date.now()}`;
@@ -1292,6 +1309,9 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
                 data: JSON.stringify({ imageId, imageUrl: savedImages[0] }),
               });
               console.log("[PersonalChats] [Image] image_generated event sent successfully");
+              
+              // Small delay to ensure event is flushed to client before next event
+              await new Promise(resolve => setTimeout(resolve, 50));
             } else {
               console.error("[PersonalChats] [Image] saveResponseImages returned empty array!");
             }
@@ -1305,6 +1325,9 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             data: JSON.stringify({ toolName: "image_generation" }),
           });
           
+          // Small delay to ensure event is flushed
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
           fullContent = "Here's the image I generated based on your request:";
           await stream.writeSSE({
             event: "content_delta",
@@ -1315,6 +1338,8 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             data: JSON.stringify({ content: fullContent }),
           });
         } catch (imgError) {
+          // Clear the frequent ping interval on error
+          clearInterval(imageGenPingInterval);
           console.error("[PersonalChats] Image generation error:", imgError);
           fullContent = "I apologize, but I encountered an error generating the image. Please try again.";
           await stream.writeSSE({
@@ -1408,6 +1433,9 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             createdAt: assistantMessage?.createdAt ? formatTimestamp(assistantMessage.createdAt) : new Date().toISOString(),
           }),
         });
+        
+        // Small delay to ensure event is flushed before done event
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Send completion event
         console.log("[PersonalChats] [Image] Sending done event");

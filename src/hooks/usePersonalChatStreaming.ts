@@ -188,6 +188,9 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
     // Skip if aborted
     if (isAbortedRef.current) return;
     
+    // Log ALL events for debugging
+    console.log(`[Streaming] EVENT RECEIVED: ${eventType}`);
+    
     const cbs = callbacksRef.current;
     
     // Parse data
@@ -375,7 +378,12 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
     const newData = responseText.substring(processedLengthRef.current);
     processedLengthRef.current = responseText.length;
     
-    if (!newData) return;
+    if (!newData) {
+      console.log("[Streaming] processNewData called but no new data");
+      return;
+    }
+    
+    console.log(`[Streaming] Received ${newData.length} bytes of new data`);
     
     // Add new data to buffer
     sseBufferRef.current += newData;
@@ -383,6 +391,8 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
     // Parse events from buffer
     const { events, remaining } = parseSSEChunk(sseBufferRef.current);
     sseBufferRef.current = remaining;
+    
+    console.log(`[Streaming] Parsed ${events.length} events, ${remaining.length} bytes remaining in buffer`);
     
     // Process each event
     for (const event of events) {
@@ -452,12 +462,14 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         
         // Handle completion
         xhr.onload = () => {
-          console.log("[Streaming] XHR completed, status:", xhr.status);
+          console.log("[Streaming] XHR onload - status:", xhr.status, "responseText length:", xhr.responseText?.length || 0);
+          console.log("[Streaming] XHR onload - buffer remaining:", sseBufferRef.current.length, "bytes");
           
           if (isAbortedRef.current) return;
           
           // Process any remaining data
           if (xhr.responseText) {
+            console.log("[Streaming] XHR onload - processing final data");
             processNewData(xhr.responseText);
           }
           

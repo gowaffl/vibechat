@@ -991,7 +991,7 @@ export default function PersonalChatScreen() {
             // Ignore scroll errors
           }
         });
-      }, 100); // Small delay for smooth transition
+      }, 500); // Longer delay to ensure image renders before state reset
     },
     onError: (error) => {
       console.error("[PersonalChat] Streaming error:", error);
