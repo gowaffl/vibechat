@@ -8,10 +8,33 @@
  * Includes adaptive thinking levels for dynamic response quality.
  */
 
-import { analyzePromptComplexity, ThinkingLevel, mapToGeminiThinkingLevel } from './gemini-streaming-service';
+import { analyzePromptComplexity, mapToGeminiThinkingLevel } from './gemini-streaming-service';
+import type { ThinkingLevel } from './gemini-streaming-service';
+
+// Type for Gemini API response
+interface GeminiAPIResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }>;
+    };
+    thoughtSignature?: string;
+    groundingMetadata?: {
+      groundingChunks?: Array<{
+        web?: { title?: string; uri?: string };
+        snippet?: string;
+      }>;
+    };
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+}
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const CHAT_MODEL = 'gemini-3-flash-preview';
+// Gemini 3 Pro Image Preview for image generation
 const IMAGE_MODEL = 'gemini-3-pro-image-preview';
 
 export interface GeminiResponseOptions {
@@ -144,7 +167,7 @@ export async function executeGeminiResponse(options: GeminiResponseOptions): Pro
     throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as GeminiAPIResponse;
   
   // Extract response content
   let content = '';
@@ -171,7 +194,7 @@ export async function executeGeminiResponse(options: GeminiResponseOptions): Pro
     // Extract search grounding metadata
     if (candidate.groundingMetadata?.groundingChunks) {
       searchGrounding = {
-        sources: candidate.groundingMetadata.groundingChunks.map((chunk: { web?: { title?: string; uri?: string }; snippet?: string }) => ({
+        sources: candidate.groundingMetadata.groundingChunks.map((chunk) => ({
           title: chunk.web?.title || 'Source',
           url: chunk.web?.uri || '',
           snippet: chunk.snippet
@@ -208,6 +231,12 @@ export async function executeGeminiWebSearch(options: Omit<GeminiResponseOptions
 
 /**
  * Generate images using Gemini 3 Pro Image Preview
+ * 
+ * Based on Gemini 3 API documentation:
+ * - Uses `imageConfig` inside `generationConfig`
+ * - Supports aspectRatio: "1:1", "3:4", "4:3", "9:16", "16:9"
+ * - Supports imageSize: "1K", "2K", "4K"
+ * - Can optionally use googleSearch tool for grounded generation
  */
 export async function generateGeminiImage(options: GeminiImageGenerationOptions): Promise<GeminiImageResponse> {
   const {
@@ -221,28 +250,29 @@ export async function generateGeminiImage(options: GeminiImageGenerationOptions)
     throw new Error('GOOGLE_API_KEY environment variable is not set');
   }
 
-  // Build the request for image generation
   console.log('[Gemini Image] Generating image with prompt:', prompt.substring(0, 100) + '...');
+  console.log('[Gemini Image] Config: aspectRatio:', aspectRatio, 'numberOfImages:', numberOfImages);
   
-  const requestBody = {
+  // Build request body per Gemini 3 API documentation
+  // Reference: https://ai.google.dev/gemini-api/docs/image-generation
+  const requestBody: Record<string, any> = {
     contents: [{
-      role: 'user',
       parts: [{ text: prompt }]
     }],
     generationConfig: {
-      responseModalities: ['image', 'text'],
-      imageGenerationConfig: {
-        numberOfImages,
+      imageConfig: {
         aspectRatio,
-        outputImageFormat: 'png'
+        imageSize: '2K' // Good balance of quality and speed
       }
-    },
-    // Enable thinking for better image understanding
-    thinkingConfig: {
-      thinkingLevel: 'low',
-      includeThoughts: false
     }
   };
+
+  // Add Google Search grounding for factual/current information requests
+  const needsGrounding = /current|today|now|latest|weather|news|stock|price/i.test(prompt);
+  if (needsGrounding) {
+    requestBody.tools = [{ googleSearch: {} }];
+    console.log('[Gemini Image] Adding Google Search grounding');
+  }
 
   const response = await fetch(
     `${GEMINI_API_BASE}/models/${IMAGE_MODEL}:generateContent`,
@@ -262,7 +292,7 @@ export async function generateGeminiImage(options: GeminiImageGenerationOptions)
     throw new Error(`Gemini Image API error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as GeminiAPIResponse;
   console.log('[Gemini Image] Response received, candidates:', data.candidates?.length || 0);
   
   const images: Array<{ base64Data: string; mimeType: string }> = [];
