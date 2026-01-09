@@ -831,7 +831,8 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
     let metadata: Record<string, any> = {};
 
     // Analyze prompt to determine if it's an image generation request
-    const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\s+(an?\s+)?(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
+    // More flexible regex to match phrases like "create me an image", "make me a picture", etc.
+    const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\b.{0,30}\b(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
 
     try {
       if (isImageRequest) {
@@ -1004,13 +1005,14 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
 // POST /api/personal-chats/:conversationId/messages/stream - Send message with streaming response
 personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPersonalMessageRequestSchema), async (c) => {
   const conversationId = c.req.param("conversationId");
-  const { userId, content, imageUrl: attachedImageUrl, aiFriendId: requestedAiFriendId } = c.req.valid("json");
+  const { userId, content, imageUrl: attachedImageUrl, aiFriendId: requestedAiFriendId, files } = c.req.valid("json");
 
   console.log("[PersonalChats] Streaming message request:", { 
     conversationId, 
     userId, 
     contentLength: content?.length,
-    requestedAiFriendId 
+    requestedAiFriendId,
+    filesCount: files?.length || 0,
   });
 
   // Verify conversation exists and belongs to user
@@ -1249,7 +1251,8 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         /\bsearch\b/i.test(content);
       
       // Detect if this is an image generation request
-      const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\s+(an?\s+)?(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
+      // More flexible regex to match phrases like "create me an image", "make me a picture", etc.
+      const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\b.{0,30}\b(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
 
       // If this is an image request, handle it specially with Gemini image generation
       if (isImageRequest) {
@@ -1420,6 +1423,8 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           role: msg.role === "assistant" ? "model" : "user",
           content: msg.content,
         })),
+        // Pass attached files to Gemini for context
+        files: files || [],
       });
 
       for await (const event of responseStream) {

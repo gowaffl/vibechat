@@ -9,6 +9,12 @@
 // Re-export types for compatibility with existing code
 export type ThinkingLevel = "none" | "low" | "medium" | "high";
 
+export interface AttachedFile {
+  name: string;
+  mimeType: string;
+  base64?: string;
+}
+
 export interface GeminiStreamingOptions {
   systemPrompt: string;
   userPrompt: string;
@@ -16,6 +22,7 @@ export interface GeminiStreamingOptions {
   thinkingLevel?: ThinkingLevel;
   maxTokens?: number;
   chatHistory?: Array<{ role: "user" | "model"; content: string }>;
+  files?: AttachedFile[];
 }
 
 export type StreamEventType = 
@@ -183,6 +190,7 @@ export async function* streamGeminiResponse(
     thinkingLevel = "none",
     maxTokens = 4096,
     chatHistory = [],
+    files = [],
   } = options;
   
   // Determine adaptive thinking level if not specified
@@ -193,6 +201,7 @@ export async function* streamGeminiResponse(
   console.log("[Gemini-Streaming] Starting streaming response");
   console.log("[Gemini-Streaming] Adaptive thinking level:", adaptiveThinking);
   console.log("[Gemini-Streaming] Web search enabled:", enableWebSearch);
+  console.log("[Gemini-Streaming] Files attached:", files.length);
   
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
@@ -203,7 +212,7 @@ export async function* streamGeminiResponse(
   
   try {
     // Build contents array with chat history
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+    const contents: Array<{ role: string; parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> }> = [];
     
     // Add chat history
     for (const msg of chatHistory) {
@@ -213,10 +222,31 @@ export async function* streamGeminiResponse(
       });
     }
     
-    // Add current user message
+    // Build user message parts - text first, then files
+    const userParts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+    
+    // Add text part
+    if (userPrompt) {
+      userParts.push({ text: userPrompt });
+    }
+    
+    // Add file parts if any
+    for (const file of files) {
+      if (file.base64) {
+        userParts.push({
+          inlineData: {
+            mimeType: file.mimeType,
+            data: file.base64
+          }
+        });
+        console.log(`[Gemini-Streaming] Added file: ${file.name} (${file.mimeType})`);
+      }
+    }
+    
+    // Add current user message with all parts
     contents.push({
       role: "user",
-      parts: [{ text: userPrompt }]
+      parts: userParts
     });
     
     // Build request body

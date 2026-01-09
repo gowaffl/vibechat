@@ -394,6 +394,7 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
       options?: {
         imageUrl?: string;
         aiFriendId?: string;
+        files?: Array<{ uri: string; name: string; mimeType: string; base64?: string }>;
       }
     ) => {
       // Abort any existing request
@@ -529,13 +530,26 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         // Set timeout (2 minutes - enough for long AI responses)
         xhr.timeout = 120000;
         
-        // Send the request
-        xhr.send(JSON.stringify({
+        // Build request body
+        const requestBody: Record<string, any> = {
           userId,
           content,
           imageUrl: options?.imageUrl,
           aiFriendId: options?.aiFriendId,
-        }));
+        };
+        
+        // Include files if present
+        if (options?.files && options.files.length > 0) {
+          requestBody.files = options.files.map(f => ({
+            name: f.name,
+            mimeType: f.mimeType,
+            base64: f.base64,
+          }));
+          console.log(`[Streaming] Including ${options.files.length} file(s)`);
+        }
+        
+        // Send the request
+        xhr.send(JSON.stringify(requestBody));
         
         console.log("[Streaming] XHR request sent");
         

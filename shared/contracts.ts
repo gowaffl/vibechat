@@ -1699,6 +1699,11 @@ export const sendPersonalMessageRequestSchema = z.object({
   content: z.string(),
   imageUrl: z.string().optional(), // User-attached image
   aiFriendId: z.string().optional(), // Allow overriding the agent per message
+  files: z.array(z.object({
+    name: z.string(),
+    mimeType: z.string(),
+    base64: z.string().optional(), // Base64 encoded file content
+  })).optional(), // Attached files (PDF, DOC, CSV, etc.)
 });
 export type SendPersonalMessageRequest = z.infer<typeof sendPersonalMessageRequestSchema>;
 export const sendPersonalMessageResponseSchema = z.object({

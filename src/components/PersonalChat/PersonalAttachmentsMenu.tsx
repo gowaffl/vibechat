@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Camera, Image as ImageIcon, Sparkles, Wand2, Globe, Search } from "lucide-react-native";
+import { Camera, Image as ImageIcon, FileText } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import Animated, {
   useSharedValue,
@@ -29,8 +29,7 @@ interface PersonalAttachmentsMenuProps {
   onClose: () => void;
   onTakePhoto: () => Promise<void>;
   onPickImage: () => Promise<void>;
-  onGenerateImage: () => void;
-  onWebSearch: () => void;
+  onPickDocument: () => Promise<void>;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -40,8 +39,7 @@ const PersonalAttachmentsMenu: React.FC<PersonalAttachmentsMenuProps> = ({
   onClose,
   onTakePhoto,
   onPickImage,
-  onGenerateImage,
-  onWebSearch,
+  onPickDocument,
 }) => {
   const insets = useSafeAreaInsets();
   const keyboard = useAnimatedKeyboard();
@@ -144,22 +142,14 @@ const PersonalAttachmentsMenu: React.FC<PersonalAttachmentsMenuProps> = ({
       iconBg: isDark ? "rgba(138, 43, 226, 0.2)" : "rgba(138, 43, 226, 0.1)",
       iconColor: "#8A2BE2",
     },
-  ];
-
-  const aiOptions = [
     {
-      icon: Wand2,
-      title: "Generate Image",
-      description: "Create custom images using AI",
-      onPress: () => handleAction(onGenerateImage),
-      color: "#FF6B6B",
-    },
-    {
-      icon: Globe,
-      title: "Web Search",
-      description: "Search the web for information",
-      onPress: () => handleAction(onWebSearch),
-      color: "#4FC3F7",
+      icon: FileText,
+      label: "Files",
+      onPress: () => handlePhotoAction(onPickDocument),
+      colors: ["rgba(255, 149, 0, 0.15)", "rgba(255, 149, 0, 0.08)"],
+      lightColors: ["rgba(255, 149, 0, 0.1)", "rgba(255, 149, 0, 0.05)"],
+      iconBg: isDark ? "rgba(255, 149, 0, 0.2)" : "rgba(255, 149, 0, 0.1)",
+      iconColor: "#FF9500",
     },
   ];
 
@@ -235,7 +225,7 @@ const PersonalAttachmentsMenu: React.FC<PersonalAttachmentsMenuProps> = ({
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Media Options Row */}
+              {/* Media Options Grid */}
               <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   {mediaOptions.map((option, index) => {
@@ -266,42 +256,6 @@ const PersonalAttachmentsMenu: React.FC<PersonalAttachmentsMenuProps> = ({
                   })}
                 </View>
               </View>
-
-              {/* AI Tools Section */}
-              <View style={{ paddingHorizontal: 20, paddingTop: 4 }}>
-                <Text style={[styles.sectionHeader, { color: colors.textTertiary }]}>AI Tools</Text>
-                <View style={{ gap: 10 }}>
-                  {aiOptions.map((option, index) => {
-                    const Icon = option.icon;
-                    return (
-                      <Pressable
-                        key={index}
-                        onPress={option.onPress}
-                        style={({ pressed }) => ({
-                          borderRadius: 18,
-                          opacity: pressed ? 0.85 : 1,
-                          transform: [{ scale: pressed ? 0.98 : 1 }],
-                        })}
-                      >
-                        <BlurView intensity={25} tint={isDark ? "dark" : "light"} style={{ borderRadius: 18, overflow: "hidden" }}>
-                          <LinearGradient
-                            colors={[`${option.color}15`, `${option.color}08`]}
-                            style={[styles.aiOptionGradient, { borderColor: `${option.color}30` }]}
-                          >
-                            <View style={[styles.aiIconContainer, { backgroundColor: `${option.color}25`, shadowColor: option.color }]}>
-                              <Icon size={22} color={option.color} strokeWidth={2} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.aiOptionTitle, { color: colors.text }]}>{option.title}</Text>
-                              <Text style={[styles.aiOptionDesc, { color: colors.textSecondary }]}>{option.description}</Text>
-                            </View>
-                          </LinearGradient>
-                        </BlurView>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
             </ScrollView>
           </LinearGradient>
         </BlurView>
@@ -319,9 +273,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   mediaIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -330,45 +284,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   mediaButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     letterSpacing: -0.1,
-  },
-  sectionHeader: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  aiOptionGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderWidth: 1,
-    borderRadius: 18,
-  },
-  aiIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  aiOptionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 2,
-    letterSpacing: -0.2,
-  },
-  aiOptionDesc: {
-    fontSize: 13,
-    lineHeight: 16,
   },
 });
 

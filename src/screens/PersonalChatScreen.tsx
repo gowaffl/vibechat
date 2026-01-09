@@ -64,6 +64,8 @@ import { BlurView } from "expo-blur";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import Markdown from "react-native-markdown-display";
@@ -528,6 +530,7 @@ export default function PersonalChatScreen() {
   const [inputText, setInputText] = useState("");
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ uri: string; name: string; mimeType: string; size?: number }>>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
@@ -1035,7 +1038,11 @@ export default function PersonalChatScreen() {
   });
 
   // Send message using SSE streaming for real-time ChatGPT-like experience
-  const sendMessage = useCallback(async (content: string, images: string[]) => {
+  const sendMessage = useCallback(async (
+    content: string, 
+    images: string[],
+    files: Array<{ uri: string; name: string; mimeType: string; size?: number }>
+  ) => {
     // Track the active conversation ID (may be created during request)
     let activeConversationId = conversationId;
 
@@ -1092,6 +1099,29 @@ export default function PersonalChatScreen() {
         }
       });
 
+      // Convert files to base64 for the API
+      let filesWithBase64: Array<{ uri: string; name: string; mimeType: string; base64?: string }> = [];
+      if (files.length > 0) {
+        filesWithBase64 = await Promise.all(
+          files.map(async (file) => {
+            try {
+              const base64 = await FileSystem.readAsStringAsync(file.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              return {
+                uri: file.uri,
+                name: file.name,
+                mimeType: file.mimeType,
+                base64,
+              };
+            } catch (error) {
+              console.error(`[PersonalChat] Failed to read file ${file.name}:`, error);
+              return file;
+            }
+          })
+        );
+      }
+
       // Start SSE streaming
       await startStreaming(
         activeConversationId,
@@ -1100,6 +1130,7 @@ export default function PersonalChatScreen() {
         {
           imageUrl: images.length > 0 ? images[0] : undefined,
           aiFriendId: selectedAgent?.id,
+          files: filesWithBase64.length > 0 ? filesWithBase64 : undefined,
         }
       );
 
@@ -1137,7 +1168,7 @@ export default function PersonalChatScreen() {
   // Handle send message
   const handleSend = useCallback(() => {
     const trimmedText = inputText.trim();
-    if (!trimmedText && attachedImages.length === 0) return;
+    if (!trimmedText && attachedImages.length === 0 && attachedFiles.length === 0) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Keyboard.dismiss();
@@ -1145,13 +1176,14 @@ export default function PersonalChatScreen() {
     // Scroll to bottom when sending to see the response
     isAtBottomRef.current = true;
 
-    // Send message with streaming
-    sendMessage(trimmedText, attachedImages);
+    // Send message with streaming (include files)
+    sendMessage(trimmedText, attachedImages, attachedFiles);
 
     setInputText("");
     setAttachedImages([]);
+    setAttachedFiles([]);
     setInputHeight(MIN_INPUT_HEIGHT);
-  }, [inputText, attachedImages, sendMessage]);
+  }, [inputText, attachedImages, attachedFiles, sendMessage]);
 
   // Handle stop generation - aborts the SSE stream and clears UI state
   const handleStopGeneration = useCallback(() => {
@@ -1248,6 +1280,44 @@ export default function PersonalChatScreen() {
   const handleRemoveImage = useCallback((index: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Handle document picker
+  const handlePickDocument = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "text/csv",
+          "text/plain",
+        ],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const newFiles = result.assets.map((asset) => ({
+          uri: asset.uri,
+          name: asset.name,
+          mimeType: asset.mimeType || "application/octet-stream",
+          size: asset.size,
+        }));
+        setAttachedFiles((prev) => [...prev, ...newFiles].slice(0, 5)); // Max 5 files
+      }
+    } catch (error) {
+      console.error("Error picking document:", error);
+    }
+  }, []);
+
+  // Remove attached file
+  const handleRemoveFile = useCallback((index: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   // Handler for picking a single reference image (for image generation)
@@ -1845,7 +1915,9 @@ export default function PersonalChatScreen() {
                   )}
                   
                   {/* Show streaming content with live Markdown rendering */}
-                  {streaming.content && (
+                  {/* Hide streaming content when image_generation is in progress to avoid showing raw JSON */}
+                  {streaming.content && 
+                   !(streaming.currentToolCall?.name === "image_generation" && !streaming.generatedImageUrl) && (
                     <StreamingContentPreview 
                       content={streaming.content} 
                       isDark={isDark} 
@@ -1910,6 +1982,40 @@ export default function PersonalChatScreen() {
                     style={styles.removeImageButton}
                   >
                     <X size={14} color="#fff" />
+                  </Pressable>
+                </View>
+              ))}
+            </Reanimated.View>
+          )}
+
+          {/* Attached files preview */}
+          {attachedFiles.length > 0 && (
+            <Reanimated.View entering={FadeIn.duration(200)} style={styles.attachedFilesContainer}>
+              {attachedFiles.map((file, index) => (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.attachedFileWrapper,
+                    { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }
+                  ]}
+                >
+                  <View style={styles.attachedFileIcon}>
+                    <Text style={{ fontSize: 12, color: "#FF9500" }}>
+                      {file.name.split('.').pop()?.toUpperCase() || 'FILE'}
+                    </Text>
+                  </View>
+                  <Text 
+                    style={[styles.attachedFileName, { color: colors.text }]} 
+                    numberOfLines={1} 
+                    ellipsizeMode="middle"
+                  >
+                    {file.name}
+                  </Text>
+                  <Pressable
+                    onPress={() => handleRemoveFile(index)}
+                    style={styles.removeFileButton}
+                  >
+                    <X size={12} color={isDark ? "#fff" : "#333"} />
                   </Pressable>
                 </View>
               ))}
@@ -2200,8 +2306,7 @@ export default function PersonalChatScreen() {
         onClose={() => setShowAttachmentsMenu(false)}
         onTakePhoto={handleTakePhoto}
         onPickImage={handlePickImage}
-        onGenerateImage={() => handleOpenImageGenerator("image")}
-        onWebSearch={handleWebSearch}
+        onPickDocument={handlePickDocument}
       />
 
       {/* Create AI Friend Modal */}
@@ -2552,6 +2657,43 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  attachedFilesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  attachedFileWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingLeft: 8,
+    paddingRight: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  attachedFileIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: "rgba(255, 149, 0, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  attachedFileName: {
+    fontSize: 12,
+    fontWeight: "500",
+    maxWidth: 100,
+  },
+  removeFileButton: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "rgba(128, 128, 128, 0.3)",
     justifyContent: "center",
     alignItems: "center",
   },
