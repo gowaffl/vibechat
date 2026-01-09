@@ -42,6 +42,7 @@ export interface StreamEvent {
     imageId?: string;
     error?: string;
     sources?: any[];
+    status?: string;
   };
 }
 

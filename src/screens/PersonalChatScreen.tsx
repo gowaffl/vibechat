@@ -530,6 +530,7 @@ export default function PersonalChatScreen() {
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
+  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   const [showImageGenerator, setShowImageGenerator] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -1373,6 +1374,9 @@ export default function PersonalChatScreen() {
         return;
       }
 
+      // Start loading state
+      setIsCreatingAgent(true);
+
       // Get user's chats - we need a chatId to create an AI friend
       // Personal AI friends are still tied to a chat, but can be used across all personal conversations
       const chatsResponse = await api.get<Array<{ id: string; name: string }>>(
@@ -1381,6 +1385,7 @@ export default function PersonalChatScreen() {
 
       // If user has no chats, we need to create one first or show an error
       if (!chatsResponse || chatsResponse.length === 0) {
+        setIsCreatingAgent(false);
         Alert.alert(
           "No Chats Available",
           "You need to be a member of at least one group chat to create an AI friend. AI friends can be used in both group chats and personal chats."
@@ -1422,17 +1427,24 @@ export default function PersonalChatScreen() {
           }
         }
         
-        // Close the modal
+        // Close the modal FIRST so user sees the agent active immediately
         setShowCreateAgentModal(false);
         
-        // Haptic feedback
+        // Then stop loading state
+        setIsCreatingAgent(false);
+        
+        // Haptic feedback for success
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         
         // Invalidate agents query to refresh the list
         queryClient.invalidateQueries({ queryKey: personalChatsKeys.allAgents(user.id) });
+      } else {
+        setIsCreatingAgent(false);
+        Alert.alert("Error", "Failed to create agent. Please try again.");
       }
     } catch (error: any) {
       console.error("Failed to create agent:", error);
+      setIsCreatingAgent(false);
       const errorMessage = error?.message || "Failed to create agent. Please try again.";
       Alert.alert("Error", errorMessage);
     }
@@ -2216,6 +2228,7 @@ export default function PersonalChatScreen() {
         visible={showCreateAgentModal}
         onClose={() => setShowCreateAgentModal(false)}
         onCreate={handleCreateAgent}
+        isCreating={isCreatingAgent}
         hideEngagementMode={true}
       />
 

@@ -4,13 +4,25 @@ import { zValidator } from "@hono/zod-validator";
 import { db, executeWithRetry } from "../db";
 import { formatTimestamp, buildUpdateObject } from "../utils/supabase-helpers";
 import { openai } from "../env";
+// Legacy GPT imports - kept for fallback/reference
 import { executeGPT51Response } from "../services/gpt-responses";
 import { 
   streamGPT51Response, 
   buildPersonalChatSystemPrompt,
-  analyzePromptComplexity,
-  type StreamEvent 
+  type StreamEvent as GPTStreamEvent
 } from "../services/gpt-streaming-service";
+// Gemini imports - primary AI backend for personal chat
+import {
+  streamGeminiResponse,
+  analyzePromptComplexity,
+  mapToGeminiThinkingLevel,
+  type StreamEvent,
+} from "../services/gemini-streaming-service";
+import {
+  executeGeminiResponse,
+  generateGeminiImage,
+  uploadGeneratedImage,
+} from "../services/gemini-responses";
 import { saveResponseImages } from "../services/image-storage";
 import { generateChatTitle } from "../services/title-generator";
 import { 
@@ -664,25 +676,78 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
       userPrompt += `\n[User attached an image: ${imageUrl}]`;
     }
 
-    // Call GPT-5.1 with web search and image generation tools
+    // Call Gemini with web search grounding (gemini-3-flash-preview)
     let aiResponseContent = "";
     let generatedImageUrl: string | null = null;
     let metadata: Record<string, any> = {};
 
-    try {
-      const result = await executeGPT51Response({
-        systemPrompt,
-        userPrompt,
-        tools: [
-          { type: "web_search" },
-          { type: "image_generation" },
-        ],
-        reasoningEffort: "none", // Required for hosted tools
-        // Note: gpt-5.1 does not support temperature parameter
-        maxTokens: 4096,
-      });
+    // Analyze prompt to determine if it's an image generation request
+    const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\s+(an?\s+)?(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
 
-      aiResponseContent = result.content;
+    try {
+      if (isImageRequest) {
+        // Use gemini-3-pro-image-preview for image generation
+        console.log("[PersonalChats] Detected image generation request");
+        const imageResult = await generateGeminiImage({
+          prompt: content,
+          numberOfImages: 1,
+          aspectRatio: '1:1',
+        });
+
+        if (imageResult.images.length > 0) {
+          // Save the generated image
+          const savedImages = await saveResponseImages(
+            imageResult.images.map((img, idx) => ({
+              id: `img_${Date.now()}_${idx}`,
+              base64: img.base64Data,
+            })),
+            conversationId
+          );
+          
+          if (savedImages.length > 0) {
+            generatedImageUrl = savedImages[0];
+            metadata.generatedImagePrompt = content;
+            metadata.toolsUsed = ["image_generation"];
+          }
+        }
+        
+        aiResponseContent = "Here's the image I generated based on your request:";
+      } else {
+        // Use gemini-3-flash-preview for chat with optional web search
+        const thinkingLevel = mapToGeminiThinkingLevel(analyzePromptComplexity(content));
+        console.log("[PersonalChats] Using Gemini with thinking level:", thinkingLevel);
+        
+        // Detect if web search would be helpful
+        const needsWebSearch = /\b(current|latest|recent|today|news|weather|stock|price|score|update|2024|2025|2026)\b/i.test(content) ||
+          /\bwhat is happening\b/i.test(content) ||
+          /\bsearch\b/i.test(content);
+
+        const result = await executeGeminiResponse({
+          systemPrompt,
+          userPrompt,
+          enableWebSearch: needsWebSearch,
+          thinkingLevel,
+          maxTokens: 8192,
+          chatHistory: chatHistory.map(msg => ({
+            role: msg.role === "assistant" ? "model" : "user",
+            content: msg.content,
+          })),
+        });
+
+        aiResponseContent = result.content;
+        
+        // Track tools and grounding
+        metadata.toolsUsed = [];
+        if (result.searchGrounding?.sources && result.searchGrounding.sources.length > 0) {
+          metadata.toolsUsed.push("web_search");
+          metadata.searchSources = result.searchGrounding.sources;
+        }
+        
+        // Store thought signature for follow-up requests
+        if (result.thoughtSignature) {
+          metadata.thoughtSignature = result.thoughtSignature;
+        }
+      }
 
       // ============================================================================
       // OUTPUT FILTERING - Same as group chat
@@ -697,26 +762,6 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
             userId, 
             flags: ["output_filtered_personal_chat"] 
           });
-        }
-      }
-
-      // If images were generated, save them
-      if (result.images && result.images.length > 0) {
-        const savedImages = await saveResponseImages(result.images, conversationId);
-        if (savedImages.length > 0) {
-          generatedImageUrl = savedImages[0];
-          metadata.generatedImagePrompt = content;
-        }
-      }
-
-      // Mark if web search was used
-      if (result.status === "completed") {
-        metadata.toolsUsed = [];
-        if (aiResponseContent.includes("[Source") || aiResponseContent.includes("Source:")) {
-          metadata.toolsUsed.push("web_search");
-        }
-        if (generatedImageUrl) {
-          metadata.toolsUsed.push("image_generation");
         }
       }
     } catch (aiError) {
@@ -994,9 +1039,10 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     userPrompt += `\n[User attached an image: ${attachedImageUrl}]`;
   }
 
-  // Analyze prompt complexity for adaptive reasoning
-  const reasoningEffort = analyzePromptComplexity(content);
-  console.log("[PersonalChats] Adaptive reasoning effort:", reasoningEffort);
+  // Analyze prompt complexity for adaptive thinking level
+  const promptComplexity = analyzePromptComplexity(content);
+  const thinkingLevel = mapToGeminiThinkingLevel(promptComplexity);
+  console.log("[PersonalChats] Adaptive thinking level:", thinkingLevel, "(from complexity:", promptComplexity, ")");
 
   // Set SSE headers to prevent proxy buffering (important for Render, Cloudflare, Nginx, etc.)
   c.header("Cache-Control", "no-cache, no-transform");
@@ -1029,10 +1075,10 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         }),
       });
 
-      // Send reasoning effort info
+      // Send thinking level info
       await stream.writeSSE({
-        event: "reasoning_effort",
-        data: JSON.stringify({ effort: reasoningEffort }),
+        event: "thinking_level",
+        data: JSON.stringify({ level: thinkingLevel, complexity: promptComplexity }),
       });
 
       // Start a keep-alive interval to prevent proxy timeout (sends ping every 10 seconds)
@@ -1048,17 +1094,183 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         }
       }, 10000);
 
-      // Stream GPT response
-      const responseStream = streamGPT51Response({
+      // Detect if web search would be helpful for this request
+      const needsWebSearch = /\b(current|latest|recent|today|news|weather|stock|price|score|update|2024|2025|2026)\b/i.test(content) ||
+        /\bwhat is happening\b/i.test(content) ||
+        /\bsearch\b/i.test(content);
+      
+      // Detect if this is an image generation request
+      const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\s+(an?\s+)?(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
+
+      // If this is an image request, handle it specially with Gemini image generation
+      if (isImageRequest) {
+        console.log("[PersonalChats] [Streaming] Image generation request detected");
+        metadata.toolsUsed.push("image_generation");
+        
+        // Notify client that image generation is starting
+        await stream.writeSSE({
+          event: "tool_call_start",
+          data: JSON.stringify({ toolName: "image_generation", toolInput: content }),
+        });
+        
+        try {
+          const imageResult = await generateGeminiImage({
+            prompt: content,
+            numberOfImages: 1,
+            aspectRatio: '1:1',
+          });
+          
+          if (imageResult.images.length > 0) {
+            const imageId = `img_${Date.now()}`;
+            generatedImages.push({
+              id: imageId,
+              base64: imageResult.images[0].base64Data,
+            });
+            
+            // Save the image and notify client
+            const savedImages = await saveResponseImages(generatedImages, conversationId);
+            if (savedImages.length > 0) {
+              metadata.generatedImageUrl = savedImages[0];
+              await stream.writeSSE({
+                event: "image_generated",
+                data: JSON.stringify({ imageId, imageUrl: savedImages[0] }),
+              });
+            }
+          }
+          
+          await stream.writeSSE({
+            event: "tool_call_end",
+            data: JSON.stringify({ toolName: "image_generation" }),
+          });
+          
+          fullContent = "Here's the image I generated based on your request:";
+          await stream.writeSSE({
+            event: "content_delta",
+            data: JSON.stringify({ content: fullContent }),
+          });
+          await stream.writeSSE({
+            event: "content_end",
+            data: JSON.stringify({ content: fullContent }),
+          });
+        } catch (imgError) {
+          console.error("[PersonalChats] Image generation error:", imgError);
+          fullContent = "I apologize, but I encountered an error generating the image. Please try again.";
+          await stream.writeSSE({
+            event: "content_delta",
+            data: JSON.stringify({ content: fullContent }),
+          });
+          await stream.writeSSE({
+            event: "content_end",
+            data: JSON.stringify({ content: fullContent }),
+          });
+        }
+        
+        // Skip to done event handling (will be handled in a synthetic done event below)
+        // Create synthetic done event data
+        const syntheticDoneEvent = { type: "done" as const, data: {} };
+        
+        // Process done event
+        console.log("[PersonalChats] [Image] Processing done event after image generation");
+        
+        // ============================================================================
+        // OUTPUT FILTERING - Same as group chat
+        // ============================================================================
+        if (fullContent) {
+          const outputFilter = filterAIOutput(fullContent);
+          if (outputFilter.wasModified) {
+            console.log("[PersonalChats] [Streaming] AI output was filtered for safety");
+            fullContent = outputFilter.filtered;
+            logSafetyEvent("filtered", { 
+              chatId: conversationId, 
+              userId, 
+              flags: ["output_filtered_personal_chat_streaming"] 
+            });
+          }
+        }
+        
+        // Save the AI response to database
+        let generatedImageUrl: string | null = metadata.generatedImageUrl || null;
+        
+        // Save assistant message
+        const messageContent = fullContent || (generatedImageUrl ? "Here's the image you requested:" : "I apologize, but I couldn't generate a response.");
+        
+        const { data: assistantMessage, error: assistantMsgError } = await db
+          .from("personal_message")
+          .insert({
+            conversationId,
+            content: messageContent,
+            role: "assistant",
+            generatedImageUrl,
+            metadata: Object.keys(metadata).length > 0 ? metadata : null,
+          })
+          .select()
+          .single();
+
+        if (assistantMsgError) {
+          console.error("[PersonalChats] Error saving assistant message:", assistantMsgError);
+        }
+
+        // Update conversation lastMessageAt and potentially title
+        const updateData: Record<string, any> = {
+          lastMessageAt: new Date().toISOString(),
+        };
+
+        if (conversation.title === "New Conversation" && chatHistory.length === 0) {
+          try {
+            const generatedTitle = await generateChatTitle(content);
+            if (generatedTitle) {
+              updateData.title = generatedTitle;
+            }
+          } catch (titleError) {
+            console.error("[PersonalChats] Error generating title:", titleError);
+            updateData.title = content.length > 30 ? content.substring(0, 30) + "..." : content;
+          }
+        }
+
+        await db
+          .from("personal_conversation")
+          .update(updateData)
+          .eq("id", conversationId);
+
+        // Send final message with assistant response
+        await stream.writeSSE({
+          event: "assistant_message",
+          data: JSON.stringify({
+            id: assistantMessage?.id,
+            conversationId,
+            content: fullContent,
+            role: "assistant",
+            generatedImageUrl,
+            metadata,
+            createdAt: assistantMessage?.createdAt ? formatTimestamp(assistantMessage.createdAt) : new Date().toISOString(),
+          }),
+        });
+
+        // Send completion event
+        await stream.writeSSE({
+          event: "done",
+          data: JSON.stringify({ 
+            success: true,
+            updatedTitle: updateData.title,
+          }),
+        });
+        
+        // Clear keep-alive and return early
+        clearInterval(keepAliveInterval);
+        return;
+      }
+
+      // Stream Gemini response using gemini-3-flash-preview for text/web search
+      const responseStream = streamGeminiResponse({
         systemPrompt,
         userPrompt,
-        tools: [
-          { type: "web_search" },
-          { type: "image_generation" },
-        ],
-        reasoningEffort,
-        // Note: gpt-5.1 does not support temperature parameter
-        maxTokens: 4096,
+        enableWebSearch: needsWebSearch,
+        thinkingLevel,
+        maxTokens: 8192,
+        chatHistory: chatHistory.map(msg => ({
+          role: msg.role === "assistant" ? "model" : "user",
+          content: msg.content,
+        })),
       });
 
       for await (const event of responseStream) {
@@ -1370,20 +1582,26 @@ personalChats.post("/generate-image", zValidator("json", generatePersonalChatIma
       return c.json({ error: "Conversation not found" }, 404);
     }
 
-    // Generate image using GPT-5.1
-    const result = await executeGPT51Response({
-      systemPrompt: "You are an image generation assistant. Generate images based on the user's description.",
-      userPrompt: `Generate an image with the following description: ${prompt}`,
-      tools: [{ type: "image_generation" }],
-      reasoningEffort: "none",
+    // Generate image using Gemini gemini-3-pro-image-preview
+    console.log("[PersonalChats] Generating image with Gemini:", prompt);
+    const imageResult = await generateGeminiImage({
+      prompt,
+      numberOfImages: 1,
+      aspectRatio: aspectRatio as '1:1' | '16:9' | '9:16' | '4:3' | '3:4' || '1:1',
     });
 
-    if (!result.images || result.images.length === 0) {
+    if (!imageResult.images || imageResult.images.length === 0) {
       return c.json({ error: "Failed to generate image" }, 500);
     }
 
     // Save the generated image
-    const savedImages = await saveResponseImages(result.images, conversationId);
+    const savedImages = await saveResponseImages(
+      imageResult.images.map((img, idx) => ({
+        id: `img_${Date.now()}_${idx}`,
+        base64: img.base64Data,
+      })),
+      conversationId
+    );
     if (savedImages.length === 0) {
       return c.json({ error: "Failed to save generated image" }, 500);
     }
