@@ -314,12 +314,19 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         break;
 
       case "image_generated":
-        console.log("[Streaming] Image generated:", data.imageId, "URL:", data.imageUrl);
-        cbs?.onImageGenerated?.(data.imageId, data.imageUrl);
+        console.log("[Streaming] *** IMAGE_GENERATED EVENT RECEIVED ***");
+        console.log("[Streaming] Image generated - imageId:", data.imageId, "imageUrl:", data.imageUrl);
+        if (data.imageUrl) {
+          console.log("[Streaming] Calling onImageGenerated callback");
+          cbs?.onImageGenerated?.(data.imageId, data.imageUrl);
+        } else {
+          console.warn("[Streaming] image_generated event has no imageUrl!");
+        }
         break;
 
       case "assistant_message":
-        console.log("[Streaming] Assistant message saved:", data.id);
+        console.log("[Streaming] *** ASSISTANT_MESSAGE EVENT RECEIVED ***");
+        console.log("[Streaming] Assistant message - id:", data.id, "generatedImageUrl:", data.generatedImageUrl);
         setStreamingState((prev) => ({
           ...prev,
           assistantMessageId: data.id,

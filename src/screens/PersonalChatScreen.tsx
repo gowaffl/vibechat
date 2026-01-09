@@ -879,31 +879,39 @@ export default function PersonalChatScreen() {
       setStreaming((prev) => ({ ...prev, content }));
     },
     onImageGenerated: (imageId, imageUrl) => {
-      console.log("[PersonalChat] Image generated:", imageId, "URL:", imageUrl);
+      console.log("[PersonalChat] Image generated event received - imageId:", imageId, "imageUrl:", imageUrl);
       if (imageUrl) {
+        console.log("[PersonalChat] Setting generatedImageUrl and clearing currentToolCall");
         // Update streaming state immediately with the generated image URL
-        setStreaming((prev) => ({
-          ...prev,
-          generatedImageUrl: imageUrl,
-          currentToolCall: null, // Clear the shimmer animation
-        }));
+        setStreaming((prev) => {
+          console.log("[PersonalChat] Previous streaming state - currentToolCall:", prev.currentToolCall?.name, "generatedImageUrl:", prev.generatedImageUrl);
+          return {
+            ...prev,
+            generatedImageUrl: imageUrl,
+            currentToolCall: null, // Clear the shimmer animation
+          };
+        });
+      } else {
+        console.warn("[PersonalChat] Image generated event received but imageUrl is missing!");
       }
     },
     onAssistantMessage: (message) => {
-      console.log("[PersonalChat] Assistant message saved:", message.id);
-      console.log("[PersonalChat] Assistant message has generatedImageUrl:", message.generatedImageUrl);
+      console.log("[PersonalChat] Assistant message event received - id:", message.id, "generatedImageUrl:", message.generatedImageUrl);
       
-      // Clear tool call if this message contains a generated image
-      // This ensures the shimmer stops and the image displays immediately
-      const shouldClearToolCall = message.generatedImageUrl && streaming.currentToolCall?.name === "image_generation";
-      
-      setStreaming((prev) => ({ 
-        ...prev, 
-        assistantMessageId: message.id, 
-        messageId: message.id,
-        generatedImageUrl: message.generatedImageUrl || null,
-        currentToolCall: shouldClearToolCall ? null : prev.currentToolCall,
-      }));
+      // Always clear tool call and set image URL from assistant message
+      // This is a fallback in case the image_generated event didn't come through
+      setStreaming((prev) => {
+        console.log("[PersonalChat] Updating streaming state with assistant message - prev.currentToolCall:", prev.currentToolCall?.name, "prev.generatedImageUrl:", prev.generatedImageUrl);
+        return { 
+          ...prev, 
+          assistantMessageId: message.id, 
+          messageId: message.id,
+          // Use message's generatedImageUrl, or keep existing if message doesn't have one
+          generatedImageUrl: message.generatedImageUrl || prev.generatedImageUrl,
+          // Always clear tool call when assistant message arrives (streaming is done)
+          currentToolCall: null,
+        };
+      });
       
       // Update query cache directly with the saved assistant message (no refetch needed)
       if (conversationId) {
@@ -972,6 +980,7 @@ export default function PersonalChatScreen() {
           error: null,
           userMessageId: null,
           assistantMessageId: null,
+          generatedImageUrl: null,
         });
         
         // Scroll to bottom smoothly after transition

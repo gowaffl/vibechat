@@ -1280,16 +1280,26 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             });
             
             // Save the image and notify client
+            console.log("[PersonalChats] [Image] Saving generated image to storage...");
             const savedImages = await saveResponseImages(generatedImages, conversationId);
+            console.log("[PersonalChats] [Image] Saved images count:", savedImages.length);
+            
             if (savedImages.length > 0) {
               metadata.generatedImageUrl = savedImages[0];
+              console.log("[PersonalChats] [Image] Sending image_generated event with URL:", savedImages[0]);
               await stream.writeSSE({
                 event: "image_generated",
                 data: JSON.stringify({ imageId, imageUrl: savedImages[0] }),
               });
+              console.log("[PersonalChats] [Image] image_generated event sent successfully");
+            } else {
+              console.error("[PersonalChats] [Image] saveResponseImages returned empty array!");
             }
+          } else {
+            console.error("[PersonalChats] [Image] generateGeminiImage returned no images!");
           }
           
+          console.log("[PersonalChats] [Image] Sending tool_call_end event");
           await stream.writeSSE({
             event: "tool_call_end",
             data: JSON.stringify({ toolName: "image_generation" }),
@@ -1385,6 +1395,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           .eq("id", conversationId);
 
         // Send final message with assistant response
+        console.log("[PersonalChats] [Image] Sending assistant_message event with generatedImageUrl:", generatedImageUrl);
         await stream.writeSSE({
           event: "assistant_message",
           data: JSON.stringify({
@@ -1399,6 +1410,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         });
 
         // Send completion event
+        console.log("[PersonalChats] [Image] Sending done event");
         await stream.writeSSE({
           event: "done",
           data: JSON.stringify({ 
@@ -1407,6 +1419,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           }),
         });
         
+        console.log("[PersonalChats] [Image] All events sent, closing stream");
         // Clear keep-alive and return early
         clearInterval(keepAliveInterval);
         return;
