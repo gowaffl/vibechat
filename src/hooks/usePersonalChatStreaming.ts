@@ -67,7 +67,7 @@ export interface StreamingCallbacks {
   onToolCallEnd?: (toolName: string, sources?: any[]) => void;
   onContentDelta?: (delta: string, accumulated: string) => void;
   onContentEnd?: (content: string) => void;
-  onImageGenerated?: (imageId: string) => void;
+  onImageGenerated?: (imageId: string, imageUrl?: string) => void;
   onAssistantMessage?: (message: AssistantMessage) => void;
   onDone?: (updatedTitle?: string) => void;
   onError?: (error: string) => void;
@@ -314,8 +314,8 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
         break;
 
       case "image_generated":
-        console.log("[Streaming] Image generated:", data.imageId);
-        cbs?.onImageGenerated?.(data.imageId);
+        console.log("[Streaming] Image generated:", data.imageId, "URL:", data.imageUrl);
+        cbs?.onImageGenerated?.(data.imageId, data.imageUrl);
         break;
 
       case "assistant_message":

@@ -10,10 +10,11 @@ import {
   Platform,
   Keyboard,
   BackHandler,
+  ScrollView,
 } from "react-native";
-import { BottomSheetModal, BottomSheetView, BottomSheetTextInput, useBottomSheetModal } from "@gorhom/bottom-sheet";
+import { BottomSheetModal, BottomSheetView, BottomSheetTextInput, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { BlurView } from "expo-blur";
-import { X, Edit2, Send, Wand2, RefreshCw } from "lucide-react-native";
+import { X, Edit2, Send, Wand2, RefreshCw, Plus, Sparkles, Smile, Trash2 } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -25,6 +26,7 @@ import Animated, {
   runOnJS,
   FadeIn,
   FadeOut,
+  Layout,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -84,7 +86,7 @@ const LoadingText = ({ text = "Generating image..." }: { text?: string }) => {
 };
 
 // Shimmer Loader for Image Container
-const ShimmerImageLoader = () => {
+const ShimmerImageLoader = ({ text = "Creating your masterpiece..." }: { text?: string }) => {
   const { shimmerStyle } = useShimmerAnimation();
   const { colors, isDark } = useTheme();
 
@@ -107,7 +109,7 @@ const ShimmerImageLoader = () => {
       </Animated.View>
       <View style={styles.centerContent}>
         <ShimmeringText 
-           text="Creating your masterpiece..."
+           text={text}
            style={[styles.loadingText, { color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)' }]}
            shimmerColor={isDark ? "#FFFFFF" : "#000000"}
            duration={1200}
@@ -116,6 +118,11 @@ const ShimmerImageLoader = () => {
     </View>
   );
 };
+
+// Type definitions
+type SheetMode = "prompt" | "generate";
+type GenerationType = "image" | "meme";
+type InternalPhase = "prompt" | "generating" | "preview";
 
 interface ImageGeneratorSheetProps {
   isVisible: boolean;
@@ -126,6 +133,11 @@ interface ImageGeneratorSheetProps {
   onAccept: (caption: string) => void;
   onEdit: (prompt: string) => void;
   initialPrompt?: string;
+  // New props for prompt mode
+  mode?: SheetMode;
+  generationType?: GenerationType;
+  onGenerate?: (prompt: string, referenceImages: string[]) => void;
+  onPickImage?: () => Promise<string | null>;
 }
 
 // --- Docked Pill Component (Exported for ChatScreen) ---
@@ -184,6 +196,11 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
   onAccept,
   onEdit,
   initialPrompt = "",
+  // New props
+  mode = "generate",
+  generationType = "image",
+  onGenerate,
+  onPickImage,
 }) => {
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { colors, isDark } = useTheme();
@@ -191,11 +208,49 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
   // Snap points: Only expanded (95% to show more content)
   const snapPoints = useMemo(() => ['95%'], []);
   
-  // State for editing/captioning
+  // State for editing/captioning (existing)
   const [isEditing, setIsEditing] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [editPrompt, setEditPrompt] = useState("");
   const [finalCaption, setFinalCaption] = useState("");
+  
+  // New state for prompt mode
+  const [promptText, setPromptText] = useState("");
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  const [internalPhase, setInternalPhase] = useState<InternalPhase>(
+    mode === "prompt" ? "prompt" : "generating"
+  );
+
+  // Reset state when sheet opens/closes or mode changes
+  useEffect(() => {
+    if (isVisible) {
+      if (mode === "prompt") {
+        setInternalPhase("prompt");
+        setPromptText("");
+        setReferenceImages([]);
+      } else {
+        // generate mode - go directly to generating/preview
+        setInternalPhase(imageUrl ? "preview" : "generating");
+      }
+      setIsEditing(false);
+      setIsFinalizing(false);
+      setEditPrompt("");
+      setFinalCaption("");
+    }
+  }, [isVisible, mode]);
+
+  // Update phase based on imageUrl and isProcessing
+  useEffect(() => {
+    if (mode === "generate" || internalPhase !== "prompt") {
+      if (imageUrl && !isProcessing) {
+        setInternalPhase("preview");
+      } else if (isProcessing || !imageUrl) {
+        if (internalPhase !== "prompt") {
+          setInternalPhase("generating");
+        }
+      }
+    }
+  }, [imageUrl, isProcessing, mode, internalPhase]);
 
   // Handle visibility changes
   useEffect(() => {
@@ -222,6 +277,42 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
     onClose(); 
   };
   
+  // Handle prompt submission
+  const handlePromptSubmit = () => {
+    if (!promptText.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Transition to generating phase
+    setInternalPhase("generating");
+    Keyboard.dismiss();
+    
+    // Call the onGenerate callback
+    if (onGenerate) {
+      onGenerate(promptText.trim(), referenceImages);
+    }
+  };
+
+  // Handle adding reference image
+  const handleAddReferenceImage = async () => {
+    if (!onPickImage) return;
+    if (referenceImages.length >= 4) {
+      // Max 4 reference images
+      return;
+    }
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const imageUri = await onPickImage();
+    if (imageUri) {
+      setReferenceImages(prev => [...prev, imageUri]);
+    }
+  };
+
+  // Handle removing reference image
+  const handleRemoveReferenceImage = (index: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReferenceImages(prev => prev.filter((_, i) => i !== index));
+  };
+  
   // Handle dismissal (swipe down)
   const handleDismiss = useCallback(() => {
     // Only trigger minimize if we are supposed to be visible
@@ -231,10 +322,157 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
     }
   }, [isVisible, onMinimize]);
 
-  // --- Render Expanded Content ---
-  const renderContent = () => {
+  // Get title based on generation type
+  const getTitle = () => {
+    if (generationType === "meme") {
+      return "Create Meme";
+    }
+    return "Generate Image";
+  };
+
+  // Get placeholder text based on generation type
+  const getPlaceholder = () => {
+    if (generationType === "meme") {
+      return "Describe the meme you want to create...";
+    }
+    return "Describe the image you want to create...";
+  };
+
+  // Get loading text based on generation type
+  const getLoadingText = () => {
+    if (generationType === "meme") {
+      return "Creating your meme...";
+    }
+    return "Creating your masterpiece...";
+  };
+
+  // Get icon based on generation type
+  const TitleIcon = generationType === "meme" ? Smile : Wand2;
+  const titleIconColor = generationType === "meme" ? "#FFD93D" : "#FF6B6B";
+
+  // --- Render Prompt Input Phase ---
+  const renderPromptPhase = () => {
     return (
-      <View style={styles.expandedContainer}>
+      <Animated.View 
+        entering={FadeIn.duration(200)} 
+        exiting={FadeOut.duration(150)}
+        style={styles.promptContainer}
+      >
+        {/* Header */}
+        <View style={styles.promptHeader}>
+          <View style={[styles.promptIconContainer, { backgroundColor: `${titleIconColor}20` }]}>
+            <TitleIcon size={24} color={titleIconColor} />
+          </View>
+          <Text style={[styles.promptTitle, { color: colors.text }]}>
+            {getTitle()}
+          </Text>
+        </View>
+
+        {/* Prompt Input */}
+        <View style={styles.promptInputSection}>
+          <Text style={[styles.promptLabel, { color: colors.textSecondary }]}>
+            What would you like to create?
+          </Text>
+          <BottomSheetTextInput
+            style={[styles.promptInput, { 
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+              color: colors.text,
+              borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+            }]}
+            placeholder={getPlaceholder()}
+            placeholderTextColor={colors.inputPlaceholder}
+            value={promptText}
+            onChangeText={setPromptText}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Reference Images Section */}
+        <View style={styles.referenceSection}>
+          <Text style={[styles.promptLabel, { color: colors.textSecondary }]}>
+            Reference images (optional)
+          </Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.referenceImagesContainer}
+          >
+            {referenceImages.map((uri, index) => (
+              <Animated.View 
+                key={uri} 
+                entering={FadeIn.duration(200)}
+                exiting={FadeOut.duration(150)}
+                layout={Layout.springify()}
+                style={styles.referenceImageWrapper}
+              >
+                <Image
+                  source={{ uri }}
+                  style={styles.referenceImage}
+                  contentFit="cover"
+                />
+                <TouchableOpacity
+                  style={[styles.removeImageButton, { backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)' }]}
+                  onPress={() => handleRemoveReferenceImage(index)}
+                >
+                  <X size={14} color="#FFF" />
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+            
+            {referenceImages.length < 4 && onPickImage && (
+              <TouchableOpacity
+                style={[styles.addImageButton, { 
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                }]}
+                onPress={handleAddReferenceImage}
+                activeOpacity={0.7}
+              >
+                <Plus size={24} color={colors.textSecondary} />
+                <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.promptActions}>
+          <TouchableOpacity 
+            style={[styles.secondaryButton, { 
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+            }]} 
+            onPress={onClose}
+          >
+            <Text style={[styles.buttonText, { color: colors.text }]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[
+              styles.primaryButton, 
+              { backgroundColor: titleIconColor },
+              !promptText.trim() && styles.disabledButton
+            ]} 
+            onPress={handlePromptSubmit}
+            disabled={!promptText.trim()}
+          >
+            <Wand2 size={18} color="#FFF" style={{ marginRight: 8 }} />
+            <Text style={styles.buttonText}>Generate</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // --- Render Generating/Preview Phase (existing content) ---
+  const renderGeneratingPhase = () => {
+    return (
+      <Animated.View 
+        entering={FadeIn.duration(200)} 
+        exiting={FadeOut.duration(150)}
+        style={styles.expandedContainer}
+      >
         {/* Floating Image Container (Separate Look) */}
         <View style={[styles.imageCardContainer, { 
           backgroundColor: isDark ? '#000' : '#f5f5f5',
@@ -249,7 +487,7 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
               transition={200}
             />
           ) : (
-            <ShimmerImageLoader />
+            <ShimmerImageLoader text={getLoadingText()} />
           )}
           
           {/* Overlay for "Refining..." state if image exists but processing again */}
@@ -371,8 +609,16 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
             </Animated.View>
           )}
         </View>
-      </View>
+      </Animated.View>
     );
+  };
+
+  // --- Render Content based on phase ---
+  const renderContent = () => {
+    if (internalPhase === "prompt") {
+      return renderPromptPhase();
+    }
+    return renderGeneratingPhase();
   };
 
   return (
@@ -423,7 +669,7 @@ const styles = StyleSheet.create({
   // Docked Pill Styles (Floating)
   dockedWrapper: {
     position: 'absolute',
-    bottom: 80, // Approximate height above input, will be overridden by parent
+    bottom: 80,
     alignSelf: 'center',
     zIndex: 1000,
   },
@@ -468,7 +714,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   imageCardContainer: {
-    aspectRatio: 1, // Square container that matches most AI-generated images
+    aspectRatio: 1,
     width: '100%',
     marginBottom: 20,
     borderRadius: 24,
@@ -476,7 +722,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     backgroundColor: '#000',
-    // Depth
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,
@@ -578,6 +823,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
   },
   secondaryButton: {
     flex: 1,
@@ -591,11 +837,97 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
-    backgroundColor: 'rgba(0,122,255,0.3)',
   },
   buttonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Prompt Phase Styles
+  promptContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  promptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 8,
+  },
+  promptIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  promptTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  promptInputSection: {
+    marginBottom: 20,
+  },
+  promptLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  promptInput: {
+    minHeight: 120,
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    borderWidth: 1,
+    textAlignVertical: 'top',
+  },
+  referenceSection: {
+    marginBottom: 24,
+  },
+  referenceImagesContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  referenceImageWrapper: {
+    position: 'relative',
+  },
+  referenceImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addImageButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  addImageText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  promptActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 'auto',
   },
 });

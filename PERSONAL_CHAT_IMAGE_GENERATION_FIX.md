@@ -52,19 +52,27 @@ When requesting image generation in personal chat:
 1. Added `ImageGenerationShimmer` component with animated shimmer
 2. Added `generatedImageUrl` to `StreamingState` interface
 3. Added state for image viewer: `imageViewerVisible`, `selectedImageUrl`
-4. Updated streaming callbacks to capture generated image URL
+4. Updated streaming callbacks to capture generated image URL and display immediately
 5. Modified streaming UI to show:
    - Image generation shimmer during generation
-   - Generated image once available
+   - Generated image once available (immediately, not after leaving/returning)
    - Clickable images that open full-screen viewer
 6. Added `ZoomableImageViewer` modal at end of render
 7. Added styles for image generation shimmer container
 8. Made all generated images (streaming and saved) clickable to open viewer
+9. **Fixed**: `onImageGenerated` callback now updates streaming state immediately with image URL and clears shimmer
+
+### Frontend (`src/hooks/usePersonalChatStreaming.ts`)
+1. Updated `onImageGenerated` callback signature to accept `imageUrl` parameter
+2. Modified event handler to pass `imageUrl` to callback
 
 ### Backend (`backend/src/routes/personal-chats.ts`)
 1. Fixed error message logic in streaming endpoint
 2. Changed default message when only image is generated (no text content)
 3. Message now says "Here's the image you requested:" instead of error message
+4. **Fixed**: Images are now saved immediately when generated (not deferred to end)
+5. **Fixed**: `image_generated` SSE event now includes `imageUrl` so frontend can display immediately
+6. Prevents duplicate image saves by checking if already saved in metadata
 
 ## Technical Details
 
@@ -167,6 +175,8 @@ interface StreamingState {
 - All animations use `react-native-reanimated` for 60fps performance
 - Images are clickable in both streaming and saved message states
 - Backend properly handles cases where only image is generated (no text)
+- **Critical Fix**: Images are saved and sent to frontend immediately when generated, not deferred to end of stream
+- This ensures the shimmer stops and image displays without needing to leave/return to chat
 
 ## Future Enhancements (Optional)
 

@@ -638,6 +638,7 @@ export default function PersonalChatScreen() {
         MAX_INPUT_HEIGHT,
         Math.max(MIN_INPUT_HEIGHT, height)
       );
+      console.log('[PersonalChat] Content size changed:', height, '-> clamped:', clampedHeight);
       setInputHeight(clampedHeight);
     },
     []
@@ -646,6 +647,7 @@ export default function PersonalChatScreen() {
   // Refs
   const flatListRef = useRef<FlashList<MessageListItem>>(null);
   const isAtBottomRef = useRef(true); // Track if user is at bottom of list
+  const hasScrolledToBottomRef = useRef(false); // Track if we've done initial scroll
   // inputRef replaced by textInputRef above
 
   // Fetch conversation details if we have an ID
@@ -740,6 +742,33 @@ export default function PersonalChatScreen() {
 
     return result;
   }, [messages, optimisticUserMessage, conversationId]);
+
+  // Scroll to bottom immediately when messages first load (without animation)
+  useEffect(() => {
+    if (messagesWithDividers.length > 0 && !hasScrolledToBottomRef.current) {
+      // Use a small timeout to ensure FlashList has fully rendered
+      const timeout = setTimeout(() => {
+        try {
+          if (flatListRef.current && messagesWithDividers.length > 0) {
+            // Scroll to the very end (bottom of last message)
+            flatListRef.current.scrollToEnd({ animated: false });
+            hasScrolledToBottomRef.current = true;
+            isAtBottomRef.current = true;
+            console.log("[PersonalChat] Initial scroll to bottom (no animation)");
+          }
+        } catch (error) {
+          console.log("[PersonalChat] Initial scroll error:", error);
+        }
+      }, 75);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [messagesWithDividers.length]);
+
+  // Reset scroll flag when conversation changes
+  useEffect(() => {
+    hasScrolledToBottomRef.current = false;
+  }, [conversationId]);
 
   // Streaming hook for real-time AI responses
   const { startStreaming, stopStreaming: stopStreamingHook } = usePersonalChatStreaming({
@@ -841,18 +870,31 @@ export default function PersonalChatScreen() {
       console.log("[PersonalChat] Content ended, length:", content.length);
       setStreaming((prev) => ({ ...prev, content }));
     },
-    onImageGenerated: (imageId) => {
-      console.log("[PersonalChat] Image generated:", imageId);
-      // Image will be included in the assistant message
+    onImageGenerated: (imageId, imageUrl) => {
+      console.log("[PersonalChat] Image generated:", imageId, "URL:", imageUrl);
+      if (imageUrl) {
+        // Update streaming state immediately with the generated image URL
+        setStreaming((prev) => ({
+          ...prev,
+          generatedImageUrl: imageUrl,
+          currentToolCall: null, // Clear the shimmer animation
+        }));
+      }
     },
     onAssistantMessage: (message) => {
       console.log("[PersonalChat] Assistant message saved:", message.id);
       console.log("[PersonalChat] Assistant message has generatedImageUrl:", message.generatedImageUrl);
+      
+      // Clear tool call if this message contains a generated image
+      // This ensures the shimmer stops and the image displays immediately
+      const shouldClearToolCall = message.generatedImageUrl && streaming.currentToolCall?.name === "image_generation";
+      
       setStreaming((prev) => ({ 
         ...prev, 
         assistantMessageId: message.id, 
         messageId: message.id,
         generatedImageUrl: message.generatedImageUrl || null,
+        currentToolCall: shouldClearToolCall ? null : prev.currentToolCall,
       }));
       
       // Update query cache directly with the saved assistant message (no refetch needed)
@@ -1648,7 +1690,7 @@ export default function PersonalChatScreen() {
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => {
               // Only auto-scroll if user is already at the bottom
-              if (isAtBottomRef.current) {
+              if (isAtBottomRef.current && hasScrolledToBottomRef.current) {
                 requestAnimationFrame(() => {
                   try {
                     if (flatListRef.current && messagesWithDividers.length > 0) {
@@ -1662,9 +1704,12 @@ export default function PersonalChatScreen() {
               }
             }}
             onScroll={(event) => {
-              // Track if user is at bottom (inverted list, so offsetY near 0 = bottom)
-              const offsetY = event.nativeEvent.contentOffset.y;
-              const isNowAtBottom = offsetY < 50;
+              // Track if user is at bottom
+              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+              const paddingToBottom = 50;
+              const isNowAtBottom = 
+                layoutMeasurement.height + contentOffset.y >= 
+                contentSize.height - paddingToBottom;
               isAtBottomRef.current = isNowAtBottom;
             }}
             ListFooterComponent={
@@ -1793,7 +1838,7 @@ export default function PersonalChatScreen() {
           )}
 
           <View style={{ width: "100%", paddingHorizontal: 16 }}>
-            <Reanimated.View className="flex-row items-end gap-3">
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
                 {/* Image Generation Docked Pill */}
                 <View style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, alignItems: 'center', zIndex: 100, paddingBottom: 24 }} pointerEvents="box-none">
                     <ImageGenerationPill
@@ -1870,34 +1915,24 @@ export default function PersonalChatScreen() {
                 </Pressable>
 
                 {/* Input Field */}
-                <Animated.View
+                <View
                     style={{
                     flex: 1,
-                    borderRadius: 20,
-                    overflow: "hidden",
-                    shadowColor: inputContainerShadowColor,
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: animatedShadowOpacity,
-                    shadowRadius: 8,
-                    elevation: 3,
                     }}
                 >
-                    <View
-                    style={{
-                        flex: 1,
-                        borderRadius: 20,
-                        overflow: "hidden",
-                        backgroundColor: isDark ? "#1C1C1E" : "#F2F2F7",
-                    }}
-                    >
                     <Animated.View
-                        style={{
-                            flex: 1,
-                            borderRadius: 20,
-                            borderWidth: 1.5,
-                            borderColor: animatedBorderColor,
-                            overflow: "hidden",
-                        }}
+                    style={{
+                        borderRadius: 20,
+                        backgroundColor: isDark ? "#1C1C1E" : "#F2F2F7",
+                        shadowColor: inputContainerShadowColor,
+                        shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: animatedShadowOpacity,
+                        shadowRadius: 8,
+                        elevation: 3,
+                        borderWidth: 1.5,
+                        borderColor: animatedBorderColor,
+                        overflow: 'hidden',
+                    }}
                     >
                         {/* Layered animated gradient backgrounds for smooth color transitions */}
                         {/* Default state gradient */}
@@ -1924,7 +1959,7 @@ export default function PersonalChatScreen() {
                                 ]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
-                                style={{ flex: 1 }}
+                                style={StyleSheet.absoluteFill}
                             />
                         </Animated.View>
                         
@@ -1948,7 +1983,7 @@ export default function PersonalChatScreen() {
                                 ]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
-                                style={{ flex: 1 }}
+                                style={StyleSheet.absoluteFill}
                             />
                         </Animated.View>
                         
@@ -1972,7 +2007,7 @@ export default function PersonalChatScreen() {
                                 ]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
-                                style={{ flex: 1 }}
+                                style={StyleSheet.absoluteFill}
                             />
                         </Animated.View>
 
@@ -1983,18 +2018,17 @@ export default function PersonalChatScreen() {
                             placeholder={attachedImages.length > 0 ? "Add a caption (optional)" : "Message"}
                             placeholderTextColor={colors.inputPlaceholder}
                             style={{
-                                flex: 1,
                                 paddingHorizontal: 14,
                                 paddingVertical: 10,
                                 fontSize: 16,
                                 lineHeight: 20,
                                 color: inputTextColor,
                                 fontWeight: inputFontWeight,
-                                textAlignVertical: "top",
+                                minHeight: MIN_INPUT_HEIGHT,
                                 maxHeight: MAX_INPUT_HEIGHT,
                             }}
                             multiline={true}
-                            scrollEnabled={true}
+                            scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
                             maxLength={4000}
                             onSubmitEditing={() => handleSend()}
                             blurOnSubmit={false}
@@ -2013,8 +2047,7 @@ export default function PersonalChatScreen() {
                             caretHidden={false}
                         />
                     </Animated.View>
-                    </View>
-                </Animated.View>
+                </View>
 
                 {/* Send Button */}
                 <Pressable
@@ -2068,7 +2101,7 @@ export default function PersonalChatScreen() {
                     </BlurView>
                     </Animated.View>
                 </Pressable>
-            </Reanimated.View>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>

@@ -79,6 +79,7 @@ import { CreateCustomCommandModal } from "@/components/CustomCommands";
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ReplyPreviewModal } from "@/components/ReplyPreviewModal";
 import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
+import TLDRSummaryModal from "@/components/TLDRSummaryModal";
 import MentionPicker from "@/components/MentionPicker";
 import MessageText from "@/components/MessageText";
 import { ProfileImage } from "@/components/ProfileImage";
@@ -2414,6 +2415,11 @@ const ChatScreen = () => {
   const [originalPreviewPrompt, setOriginalPreviewPrompt] = useState<string>("");
   const [previewType, setPreviewType] = useState<"image" | "meme" | "remix">("image");
   
+  // New modal-based AI tools state
+  const [imageGenSheetMode, setImageGenSheetMode] = useState<"prompt" | "generate">("generate");
+  const [imageGenType, setImageGenType] = useState<"image" | "meme">("image");
+  const [showTLDRModal, setShowTLDRModal] = useState(false);
+  
   // Auto-open sheet when new preview image arrives
   useEffect(() => {
     if (previewImage) {
@@ -4709,6 +4715,227 @@ const ChatScreen = () => {
     } catch (error) {
       console.error("Error picking image:", error);
       Alert.alert("Error", "Failed to pick image");
+    }
+  };
+
+  // Handler for picking a single reference image (for image generation)
+  const pickReferenceImage = async (): Promise<string | null> => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "images",
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const pickedImage = result.assets[0];
+        
+        // Compress and resize
+        const maxDimension = 1024;
+        let width = pickedImage.width;
+        let height = pickedImage.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height / width) * maxDimension);
+            width = maxDimension;
+          } else {
+            width = Math.round((width / height) * maxDimension);
+            height = maxDimension;
+          }
+        }
+
+        const manipulatedImage = await ImageManipulator.manipulateAsync(
+          pickedImage.uri,
+          [{ resize: { width, height } }],
+          {
+            compress: 0.8,
+            format: ImageManipulator.SaveFormat.JPEG,
+          }
+        );
+
+        return manipulatedImage.uri;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error picking reference image:", error);
+      return null;
+    }
+  };
+
+  // Handler to open Image Generator in prompt mode
+  const handleOpenImageGenerator = (type: "image" | "meme") => {
+    console.log("[ChatScreen] Opening image generator in prompt mode for:", type);
+    setShowAttachmentsMenu(false);
+    setImageGenType(type);
+    setImageGenSheetMode("prompt");
+    setPreviewType(type);
+    // Set a placeholder to trigger the sheet visibility
+    setPreviewImage({
+      imageUrl: "",
+      previewId: "prompt-mode",
+      prompt: "",
+      metadata: {},
+    });
+    setIsGeneratorSheetOpen(true);
+  };
+
+  // Handler to open TLDR Summary modal
+  const handleOpenTLDRSummary = () => {
+    console.log("[ChatScreen] Opening TLDR Summary modal");
+    setShowAttachmentsMenu(false);
+    setTimeout(() => setShowTLDRModal(true), 200);
+  };
+
+  // Handler for TLDR submission from modal
+  const handleTLDRSubmit = async (messageCount: number | "all") => {
+    if (!user) return;
+    
+    console.log("[ChatScreen] TLDR submit with count:", messageCount);
+    
+    const limit = messageCount === "all" ? 999 : messageCount;
+    
+    // Get messages for context
+    const recentMessages = (allMessages || [])
+      .filter((m): m is Message => !("isDateDivider" in m))
+      .slice(0, limit);
+
+    if (recentMessages.length === 0) {
+      Alert.alert("No Messages", "There are no messages to summarize.");
+      return;
+    }
+
+    try {
+      const response = await api.post("/api/ai/tldr", {
+        chatId,
+        userId: user.id,
+        threadId: currentThreadId || null,
+        limit,
+      });
+
+      if (response && typeof response === 'object' && 'summary' in response) {
+        const summaryResponse = response as { summary: string };
+        
+        // Create a local TLDR message to display
+        const tldrMessage: PendingMessage = {
+          id: `tldr-${Date.now()}`,
+          chatId,
+          userId: "ai-assistant",
+          content: `📋 **Summary of the last ${recentMessages.length} messages:**\n\n${summaryResponse.summary}`,
+          messageType: "text",
+          createdAt: new Date().toISOString(),
+          user: {
+            id: "ai-assistant",
+            displayName: "AI Assistant",
+            username: "ai",
+            avatarUrl: null,
+            createdAt: new Date().toISOString(),
+          },
+          reactions: [],
+          mentions: [],
+          isPending: false,
+        };
+
+        // Add to local messages
+        queryClient.setQueryData<Message[]>(["messages", chatId], (old) => {
+          if (!old) return [tldrMessage as Message];
+          return [tldrMessage as Message, ...old];
+        });
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error("[ChatScreen] TLDR error:", error);
+      Alert.alert("Error", "Failed to generate summary. Please try again.");
+    }
+  };
+
+  // Handler for image generation from prompt modal
+  const handleImageGenerate = async (prompt: string, referenceImages: string[]) => {
+    console.log("[ChatScreen] Image generate from prompt:", prompt, "refs:", referenceImages.length);
+    
+    // Transition to generating phase
+    setImageGenSheetMode("generate");
+    
+    // Track keyboard state
+    if (isInputFocused.current) {
+      wasKeyboardOpenForImageGen.current = true;
+      Keyboard.dismiss();
+    }
+    
+    // Upload reference images if any
+    if (referenceImages.length > 0) {
+      setIsUploadingImage(true);
+      try {
+        const uploadedUrls: string[] = [];
+        const token = await authClient.getToken();
+
+        for (const imageUri of referenceImages) {
+          console.log("[ChatScreen] Uploading reference image:", imageUri);
+          
+          const uploadResult = await FileSystem.uploadAsync(
+            `${BACKEND_URL}/api/upload/image`,
+            imageUri,
+            {
+              httpMethod: "POST",
+              uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+              fieldName: "image",
+              headers: token ? {
+                Authorization: `Bearer ${token}`,
+              } : undefined,
+            }
+          );
+
+          if (uploadResult.status !== 200) {
+            throw new Error(`Upload failed: ${uploadResult.status}`);
+          }
+
+          const uploadData: UploadImageResponse = JSON.parse(uploadResult.body);
+          uploadedUrls.push(uploadData.url);
+        }
+
+        // Generate with references
+        if (imageGenType === "meme") {
+          generateMemeMutation.mutate({
+            prompt,
+            userId: user?.id || "",
+            chatId,
+            referenceImageUrls: uploadedUrls,
+          });
+        } else {
+          generateImageMutation.mutate({
+            prompt,
+            userId: user?.id || "",
+            chatId,
+            type: imageGenType,
+            referenceImageUrls: uploadedUrls,
+          });
+        }
+      } catch (error) {
+        console.error("[ChatScreen] Error uploading reference images:", error);
+        Alert.alert("Error", "Failed to upload reference images");
+        // Reset sheet mode if failed
+        setImageGenSheetMode("prompt");
+      } finally {
+        setIsUploadingImage(false);
+      }
+    } else {
+      // No reference images
+      if (imageGenType === "meme") {
+        generateMemeMutation.mutate({
+          prompt,
+          userId: user?.id || "",
+          chatId,
+        });
+      } else {
+        generateImageMutation.mutate({
+          prompt,
+          userId: user?.id || "",
+          chatId,
+          type: imageGenType,
+        });
+      }
     }
   };
 
@@ -9697,6 +9924,8 @@ const ChatScreen = () => {
                   navigation.navigate("GroupSettings", { chatId });
                 }}
                 customCommands={customCommands}
+                onOpenImageGenerator={handleOpenImageGenerator}
+                onOpenTLDRSummary={handleOpenTLDRSummary}
               />
             </Pressable>
           </KeyboardAvoidingView>
@@ -9822,7 +10051,7 @@ const ChatScreen = () => {
           onPickImage={pickImage}
           onPickVideo={pickVideo}
           onSelectCommand={(command) => {
-            // Insert the command into the message input
+            // Insert the command into the message input (fallback for custom commands)
             setMessageText(command + " ");
           }}
           onCreateCommand={() => {
@@ -9837,6 +10066,8 @@ const ChatScreen = () => {
             setTimeout(() => setShowCreatePoll(true), 300);
           }}
           customCommands={customCommands}
+          onOpenImageGenerator={handleOpenImageGenerator}
+          onOpenTLDRSummary={handleOpenTLDRSummary}
         />
         )}
 
@@ -10565,8 +10796,16 @@ const ChatScreen = () => {
           imageUrl={previewImage?.imageUrl || null}
           initialPrompt={previewImage?.prompt || ""}
           isProcessing={isConfirmingImage || isEditingImage || generateImageMutation.isPending || generateMemeMutation.isPending || isReactorProcessing}
+          mode={imageGenSheetMode}
+          generationType={imageGenType}
+          onGenerate={handleImageGenerate}
+          onPickImage={pickReferenceImage}
           onMinimize={() => {
             setIsGeneratorSheetOpen(false); // Swipe down -> Minimize (show pill)
+            // Reset mode when minimizing from prompt phase
+            if (imageGenSheetMode === "prompt") {
+              setPreviewImage(null);
+            }
             // Restore keyboard if it was open
             if (wasKeyboardOpenForImageGen.current) {
               setTimeout(() => {
@@ -10579,6 +10818,7 @@ const ChatScreen = () => {
             // Explicit close (X button or Cancel) -> Clear everything
             setPreviewImage(null);
             setIsGeneratorSheetOpen(false);
+            setImageGenSheetMode("generate"); // Reset mode
             // Restore keyboard if it was open
             if (wasKeyboardOpenForImageGen.current) {
               setTimeout(() => {
@@ -10602,6 +10842,8 @@ const ChatScreen = () => {
                       },
                     },
                   });
+                  // Reset mode after confirming
+                  setImageGenSheetMode("generate");
                 }
               }}
               onEdit={(newPrompt) => {
@@ -10710,6 +10952,13 @@ const ChatScreen = () => {
             </Pressable>
           </Pressable>
         </Modal>
+
+        {/* TLDR Summary Modal */}
+        <TLDRSummaryModal
+          visible={showTLDRModal}
+          onClose={() => setShowTLDRModal(false)}
+          onSubmit={handleTLDRSubmit}
+        />
       </View>
     );
 };

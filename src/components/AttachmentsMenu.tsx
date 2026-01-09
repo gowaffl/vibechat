@@ -39,6 +39,9 @@ interface AttachmentsMenuProps {
   onCreatePoll: () => void;
   onOpenSettings: () => void;
   customCommands: CustomSlashCommand[];
+  // New callbacks for modal-based AI tools
+  onOpenImageGenerator?: (type: "image" | "meme") => void;
+  onOpenTLDRSummary?: () => void;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -54,6 +57,8 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   onCreatePoll,
   onOpenSettings,
   customCommands,
+  onOpenImageGenerator,
+  onOpenTLDRSummary,
 }) => {
   const insets = useSafeAreaInsets();
   const keyboard = useAnimatedKeyboard();
@@ -157,20 +162,23 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
   const builtInCommands = [
     {
       command: "/image",
+      label: "Generate Image",
       icon: Wand2,
-      description: "Generate custom images using AI",
+      description: "Create custom images using AI",
       color: "#FF6B6B",
     },
     {
       command: "/meme",
+      label: "Create Meme",
       icon: Sparkles,
-      description: "Create funny meme images with text",
+      description: "Generate funny meme images",
       color: "#FFD93D",
     },
     {
       command: "/tldr",
+      label: "Summarize Chat",
       icon: AlignLeft,
-      description: "Summarize recent messages",
+      description: "Get a quick TLDR of messages",
       color: "#9D4EDD",
     },
   ];
@@ -362,10 +370,25 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                 <View style={{ gap: 8 }}>
                   {builtInCommands.map((cmd) => {
                     const Icon = cmd.icon;
+                    
+                    // Determine the correct action based on command type
+                    const handlePress = () => {
+                      if (cmd.command === "/image" && onOpenImageGenerator) {
+                        handleCommandAction(() => onOpenImageGenerator("image"));
+                      } else if (cmd.command === "/meme" && onOpenImageGenerator) {
+                        handleCommandAction(() => onOpenImageGenerator("meme"));
+                      } else if (cmd.command === "/tldr" && onOpenTLDRSummary) {
+                        handleCommandAction(() => onOpenTLDRSummary());
+                      } else {
+                        // Fallback to old behavior for backwards compatibility
+                        handleCommandAction(() => onSelectCommand(cmd.command));
+                      }
+                    };
+                    
                     return (
                       <Pressable
                         key={cmd.command}
-                        onPress={() => handleCommandAction(() => onSelectCommand(cmd.command))}
+                        onPress={handlePress}
                         style={({ pressed }) => ({
                           borderRadius: 18,
                           opacity: pressed ? 0.85 : 1,
@@ -381,7 +404,7 @@ const AttachmentsMenu: React.FC<AttachmentsMenuProps> = ({
                               <Icon size={20} color={cmd.color} strokeWidth={2.5} />
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={[styles.commandTitle, { color: colors.text }]}>{cmd.command}</Text>
+                              <Text style={[styles.commandTitle, { color: colors.text }]}>{cmd.label}</Text>
                               <Text style={[styles.commandDesc, { color: colors.textSecondary }]}>{cmd.description}</Text>
                             </View>
                           </LinearGradient>

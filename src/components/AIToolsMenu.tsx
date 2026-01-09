@@ -22,6 +22,9 @@ interface AIToolsMenuProps {
   onCreateCommand: () => void;
   onOpenSettings: () => void;
   customCommands: CustomSlashCommand[];
+  // New callbacks for modal-based AI tools
+  onOpenImageGenerator?: (type: "image" | "meme") => void;
+  onOpenTLDRSummary?: () => void;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -33,6 +36,8 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
   onCreateCommand,
   onOpenSettings,
   customCommands,
+  onOpenImageGenerator,
+  onOpenTLDRSummary,
 }) => {
   const { colors, isDark } = useTheme();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -76,26 +81,48 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
   const builtInCommands = [
     {
       command: "/image",
+      label: "Generate Image",
       icon: ImageIcon,
-      description: "Generate custom images using AI",
+      description: "Create custom images using AI",
       color: "#FF6B6B",
     },
     {
       command: "/meme",
+      label: "Create Meme",
       icon: Smile,
-      description: "Create funny meme images with text",
+      description: "Generate funny meme images",
       color: "#FFD93D",
     },
     {
       command: "/tldr",
+      label: "Summarize Chat",
       icon: AlignLeft,
-      description: "Summarize recent messages",
+      description: "Get a quick TLDR of messages",
       color: "#9D4EDD",
     },
   ];
 
   const handleSelectCommand = (command: string) => {
     Haptics.selectionAsync();
+    
+    // Use new modal-based callbacks when available
+    if (command === "/image" && onOpenImageGenerator) {
+      onOpenImageGenerator("image");
+      onClose();
+      return;
+    }
+    if (command === "/meme" && onOpenImageGenerator) {
+      onOpenImageGenerator("meme");
+      onClose();
+      return;
+    }
+    if (command === "/tldr" && onOpenTLDRSummary) {
+      onOpenTLDRSummary();
+      onClose();
+      return;
+    }
+    
+    // Fallback to old behavior
     onSelectCommand(command);
     onClose();
   };
@@ -268,7 +295,7 @@ const AIToolsMenu: React.FC<AIToolsMenuProps> = ({
                             marginBottom: 2,
                           }}
                         >
-                          {cmd.command}
+                          {cmd.label}
                         </Text>
                         <Text
                           style={{

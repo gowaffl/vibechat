@@ -1133,14 +1133,45 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
 
           case "image_generated":
             if (event.data.imageBase64) {
+              const imageId = event.data.imageId || `img_${Date.now()}`;
               generatedImages.push({
-                id: event.data.imageId || `img_${Date.now()}`,
+                id: imageId,
                 base64: event.data.imageBase64,
               });
-              await stream.writeSSE({
-                event: "image_generated",
-                data: JSON.stringify({ imageId: event.data.imageId }),
-              });
+              
+              // Save the image immediately so we can send the URL to the frontend
+              try {
+                console.log("[PersonalChats] Saving generated image immediately...");
+                const savedImages = await saveResponseImages([{ id: imageId, base64: event.data.imageBase64 }], conversationId);
+                if (savedImages.length > 0) {
+                  const imageUrl = savedImages[0];
+                  console.log("[PersonalChats] Image saved, sending URL to frontend:", imageUrl);
+                  await stream.writeSSE({
+                    event: "image_generated",
+                    data: JSON.stringify({ 
+                      imageId,
+                      imageUrl,
+                    }),
+                  });
+                  
+                  // Store the URL so we don't save it again in the done event
+                  if (!metadata.generatedImageUrl) {
+                    metadata.generatedImageUrl = imageUrl;
+                  }
+                } else {
+                  console.error("[PersonalChats] Failed to save image immediately");
+                  await stream.writeSSE({
+                    event: "image_generated",
+                    data: JSON.stringify({ imageId }),
+                  });
+                }
+              } catch (imgError) {
+                console.error("[PersonalChats] Error saving image:", imgError);
+                await stream.writeSSE({
+                  event: "image_generated",
+                  data: JSON.stringify({ imageId }),
+                });
+              }
             }
             break;
 
@@ -1176,7 +1207,12 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             // Save the AI response to database
             let generatedImageUrl: string | null = null;
             
-            if (generatedImages.length > 0) {
+            // Check if image was already saved during streaming
+            if (metadata.generatedImageUrl) {
+              console.log("[PersonalChats] Using already-saved image URL:", metadata.generatedImageUrl);
+              generatedImageUrl = metadata.generatedImageUrl;
+              metadata.generatedImagePrompt = fullContent;
+            } else if (generatedImages.length > 0) {
               console.log("[PersonalChats] Saving generated images to storage...");
               try {
                 const savedImages = await saveResponseImages(generatedImages, conversationId);
