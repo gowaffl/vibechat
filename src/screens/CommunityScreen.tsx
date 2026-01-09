@@ -16,6 +16,8 @@ import {
   RefreshControl,
   Dimensions,
   StyleSheet,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -32,9 +34,11 @@ import {
   TrendingUp,
   Clock,
   ChevronRight,
+  ChevronDown,
   Zap,
   Wand2,
   Award,
+  X,
 } from "lucide-react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
@@ -155,6 +159,12 @@ const CommunityScreen = () => {
   const [commandsExpanded, setCommandsExpanded] = useState(false);
   const [workflowsExpanded, setWorkflowsExpanded] = useState(false);
 
+  // Filter modal state
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+
+  // Expanded cards state - stores IDs of expanded cards
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
   // Fetch data
   const fetchPersonas = useCallback(async () => {
     try {
@@ -264,6 +274,18 @@ const CommunityScreen = () => {
     loadData();
   };
 
+  const toggleCardExpansion = (id: string) => {
+    setExpandedCards((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
   // Render helpers
   const renderTab = (tab: TabType, label: string, icon: React.ReactNode) => {
     const isActive = activeTab === tab;
@@ -301,249 +323,333 @@ const CommunityScreen = () => {
     );
   };
 
-  const renderPersonaCard = (persona: CommunityPersona, index?: number) => (
-    <TouchableOpacity
-      key={persona.id}
-      onPress={() => handleClone(persona, "ai_friend")}
-      style={[
-        styles.card,
-        {
-          backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
-          borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
-        },
-      ]}
-    >
-      {index !== undefined && index < 3 && (
-        <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
-          <Text style={styles.rankText}>#{index + 1}</Text>
-        </View>
-      )}
-      <View style={styles.cardHeader}>
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: `${colors.primary}33` },
-          ]}
-        >
-          <Sparkles size={24} color={colors.primary} />
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-            {persona.name}
-          </Text>
-          <Text style={[styles.cardCategory, { color: colors.textSecondary }]}>
-            {persona.category || "General"}
-          </Text>
-        </View>
-      </View>
-      {persona.description && (
-        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-          {persona.description}
-        </Text>
-      )}
-      {persona.personality && (
-        <View style={styles.promptSection}>
-          <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>Personality:</Text>
-          <Text style={[styles.promptText, { color: colors.textSecondary }]} numberOfLines={3}>
-            {persona.personality}
-          </Text>
-        </View>
-      )}
-      {persona.tags && persona.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {persona.tags.slice(0, 3).map((tag, i) => (
-            <View
-              key={i}
-              style={[
-                styles.tag,
-                { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
-              ]}
-            >
-              <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-      <View style={styles.cardFooter}>
-        {persona.creator && (
-          <View style={styles.creatorRow}>
-            <User size={12} color={colors.textTertiary} />
-            <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-              {formatCreatorName(persona.creator.name)}
-            </Text>
+  const renderPersonaCard = (persona: CommunityPersona, index?: number) => {
+    const isExpanded = expandedCards.has(persona.id);
+    
+    return (
+      <View
+        key={persona.id}
+        style={[
+          styles.card,
+          {
+            backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+            borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
+          },
+        ]}
+      >
+        {index !== undefined && index < 3 && (
+          <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
+            <Text style={styles.rankText}>#{index + 1}</Text>
           </View>
         )}
-        <View style={styles.cloneStats}>
-          <Download size={14} color={colors.textSecondary} />
-          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
-            {formatNumber(persona.cloneCount)}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+        
+        {/* Compact View */}
+        <TouchableOpacity
+          onPress={() => toggleCardExpansion(persona.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardHeader}>
+            <View
+              style={[
+                styles.iconContainerSmall,
+                { backgroundColor: `${colors.primary}33` },
+              ]}
+            >
+              <Sparkles size={20} color={colors.primary} />
+            </View>
+            <View style={styles.cardInfo}>
+              <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+                {persona.name}
+              </Text>
+              <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={isExpanded ? undefined : 1}>
+                {persona.description || persona.personality}
+              </Text>
+            </View>
+            <ChevronDown
+              size={20}
+              color={colors.textSecondary}
+              style={{
+                transform: [{ rotate: isExpanded ? "180deg" : "0deg" }],
+              }}
+            />
+          </View>
+        </TouchableOpacity>
 
-  const renderCommandCard = (command: CommunityCommand, index?: number) => (
-    <TouchableOpacity
-      key={command.id}
-      onPress={() => handleClone(command, "command")}
-      style={[
-        styles.card,
-        {
-          backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
-          borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
-        },
-      ]}
-    >
-      {index !== undefined && index < 3 && (
-        <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
-          <Text style={styles.rankText}>#{index + 1}</Text>
-        </View>
-      )}
-      <View style={styles.cardHeader}>
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: isDark ? "rgba(175, 82, 222, 0.2)" : "rgba(175, 82, 222, 0.1)" },
-          ]}
-        >
-          <Zap size={24} color="#AF52DE" />
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-            {command.command.startsWith('/') ? command.command : `/${command.command}`}
-          </Text>
-          <Text style={[styles.cardCategory, { color: colors.textSecondary }]}>
-            {command.category || "General"}
-          </Text>
-        </View>
-      </View>
-      {command.description && (
-        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-          {command.description}
-        </Text>
-      )}
-      {command.prompt && (
-        <View style={styles.promptSection}>
-          <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>Prompt:</Text>
-          <Text style={[styles.promptText, { color: colors.textSecondary }]} numberOfLines={3}>
-            {command.prompt}
-          </Text>
-        </View>
-      )}
-      {command.tags && command.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {command.tags.slice(0, 3).map((tag, i) => (
-            <View
-              key={i}
+        {/* Expanded View */}
+        {isExpanded && (
+          <>
+            {persona.personality && persona.description && (
+              <View style={styles.promptSection}>
+                <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>PERSONALITY</Text>
+                <Text style={[styles.promptText, { color: colors.textSecondary }]}>
+                  {persona.personality}
+                </Text>
+              </View>
+            )}
+            {persona.tags && persona.tags.length > 0 && (
+              <View style={styles.tagsContainer}>
+                {persona.tags.slice(0, 5).map((tag, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.tag,
+                      { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
+                    ]}
+                  >
+                    <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <View style={styles.cardFooter}>
+              {persona.creator && (
+                <View style={styles.creatorRow}>
+                  <User size={12} color={colors.textTertiary} />
+                  <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
+                    {formatCreatorName(persona.creator.name)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.cloneStats}>
+                <Download size={14} color={colors.textSecondary} />
+                <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
+                  {formatNumber(persona.cloneCount)}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleClone(persona, "ai_friend")}
               style={[
-                styles.tag,
-                { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
+                styles.cloneButton,
+                { backgroundColor: colors.primary },
               ]}
             >
-              <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-      <View style={styles.cardFooter}>
-        {command.creator && (
-          <View style={styles.creatorRow}>
-            <User size={12} color={colors.textTertiary} />
-            <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-              {formatCreatorName(command.creator.name)}
-            </Text>
-          </View>
+              <Download size={16} color="#fff" />
+              <Text style={styles.cloneButtonText}>Clone This Persona</Text>
+            </TouchableOpacity>
+          </>
         )}
-        <View style={styles.cloneStats}>
-          <Download size={14} color={colors.textSecondary} />
-          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
-            {formatNumber(command.cloneCount)}
-          </Text>
-        </View>
       </View>
-    </TouchableOpacity>
-  );
+    );
+  };
 
-  const renderWorkflowCard = (workflow: CommunityWorkflow, index?: number) => (
-    <TouchableOpacity
-      key={workflow.id}
-      onPress={() => handleClone(workflow, "workflow")}
-      style={[
-        styles.card,
-        {
-          backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
-          borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
-        },
-      ]}
-    >
-      {index !== undefined && index < 3 && (
-        <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
-          <Text style={styles.rankText}>#{index + 1}</Text>
-        </View>
-      )}
-      <View style={styles.cardHeader}>
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: isDark ? "rgba(0, 122, 255, 0.2)" : "rgba(0, 122, 255, 0.1)" },
-          ]}
-        >
-          <Wand2 size={24} color="#007AFF" />
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-            {workflow.name}
-          </Text>
-          <Text style={[styles.cardCategory, { color: colors.textSecondary }]}>
-            {workflow.category || "General"}
-          </Text>
-        </View>
-      </View>
-      {workflow.description && (
-        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-          {workflow.description}
-        </Text>
-      )}
-      <View style={styles.promptSection}>
-        <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>Automation:</Text>
-        <Text style={[styles.promptText, { color: colors.textSecondary }]} numberOfLines={2}>
-          {workflow.triggerType} → {workflow.actionType}
-        </Text>
-      </View>
-      {workflow.tags && workflow.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {workflow.tags.slice(0, 3).map((tag, i) => (
-            <View
-              key={i}
-              style={[
-                styles.tag,
-                { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
-              ]}
-            >
-              <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-      <View style={styles.cardFooter}>
-        {workflow.creator && (
-          <View style={styles.creatorRow}>
-            <User size={12} color={colors.textTertiary} />
-            <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
-              {formatCreatorName(workflow.creator.name)}
-            </Text>
+  const renderCommandCard = (command: CommunityCommand, index?: number) => {
+    const isExpanded = expandedCards.has(command.id);
+    
+    return (
+      <View
+        key={command.id}
+        style={[
+          styles.card,
+          {
+            backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+            borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
+          },
+        ]}
+      >
+        {index !== undefined && index < 3 && (
+          <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
+            <Text style={styles.rankText}>#{index + 1}</Text>
           </View>
         )}
-        <View style={styles.cloneStats}>
-          <Download size={14} color={colors.textSecondary} />
-          <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
-            {formatNumber(workflow.cloneCount)}
-          </Text>
-        </View>
+        
+        {/* Compact View */}
+        <TouchableOpacity
+          onPress={() => toggleCardExpansion(command.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardHeader}>
+            <View
+              style={[
+                styles.iconContainerSmall,
+                { backgroundColor: isDark ? "rgba(175, 82, 222, 0.2)" : "rgba(175, 82, 222, 0.1)" },
+              ]}
+            >
+              <Zap size={20} color="#AF52DE" />
+            </View>
+            <View style={styles.cardInfo}>
+              <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+                {command.command.startsWith('/') ? command.command : `/${command.command}`}
+              </Text>
+              <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={isExpanded ? undefined : 1}>
+                {command.description}
+              </Text>
+            </View>
+            <ChevronDown
+              size={20}
+              color={colors.textSecondary}
+              style={{
+                transform: [{ rotate: isExpanded ? "180deg" : "0deg" }],
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+
+        {/* Expanded View */}
+        {isExpanded && (
+          <>
+            {command.prompt && (
+              <View style={styles.promptSection}>
+                <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>PROMPT</Text>
+                <Text style={[styles.promptText, { color: colors.textSecondary }]}>
+                  {command.prompt}
+                </Text>
+              </View>
+            )}
+            {command.tags && command.tags.length > 0 && (
+              <View style={styles.tagsContainer}>
+                {command.tags.slice(0, 5).map((tag, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.tag,
+                      { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
+                    ]}
+                  >
+                    <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <View style={styles.cardFooter}>
+              {command.creator && (
+                <View style={styles.creatorRow}>
+                  <User size={12} color={colors.textTertiary} />
+                  <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
+                    {formatCreatorName(command.creator.name)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.cloneStats}>
+                <Download size={14} color={colors.textSecondary} />
+                <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
+                  {formatNumber(command.cloneCount)}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleClone(command, "command")}
+              style={[
+                styles.cloneButton,
+                { backgroundColor: "#AF52DE" },
+              ]}
+            >
+              <Download size={16} color="#fff" />
+              <Text style={styles.cloneButtonText}>Clone This Command</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
-    </TouchableOpacity>
-  );
+    );
+  };
+
+  const renderWorkflowCard = (workflow: CommunityWorkflow, index?: number) => {
+    const isExpanded = expandedCards.has(workflow.id);
+    
+    return (
+      <View
+        key={workflow.id}
+        style={[
+          styles.card,
+          {
+            backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+            borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
+          },
+        ]}
+      >
+        {index !== undefined && index < 3 && (
+          <View style={[styles.rankBadge, { backgroundColor: getRankColor(index) }]}>
+            <Text style={styles.rankText}>#{index + 1}</Text>
+          </View>
+        )}
+        
+        {/* Compact View */}
+        <TouchableOpacity
+          onPress={() => toggleCardExpansion(workflow.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardHeader}>
+            <View
+              style={[
+                styles.iconContainerSmall,
+                { backgroundColor: isDark ? "rgba(0, 122, 255, 0.2)" : "rgba(0, 122, 255, 0.1)" },
+              ]}
+            >
+              <Wand2 size={20} color="#007AFF" />
+            </View>
+            <View style={styles.cardInfo}>
+              <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+                {workflow.name}
+              </Text>
+              <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={isExpanded ? undefined : 1}>
+                {workflow.description}
+              </Text>
+            </View>
+            <ChevronDown
+              size={20}
+              color={colors.textSecondary}
+              style={{
+                transform: [{ rotate: isExpanded ? "180deg" : "0deg" }],
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+
+        {/* Expanded View */}
+        {isExpanded && (
+          <>
+            <View style={styles.promptSection}>
+              <Text style={[styles.promptLabel, { color: colors.textTertiary }]}>AUTOMATION</Text>
+              <Text style={[styles.promptText, { color: colors.textSecondary }]}>
+                {workflow.triggerType} → {workflow.actionType}
+              </Text>
+            </View>
+            {workflow.tags && workflow.tags.length > 0 && (
+              <View style={styles.tagsContainer}>
+                {workflow.tags.slice(0, 5).map((tag, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.tag,
+                      { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" },
+                    ]}
+                  >
+                    <Text style={[styles.tagText, { color: colors.textSecondary }]}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <View style={styles.cardFooter}>
+              {workflow.creator && (
+                <View style={styles.creatorRow}>
+                  <User size={12} color={colors.textTertiary} />
+                  <Text style={[styles.creatorName, { color: colors.textTertiary }]}>
+                    {formatCreatorName(workflow.creator.name)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.cloneStats}>
+                <Download size={14} color={colors.textSecondary} />
+                <Text style={[styles.cloneCount, { color: colors.textSecondary }]}>
+                  {formatNumber(workflow.cloneCount)}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleClone(workflow, "workflow")}
+              style={[
+                styles.cloneButton,
+                { backgroundColor: "#007AFF" },
+              ]}
+            >
+              <Download size={16} color="#fff" />
+              <Text style={styles.cloneButtonText}>Clone This Workflow</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    );
+  };
 
   const renderFeaturedSection = () => {
     if (featuredPersonas.length === 0 && featuredCommands.length === 0 && featuredWorkflows.length === 0) return null;
@@ -708,93 +814,163 @@ const CommunityScreen = () => {
     );
   };
 
-  const renderCategoryFilter = () => (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.categoryScroll}
-      contentContainerStyle={styles.categoryContent}
+  // Filter Modal Component
+  const renderFilterModal = () => (
+    <Modal
+      visible={filterModalVisible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setFilterModalVisible(false)}
     >
-      {CATEGORIES.map((cat) => {
-        const Icon = cat.icon;
-        const isActive = selectedCategory === cat.id;
-        return (
-          <TouchableOpacity
-            key={cat.id}
-            onPress={() => setSelectedCategory(cat.id)}
-            style={[
-              styles.categoryChip,
-              {
-              backgroundColor: isActive
-                ? `${colors.primary}33`
-                : isDark
-                ? "rgba(255,255,255,0.05)"
-                : "rgba(0,0,0,0.05)",
-              borderColor: isActive
-                ? `${colors.primary}66`
-                : "transparent",
-              },
-            ]}
-          >
-            <Icon size={14} color={isActive ? (isDark ? colors.primary : "#fff") : colors.textSecondary} />
-            <Text
-              style={[
-                styles.categoryText,
-                { color: isActive ? (isDark ? colors.primary : "#fff") : colors.textSecondary },
-              ]}
+      <Pressable 
+        style={styles.modalOverlay}
+        onPress={() => setFilterModalVisible(false)}
+      >
+        <Pressable
+          style={[
+            styles.modalContent,
+            {
+              backgroundColor: colors.background,
+              borderTopColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.1)",
+            },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Filters</Text>
+            <TouchableOpacity
+              onPress={() => setFilterModalVisible(false)}
+              style={styles.closeButton}
             >
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  );
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
 
-  const renderSortToggle = () => (
-    <View style={styles.sortContainer}>
-      <TouchableOpacity
-        onPress={() => setSortBy("popular")}
-        style={[
-          styles.sortButton,
-          sortBy === "popular" && {
-            backgroundColor: `${colors.primary}26`,
-          },
-        ]}
-      >
-        <TrendingUp
-          size={16}
-          color={sortBy === "popular" ? colors.primary : colors.textSecondary}
-        />
-        <Text
-          style={[
-            styles.sortText,
-            { color: sortBy === "popular" ? colors.primary : colors.textSecondary },
-          ]}
-        >
-          Popular
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => setSortBy("recent")}
-        style={[
-          styles.sortButton,
-          sortBy === "recent" && {
-            backgroundColor: `${colors.primary}26`,
-          },
-        ]}
-      >
-        <Clock size={16} color={sortBy === "recent" ? colors.primary : colors.textSecondary} />
-        <Text
-          style={[
-            styles.sortText,
-            { color: sortBy === "recent" ? colors.primary : colors.textSecondary },
-          ]}
-        >
-          Recent
-        </Text>
-      </TouchableOpacity>
-    </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Sort Options */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.textSecondary }]}>
+                SORT BY
+              </Text>
+              <View style={styles.filterOptions}>
+                <TouchableOpacity
+                  onPress={() => setSortBy("popular")}
+                  style={[
+                    styles.filterOption,
+                    {
+                      backgroundColor: sortBy === "popular"
+                        ? `${colors.primary}26`
+                        : isDark
+                        ? "rgba(255,255,255,0.05)"
+                        : "rgba(0,0,0,0.05)",
+                      borderColor: sortBy === "popular"
+                        ? colors.primary
+                        : "transparent",
+                    },
+                  ]}
+                >
+                  <TrendingUp
+                    size={20}
+                    color={sortBy === "popular" ? colors.primary : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      { color: sortBy === "popular" ? colors.primary : colors.text },
+                    ]}
+                  >
+                    Popular
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSortBy("recent")}
+                  style={[
+                    styles.filterOption,
+                    {
+                      backgroundColor: sortBy === "recent"
+                        ? `${colors.primary}26`
+                        : isDark
+                        ? "rgba(255,255,255,0.05)"
+                        : "rgba(0,0,0,0.05)",
+                      borderColor: sortBy === "recent"
+                        ? colors.primary
+                        : "transparent",
+                    },
+                  ]}
+                >
+                  <Clock
+                    size={20}
+                    color={sortBy === "recent" ? colors.primary : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      { color: sortBy === "recent" ? colors.primary : colors.text },
+                    ]}
+                  >
+                    Recent
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Category Options */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.textSecondary }]}>
+                CATEGORY
+              </Text>
+              <View style={styles.filterGrid}>
+                {CATEGORIES.map((cat) => {
+                  const Icon = cat.icon;
+                  const isActive = selectedCategory === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      onPress={() => setSelectedCategory(cat.id)}
+                      style={[
+                        styles.filterGridItem,
+                        {
+                          backgroundColor: isActive
+                            ? `${colors.primary}26`
+                            : isDark
+                            ? "rgba(255,255,255,0.05)"
+                            : "rgba(0,0,0,0.05)",
+                          borderColor: isActive
+                            ? colors.primary
+                            : "transparent",
+                        },
+                      ]}
+                    >
+                      <Icon
+                        size={20}
+                        color={isActive ? colors.primary : colors.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.filterGridText,
+                          { color: isActive ? colors.primary : colors.text },
+                        ]}
+                      >
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Apply Button */}
+          <TouchableOpacity
+            onPress={() => setFilterModalVisible(false)}
+            style={[styles.applyButton, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.applyButtonText}>Apply Filters</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 
   return (
@@ -836,24 +1012,42 @@ const CommunityScreen = () => {
           </View>
         </View>
 
-        {/* Search */}
-        <View
-          style={[
-            styles.searchContainer,
-            {
-              backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
-              borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
-            },
-          ]}
-        >
-          <Search size={20} color={colors.textSecondary} />
-          <TextInput
-            placeholder="Search personas & commands..."
-            placeholderTextColor={colors.textTertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={[styles.searchInput, { color: colors.text }]}
-          />
+        {/* Search and Filter Row */}
+        <View style={styles.searchRow}>
+          <View
+            style={[
+              styles.searchContainer,
+              {
+                backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+                borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
+              },
+            ]}
+          >
+            <Search size={20} color={colors.textSecondary} />
+            <TextInput
+              placeholder="Search personas & commands..."
+              placeholderTextColor={colors.textTertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={[styles.searchInput, { color: colors.text }]}
+            />
+          </View>
+          
+          {/* Filter Button (only for personas/commands/workflows tabs) */}
+          {activeTab !== "rankings" && (
+            <TouchableOpacity
+              onPress={() => setFilterModalVisible(true)}
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor: isDark ? colors.glassBackground : "rgba(255, 255, 255, 0.9)",
+                  borderColor: isDark ? colors.glassBorder : "rgba(0, 0, 0, 0.08)",
+                },
+              ]}
+            >
+              <Filter size={20} color={colors.primary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Tabs */}
@@ -868,14 +1062,6 @@ const CommunityScreen = () => {
           {renderTab("workflows", "Workflows", <Wand2 size={18} color={activeTab === "workflows" ? colors.primary : colors.textSecondary} />)}
           {renderTab("rankings", "Rankings", <Award size={18} color={activeTab === "rankings" ? colors.primary : colors.textSecondary} />)}
         </ScrollView>
-
-        {/* Category Filter & Sort (only for personas/commands tabs) */}
-        {activeTab !== "rankings" && (
-          <>
-            {renderCategoryFilter()}
-            {renderSortToggle()}
-          </>
-        )}
 
         {/* Content */}
         {loading ? (
@@ -932,6 +1118,9 @@ const CommunityScreen = () => {
         {/* Bottom padding */}
         <View style={{ height: insets.bottom + 100 }} />
       </ScrollView>
+
+      {/* Filter Modal */}
+      {renderFilterModal()}
 
       {/* Clone Modal */}
       <CloneModal
@@ -995,14 +1184,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 16,
     gap: 12,
   },
   searchInput: {
@@ -1032,42 +1227,102 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 14,
   },
-  categoryScroll: {
+  filterButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    paddingTop: 24,
+    paddingBottom: 40,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  closeButton: {
+    padding: 4,
+  },
+  filterSection: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  filterSectionTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
     marginBottom: 12,
   },
-  categoryContent: {
-    gap: 8,
-    paddingRight: 16,
+  filterOptions: {
+    flexDirection: "row",
+    gap: 12,
   },
-  categoryChip: {
+  filterOption: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
-  },
-  categoryText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  sortContainer: {
-    flexDirection: "row",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
     gap: 8,
-    marginBottom: 16,
   },
-  sortButton: {
+  filterOptionText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  filterGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  filterGridItem: {
+    width: "47%",
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 6,
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 8,
   },
-  sortText: {
-    fontSize: 13,
+  filterGridText: {
+    fontSize: 14,
     fontWeight: "500",
+  },
+  applyButton: {
+    marginHorizontal: 24,
+    marginTop: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  applyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   loadingContainer: {
     alignItems: "center",
@@ -1082,8 +1337,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   card: {
-    padding: 16,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
     position: "relative",
   },
@@ -1094,6 +1349,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    zIndex: 10,
   },
   rankText: {
     color: "#fff",
@@ -1103,7 +1359,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    gap: 10,
   },
   iconContainer: {
     width: 44,
@@ -1111,14 +1367,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+  },
+  iconContainerSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardInfo: {
     flex: 1,
   },
   cardTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
+    marginBottom: 2,
   },
   cardCategory: {
     fontSize: 13,
@@ -1135,45 +1398,65 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   cardDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
   promptSection: {
-    marginBottom: 10,
-    paddingTop: 8,
+    marginTop: 12,
+    marginBottom: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(128, 128, 128, 0.15)",
   },
   promptLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   promptText: {
     fontSize: 13,
-    lineHeight: 18,
-    fontStyle: "italic",
+    lineHeight: 19,
+  },
+  cloneButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 12,
+    gap: 8,
+  },
+  cloneButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   tagsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
+    marginTop: 8,
     marginBottom: 8,
   },
   tag: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   tagText: {
-    fontSize: 12,
+    fontSize: 11,
   },
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(128, 128, 128, 0.15)",
   },
   creatorRow: {
     flexDirection: "row",
@@ -1181,7 +1464,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   creatorName: {
-    fontSize: 12,
+    fontSize: 11,
   },
   section: {
     marginBottom: 24,

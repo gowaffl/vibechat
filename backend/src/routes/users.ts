@@ -30,6 +30,8 @@ const formatUserResponse = (user: any) => ({
   themePreference: user.themePreference || "system",
   summaryPreference: user.summaryPreference || "concise",
   hasSeenSummaryPreferencePrompt: user.hasSeenSummaryPreferencePrompt || false,
+  translationPreference: user.translationPreference || "disabled",
+  preferredLanguage: user.preferredLanguage || "en",
   createdAt: typeof user.createdAt === 'string' ? user.createdAt : new Date(user.createdAt).toISOString(),
   updatedAt: typeof user.updatedAt === 'string' ? user.updatedAt : new Date(user.updatedAt).toISOString(),
 });
@@ -73,7 +75,7 @@ users.post("/", zValidator("json", createUserRequestSchema), async (c) => {
 // PATCH /api/users/:id - Update user
 users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   const id = c.req.param("id");
-  const { name, bio, image, birthdate, hasCompletedOnboarding, themePreference, summaryPreference, hasSeenSummaryPreferencePrompt, timezone } = c.req.valid("json");
+  const { name, bio, image, birthdate, hasCompletedOnboarding, themePreference, summaryPreference, hasSeenSummaryPreferencePrompt, timezone, translationPreference, preferredLanguage } = c.req.valid("json");
   const authHeader = c.req.header("Authorization");
   const token = authHeader?.replace("Bearer ", "");
 
@@ -87,6 +89,8 @@ users.patch("/:id", zValidator("json", updateUserRequestSchema), async (c) => {
   if (summaryPreference !== undefined) updateData.summaryPreference = summaryPreference;
   if (hasSeenSummaryPreferencePrompt !== undefined) updateData.hasSeenSummaryPreferencePrompt = hasSeenSummaryPreferencePrompt;
   if (timezone !== undefined) updateData.timezone = timezone;
+  if (translationPreference !== undefined) updateData.translationPreference = translationPreference;
+  if (preferredLanguage !== undefined) updateData.preferredLanguage = preferredLanguage;
 
   // Use user-scoped client if token exists, otherwise fall back to db (admin)
   const client = token ? createUserClient(token) : db;

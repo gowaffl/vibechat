@@ -534,6 +534,10 @@ export default function PersonalChatScreen() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [showAttachmentsMenu, setShowAttachmentsMenu] = useState(false);
+  
+  // New modal-based AI tools state (matching ChatScreen)
+  const [imageGenSheetMode, setImageGenSheetMode] = useState<"prompt" | "generate">("generate");
+  const [imageGenType, setImageGenType] = useState<"image" | "meme">("image");
   const [streaming, setStreaming] = useState<StreamingState>({
     isStreaming: false,
     content: "",
@@ -1245,7 +1249,89 @@ export default function PersonalChatScreen() {
     setAttachedImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Handle image generation
+  // Handler for picking a single reference image (for image generation)
+  const pickReferenceImage = async (): Promise<string | null> => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "images",
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const pickedImage = result.assets[0];
+        
+        // Compress and resize
+        const manipResult = await ImageManipulator.manipulateAsync(
+          pickedImage.uri,
+          [{ resize: { width: 800 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        );
+
+        return manipResult.uri;
+      }
+      return null;
+    } catch (error) {
+      console.error("[PersonalChat] Error picking reference image:", error);
+      Alert.alert("Error", "Failed to pick reference image");
+      return null;
+    }
+  };
+
+  // Handler to open Image Generator in prompt mode
+  const handleOpenImageGenerator = (type: "image" | "meme") => {
+    console.log("[PersonalChat] Opening image generator in prompt mode for:", type);
+    setShowAttachmentsMenu(false);
+    setImageGenType(type);
+    setImageGenSheetMode("prompt");
+    // Set a placeholder to trigger the sheet visibility
+    setGeneratedImageUrl("");
+    setShowImageGenerator(true);
+  };
+
+  // Handler for image generation from prompt modal (with reference images)
+  const handleImageGenerateFromPrompt = async (prompt: string, referenceImages: string[]) => {
+    console.log("[PersonalChat] Image generate from prompt:", prompt, "refs:", referenceImages.length);
+    
+    // Transition to generating phase
+    setImageGenSheetMode("generate");
+    
+    // Track keyboard state
+    if (isInputFocused.current) {
+      wasKeyboardOpenForImageGen.current = true;
+      Keyboard.dismiss();
+    }
+    
+    try {
+      setIsGeneratingImage(true);
+      
+      // Handle reference images upload if any
+      if (referenceImages.length > 0) {
+        // Call generation API with reference images
+        // For now, just generate without references (matching existing behavior)
+        console.log("[PersonalChat] Generating with reference images:", referenceImages.length);
+      }
+      
+      // Call the existing image generation
+      const response = await api.post<{ success: boolean; imageUrl: string }>("/api/images/generate", {
+        prompt,
+      });
+      
+      if (response.success) {
+        setGeneratedImageUrl(response.imageUrl);
+      }
+    } catch (error) {
+      console.error("[PersonalChat] Image generation failed:", error);
+      Alert.alert("Error", "Failed to generate image");
+      // Reset sheet mode if failed
+      setImageGenSheetMode("prompt");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  // Handle image generation (existing - used for edit from preview)
   const handleGenerateImage = useCallback(async (prompt: string) => {
     try {
       setIsGeneratingImage(true);
@@ -2121,10 +2207,7 @@ export default function PersonalChatScreen() {
         onClose={() => setShowAttachmentsMenu(false)}
         onTakePhoto={handleTakePhoto}
         onPickImage={handlePickImage}
-        onGenerateImage={() => {
-          setShowAttachmentsMenu(false);
-          setTimeout(() => setShowImageGenerator(true), 200);
-        }}
+        onGenerateImage={() => handleOpenImageGenerator("image")}
         onWebSearch={handleWebSearch}
       />
 
@@ -2142,12 +2225,24 @@ export default function PersonalChatScreen() {
         onClose={() => {
           setShowImageGenerator(false);
           setGeneratedImageUrl(null);
+          setImageGenSheetMode("generate"); // Reset mode
         }}
-        onMinimize={() => setShowImageGenerator(false)}
+        onMinimize={() => {
+          setShowImageGenerator(false);
+          // Reset mode when minimizing from prompt phase
+          if (imageGenSheetMode === "prompt") {
+            setGeneratedImageUrl(null);
+          }
+        }}
         imageUrl={generatedImageUrl}
         isProcessing={isGeneratingImage}
         onAccept={handleAcceptGeneratedImage}
         onEdit={handleGenerateImage}
+        // New props for prompt mode
+        mode={imageGenSheetMode}
+        generationType={imageGenType}
+        onGenerate={handleImageGenerateFromPrompt}
+        onPickImage={pickReferenceImage}
       />
       
       {/* Image Viewer Modal */}

@@ -26,6 +26,8 @@ export const userSchema = z.object({
   summaryPreference: z.enum(["concise", "detailed"]).default("concise"), // AI catch-up summary preference
   hasSeenSummaryPreferencePrompt: z.boolean().default(false), // Whether user has seen the first-time preference prompt
   timezone: z.string().default("America/New_York"), // IANA timezone (e.g., "America/New_York", "Europe/London")
+  translationPreference: z.enum(["enabled", "disabled"]).default("disabled").optional(), // Auto-translate foreign messages
+  preferredLanguage: z.string().default("en").optional(), // Preferred language code for translations (e.g., "en", "es", "fr")
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -250,6 +252,8 @@ export const updateUserRequestSchema = z.object({
   summaryPreference: z.enum(["concise", "detailed"]).optional(),
   hasSeenSummaryPreferencePrompt: z.boolean().optional(),
   timezone: z.string().optional(), // IANA timezone
+  translationPreference: z.enum(["enabled", "disabled"]).optional(), // Auto-translate preference
+  preferredLanguage: z.string().optional(), // User's preferred language (ISO 639-1 code)
 });
 export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
 export const updateUserResponseSchema = userSchema;

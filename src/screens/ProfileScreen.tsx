@@ -90,6 +90,8 @@ const ProfileScreen = () => {
   const [preferredLanguage, setPreferredLanguage] = useState(user?.preferredLanguage || "en");
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false);
+  const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(user?.translationPreference === "enabled");
+  const [isUpdatingAutoTranslate, setIsUpdatingAutoTranslate] = useState(false);
 
   // Reset image error state when user image changes
   React.useEffect(() => {
@@ -232,6 +234,26 @@ const ProfileScreen = () => {
       Alert.alert("Error", "Failed to update preferred language");
     } finally {
       setIsUpdatingLanguage(false);
+    }
+  };
+
+  const handleToggleAutoTranslate = async (value: boolean) => {
+    if (!user?.id || isUpdatingAutoTranslate) return;
+
+    const previousValue = autoTranslateEnabled;
+    setAutoTranslateEnabled(value);
+    setIsUpdatingAutoTranslate(true);
+
+    try {
+      const translationPreference = value ? "enabled" : "disabled";
+      await api.patch(`/api/users/${user.id}`, { translationPreference });
+      await updateUser({ translationPreference });
+    } catch (error) {
+      console.error("Failed to update auto-translate preference:", error);
+      setAutoTranslateEnabled(previousValue);
+      Alert.alert("Error", "Failed to update auto-translate preference");
+    } finally {
+      setIsUpdatingAutoTranslate(false);
     }
   };
 
@@ -731,41 +753,75 @@ const ProfileScreen = () => {
               </View>
             </View>
 
-            {/* Preferred Language */}
+            {/* Translation Settings */}
             <View className="mb-6">
               <Text className="text-sm font-semibold mb-3 ml-1" style={{ color: colors.textSecondary }}>
-                PREFERRED LANGUAGE
+                TRANSLATION
               </Text>
-              <Pressable
-                onPress={() => setShowLanguagePicker(true)}
-                disabled={isUpdatingLanguage}
-                style={({ pressed }) => ({
-                  opacity: pressed || isUpdatingLanguage ? 0.7 : 1,
-                })}
+              <View
+                className="rounded-2xl"
+                style={{
+                  backgroundColor: colors.inputBackground,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  overflow: "hidden",
+                }}
               >
+                {/* Auto-Translate Toggle */}
                 <View
-                  className="rounded-2xl px-5 py-4"
+                  className="px-5 py-4"
                   style={{
-                    backgroundColor: colors.inputBackground,
-                    borderWidth: 1,
-                    borderColor: colors.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
                   }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                    <Languages size={20} color={colors.primary} />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
+                        Auto-Translate Messages
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
+                        Automatically translate foreign language messages
+                      </Text>
+                    </View>
+                  </View>
+                  {isUpdatingAutoTranslate ? (
+                    <LuxeLogoLoader size="small" />
+                  ) : (
+                    <Switch
+                      value={autoTranslateEnabled}
+                      onValueChange={handleToggleAutoTranslate}
+                      trackColor={{ false: "#333333", true: colors.primary }}
+                      thumbColor={autoTranslateEnabled ? "#FFFFFF" : "#666666"}
+                    />
+                  )}
+                </View>
+
+                {/* Preferred Language Selector */}
+                <Pressable
+                  onPress={() => setShowLanguagePicker(true)}
+                  disabled={isUpdatingLanguage}
+                  className="px-5 py-4"
+                  style={({ pressed }) => ({
+                    opacity: pressed || isUpdatingLanguage ? 0.7 : 1,
+                  })}
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                     <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                      <Languages size={20} color={colors.primary} />
+                      <Text style={{ fontSize: 20 }}>
+                        {LANGUAGES.find(l => l.code === preferredLanguage)?.flag || "🌐"}
+                      </Text>
                       <View style={{ marginLeft: 12, flex: 1 }}>
                         <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
-                          Default Translation Language
+                          Preferred Language
                         </Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
-                          <Text style={{ fontSize: 16, marginRight: 6 }}>
-                            {LANGUAGES.find(l => l.code === preferredLanguage)?.flag || "🌐"}
-                          </Text>
-                          <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-                            {LANGUAGES.find(l => l.code === preferredLanguage)?.name || "English"}
-                          </Text>
-                        </View>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
+                          {LANGUAGES.find(l => l.code === preferredLanguage)?.name || "English"}
+                        </Text>
                       </View>
                     </View>
                     {isUpdatingLanguage ? (
@@ -774,8 +830,23 @@ const ProfileScreen = () => {
                       <ChevronRight size={20} color={colors.textSecondary} />
                     )}
                   </View>
-                </View>
-              </Pressable>
+                </Pressable>
+              </View>
+              
+              {/* Info text when auto-translate is enabled */}
+              {autoTranslateEnabled && (
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                    marginTop: 8,
+                    marginLeft: 4,
+                    lineHeight: 18,
+                  }}
+                >
+                  Messages in other languages will be automatically translated to {LANGUAGES.find(l => l.code === preferredLanguage)?.name || "English"}. You can disable this for specific chats.
+                </Text>
+              )}
             </View>
 
             {/* Save Button */}

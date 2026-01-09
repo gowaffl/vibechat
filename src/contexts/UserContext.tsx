@@ -8,7 +8,7 @@ interface UserContextType {
   user: User | null;
   loading: boolean;
   isAuthenticated: boolean;
-  updateUser: (updates: { name?: string; bio?: string; image?: string; birthdate?: string; hasCompletedOnboarding?: boolean; summaryPreference?: "concise" | "detailed"; hasSeenSummaryPreferencePrompt?: boolean }) => Promise<void>;
+  updateUser: (updates: { name?: string; bio?: string; image?: string; birthdate?: string; hasCompletedOnboarding?: boolean; summaryPreference?: "concise" | "detailed"; hasSeenSummaryPreferencePrompt?: boolean; translationPreference?: "enabled" | "disabled"; preferredLanguage?: string }) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -88,7 +88,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const updateUser = async (updates: { name?: string; bio?: string; image?: string; birthdate?: string; hasCompletedOnboarding?: boolean; summaryPreference?: "concise" | "detailed"; hasSeenSummaryPreferencePrompt?: boolean }) => {
+  const updateUser = async (updates: { name?: string; bio?: string; image?: string; birthdate?: string; hasCompletedOnboarding?: boolean; summaryPreference?: "concise" | "detailed"; hasSeenSummaryPreferencePrompt?: boolean; translationPreference?: "enabled" | "disabled"; preferredLanguage?: string }) => {
     if (!user) {
       console.error("[UserContext] Cannot update user - user is null");
       throw new Error("Cannot update user - user is null. Please restart the app.");

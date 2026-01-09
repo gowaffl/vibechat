@@ -24,6 +24,7 @@ import {
   TouchableOpacity,
   AppState,
   AppStateStatus,
+  Switch,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -1853,58 +1854,40 @@ const ChatScreen = () => {
     }
   };
 
-  // Translation handlers
-  const handleTranslationToggle = async (enabled: boolean) => {
-    console.log("[Translation] Toggle translation:", enabled);
-    setTranslationEnabled(enabled);
+  // Translation handlers - Now uses per-chat disable toggle (inverted from before)
+  const handleToggleAutoTranslateForChat = async (disabled: boolean) => {
+    console.log("[Translation] Toggle auto-translate disabled for chat:", disabled);
+    setAutoTranslateDisabledForChat(disabled);
     
-    // Persist to backend
+    // Persist to backend (translationEnabled = !disabled)
     try {
       await api.patch(`/api/chats/${chatId}/translation`, {
         userId: user?.id,
-        translationEnabled: enabled
+        translationEnabled: !disabled
       });
-      console.log("[Translation] Saved chat translation settings to server:", enabled);
+      console.log("[Translation] Saved chat auto-translate disabled to server:", disabled);
     } catch (error) {
       console.error("[Translation] Failed to save chat translation settings:", error);
     }
     
-    // If disabling, clear translations
-    if (!enabled) {
-      console.log("[Translation] Clearing translations");
+    // If disabling for this chat, clear translations
+    if (disabled) {
+      console.log("[Translation] Clearing translations (disabled for this chat)");
       setTranslatedMessages({});
+      setShowingOriginal({});
       setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
     }
-    // Note: If enabling, we DON'T translate yet - wait for user to select language
-    // Translation will be triggered by handleLanguageSelect or by the translation effects
+    // If enabling (un-disabling), translations will be triggered by the useEffect
   };
-
-  const handleLanguageSelect = async (language: string) => {
-    console.log("[Translation] Language selected:", language);
-    setTranslationLanguage(language);
-    
-    // Persist to backend
-    try {
-      await api.patch(`/api/chats/${chatId}/translation`, {
-        userId: user?.id,
-        translationLanguage: language
-      });
-      console.log("[Translation] Saved chat language to server:", language);
-      
-      // Clear existing translations and translate with new language
-      setTranslatedMessages({});
-      setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
-      
-      // Now that language is selected, trigger translation if enabled
-      if (translationEnabled && messages && messages.length > 0) {
-        console.log("[Translation] Language selected, translating", messages.length, "messages");
-        await translateVisibleMessages(messages, true);
-      }
-    } catch (error) {
-      console.error("[Translation] Failed to save chat language:", error);
-      Alert.alert("Error", "Failed to update translation language");
-    }
-  };
+  
+  // Toggle showing original text for a specific message
+  const handleToggleShowOriginal = useCallback((messageId: string) => {
+    setShowingOriginal(prev => ({
+      ...prev,
+      [messageId]: !prev[messageId]
+    }));
+    setTranslationVersion(v => v + 1); // Force re-render
+  }, []);
 
   const translateVisibleMessages = useCallback(async (messagesToTranslate: Message[], forceRetranslate: boolean = false) => {
     if (!messagesToTranslate || messagesToTranslate.length === 0) {
@@ -2031,60 +2014,37 @@ const ChatScreen = () => {
     
     const currentLanguage = translationLanguageRef.current;
     
-    // Detect the language of the message first
-    try {
-      const detectionResponse = await api.post<{ languageCode: string; languageName: string }>(
-        "/api/ai-native/detect-language",
-        { text: messageToTranslate.content }
-      );
-      
-      const detectedLang = detectionResponse.languageCode || 'unknown';
-      console.log(`[Translation] Single message ${messageToTranslate.id.slice(0, 8)} detected as: ${detectedLang}, target: ${currentLanguage}`);
-      
-      // Skip translation if message is already in target language
-      if (detectedLang === currentLanguage) {
-        console.log(`[Translation] Skipping translation - message already in target language`);
-        // Store original content as "translation" since it's already in the target language
-        setTranslatedMessages(prev => ({
-          ...prev,
-          [messageToTranslate.id]: messageToTranslate.content
-        }));
-        setTranslationVersion(v => v + 1);
-        return;
-      }
-    } catch (detectionError) {
-      console.error("[Translation] Failed to detect language, proceeding with translation:", detectionError);
-      // Continue with translation if detection fails
-    }
-    
     // Mark message as translating
     setTranslatingMessages(prev => new Set(prev).add(messageToTranslate.id));
     
     try {
+      // Backend handles language detection internally and skips translation if already in target language
+      // This optimization reduces API calls from 2 to 1 per message
       console.log("[Translation] Translating single message:", messageToTranslate.id, "to language:", currentLanguage);
-       const response = await api.post<{ translatedText: string }>(
-         "/api/ai-native/translate",
-         {
-           userId: user?.id,
-           messageId: messageToTranslate.id,
-           targetLanguage: currentLanguage,
-         }
-       );
+      const response = await api.post<{ translatedText: string; skipped?: boolean }>(
+        "/api/ai-native/translate",
+        {
+          userId: user?.id,
+          messageId: messageToTranslate.id,
+          targetLanguage: currentLanguage,
+        }
+      );
       
-       // Safely check for translatedText directly or in data wrapper
-       const responseData = (response as any).data;
-       const translatedText = response.translatedText || (responseData && responseData.translatedText);
+      // Safely check for translatedText directly or in data wrapper
+      const responseData = (response as any).data;
+      const translatedText = response.translatedText || (responseData && responseData.translatedText);
+      const wasSkipped = response.skipped || (responseData && responseData.skipped);
        
-       console.log("[Translation] Received single translation:", translatedText ? "success" : "empty");
+      console.log("[Translation] Received single translation:", translatedText ? "success" : "empty", wasSkipped ? "(already in target language)" : "");
        
-       if (translatedText) {
-         setTranslatedMessages(prev => ({
-           ...prev,
-           [messageToTranslate.id]: translatedText
-         }));
-         setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
-         console.log("[Translation] Updated single message translation");
-       }
+      if (translatedText) {
+        setTranslatedMessages(prev => ({
+          ...prev,
+          [messageToTranslate.id]: translatedText
+        }));
+        setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
+        console.log("[Translation] Updated single message translation");
+      }
     } catch (error) {
       console.error("[Translation] Failed to translate message:", error);
     } finally {
@@ -2215,11 +2175,18 @@ const ChatScreen = () => {
   const [showCreateAIFriend, setShowCreateAIFriend] = useState(false);
   
   // Translation state - Use object instead of Map for proper React re-rendering
-  const [translationEnabled, setTranslationEnabled] = useState(false);
-  const [translationLanguage, setTranslationLanguage] = useState(""); // Empty string = no language selected yet
+  // Auto-translate: Use user's global preference unless explicitly disabled for this chat
+  const [autoTranslateDisabledForChat, setAutoTranslateDisabledForChat] = useState(false); // Per-chat override to disable
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [translationVersion, setTranslationVersion] = useState(0); // Version counter for forcing re-renders
   const [translatingMessages, setTranslatingMessages] = useState<Set<string>>(new Set()); // Messages currently being translated
+  const [showingOriginal, setShowingOriginal] = useState<Record<string, boolean>>({}); // Track which messages show original text
+  
+  // Compute effective translation state from user's global preference and per-chat override
+  const globalAutoTranslateEnabled = user?.translationPreference === "enabled";
+  const translationEnabled = globalAutoTranslateEnabled && !autoTranslateDisabledForChat;
+  const translationLanguage = user?.preferredLanguage || "en";
+  
   const translationLanguageRef = useRef(translationLanguage); // Ref to always get current value
   const translationInProgressRef = useRef(false); // Lock to prevent concurrent translations
   const translationTimeoutRef = useRef<NodeJS.Timeout | null>(null); // For debouncing
@@ -2245,7 +2212,7 @@ const ChatScreen = () => {
     enabled: !!chatId && !!user?.id,
   });
 
-  // Sync translation settings from chat details
+  // Sync translation settings from chat details (per-chat override)
   useEffect(() => {
     if (chatDetails) {
         // Find my membership details if available in the response
@@ -2253,21 +2220,20 @@ const ChatScreen = () => {
         const myMember = chatDetails.members?.find((m: any) => m.userId === user?.id);
         
         if (myMember) {
-            if (myMember.translationEnabled !== undefined) {
-                setTranslationEnabled(myMember.translationEnabled);
-                console.log("[Translation] Loaded chat translation enabled from server:", myMember.translationEnabled);
+            // Per-chat override: translation_enabled === false means disabled for this chat
+            // If translation_enabled is true or undefined, use global preference
+            if (myMember.translationEnabled === false) {
+                setAutoTranslateDisabledForChat(true);
+                console.log("[Translation] Auto-translate explicitly disabled for this chat");
+            } else {
+                setAutoTranslateDisabledForChat(false);
+                console.log("[Translation] Using global auto-translate preference for this chat");
             }
-            if (myMember.translationLanguage) {
-                setTranslationLanguage(myMember.translationLanguage);
-                console.log("[Translation] Loaded chat language from server:", myMember.translationLanguage);
-            }
-        } else if (chatDetails.translationEnabled !== undefined) {
-             // Fallback if returned at top level (modified endpoint does this)
-            setTranslationEnabled(chatDetails.translationEnabled);
-            // Only set language if it's not empty
-            if (chatDetails.translationLanguage) {
-                setTranslationLanguage(chatDetails.translationLanguage);
-            }
+        } else if (chatDetails.translationEnabled === false) {
+             // Fallback if returned at top level
+            setAutoTranslateDisabledForChat(true);
+        } else {
+            setAutoTranslateDisabledForChat(false);
         }
     }
   }, [chatDetails, user?.id]);
@@ -2813,103 +2779,46 @@ const ChatScreen = () => {
               // Translate new message in real-time if translation is enabled AND a language is selected
               const currentLanguage = translationLanguageRef.current;
               if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "") {
+                // Backend handles language detection internally - this optimization reduces API calls from 2 to 1
+                setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
+                
                 try {
-                  // First, detect the language of the new message
-                  const detectionResponse = await api.post<{ languageCode: string; languageName: string }>(
-                    "/api/ai-native/detect-language",
-                    { text: newMessage.content }
+                  console.log('[Translation] Translating new real-time message:', newMessage.id, 'to language:', currentLanguage);
+                  const translateResponse = await api.post<{ translatedText: string; skipped?: boolean }>(
+                    "/api/ai-native/translate",
+                    {
+                      userId: user?.id,
+                      messageId: newMessage.id,
+                      targetLanguage: currentLanguage,
+                    }
                   );
+                   
+                  // Safely check for translatedText directly or in data wrapper
+                  const responseData = (translateResponse as any).data;
+                  const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
+                  const wasSkipped = translateResponse.skipped || (responseData && responseData.skipped);
                   
-                  const detectedLang = detectionResponse.languageCode || 'unknown';
-                  console.log(`[Translation] Real-time message ${newMessage.id.slice(0, 8)} detected as: ${detectedLang}, target: ${currentLanguage}`);
-                  
-                  // Skip translation if message is already in target language
-                  if (detectedLang === currentLanguage) {
-                    console.log('[Translation] Skipping real-time translation - message already in target language');
-                    // Store original content as "translation" since it's already in the target language
+                  console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty', wasSkipped ? '(already in target language)' : '');
+                   
+                  if (translatedText) {
                     setTranslatedMessages(prev => ({
                       ...prev,
-                      [newMessage.id]: newMessage.content
+                      [newMessage.id]: translatedText
                     }));
-                    setTranslationVersion(v => v + 1);
-                  } else {
-                    // Language differs, proceed with translation
-                    // Mark message as translating
-                    setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
-                    
-                    try {
-                      console.log('[Translation] Translating new real-time message:', newMessage.id, 'to language:', currentLanguage);
-                      const translateResponse = await api.post<{ translatedText: string }>(
-                        "/api/ai-native/translate",
-                        {
-                          userId: user?.id,
-                          messageId: newMessage.id,
-                          targetLanguage: currentLanguage,
-                        }
-                      );
-                       
-                      // Safely check for translatedText directly or in data wrapper (same as translateSingleMessage)
-                      const responseData = (translateResponse as any).data;
-                      const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
-                      
-                      console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty');
-                       
-                      if (translatedText) {
-                        setTranslatedMessages(prev => ({
-                          ...prev,
-                          [newMessage.id]: translatedText
-                        }));
-                        setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
-                        console.log('[Translation] Updated real-time message translation');
-                      }
-                    } catch (translateError) {
-                      console.error('[Translation] Failed to translate new message:', translateError);
-                    } finally {
-                      // Remove message from translating set
-                      setTranslatingMessages(prev => {
-                        const newSet = new Set(prev);
-                        newSet.delete(newMessage.id);
-                        return newSet;
-                      });
-                    }
+                    setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
+                    console.log('[Translation] Updated real-time message translation');
                   }
-                } catch (detectionError) {
-                  console.error('[Translation] Failed to detect language for real-time message:', detectionError);
-                  // If detection fails, proceed with translation as fallback
-                  setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
-                  
-                  try {
-                    console.log('[Translation] Translating new real-time message (detection failed):', newMessage.id, 'to language:', currentLanguage);
-                    const translateResponse = await api.post<{ translatedText: string }>(
-                      "/api/ai-native/translate",
-                      {
-                        userId: user?.id,
-                        messageId: newMessage.id,
-                        targetLanguage: currentLanguage,
-                      }
-                    );
-                     
-                    const responseData = (translateResponse as any).data;
-                    const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
-                    
-                    if (translatedText) {
-                      setTranslatedMessages(prev => ({
-                        ...prev,
-                        [newMessage.id]: translatedText
-                      }));
-                      setTranslationVersion(v => v + 1);
-                    }
-                  } catch (translateError) {
-                    console.error('[Translation] Failed to translate new message:', translateError);
-                  } finally {
-                    setTranslatingMessages(prev => {
-                      const newSet = new Set(prev);
-                      newSet.delete(newMessage.id);
-                      return newSet;
-                    });
-                  }
+                } catch (translateError) {
+                  console.error('[Translation] Failed to translate new message:', translateError);
+                } finally {
+                  // Remove message from translating set
+                  setTranslatingMessages(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(newMessage.id);
+                    return newSet;
+                  });
                 }
-               }
+              }
                
                setAllMessages(prev => {
                  
@@ -7318,11 +7227,34 @@ const ChatScreen = () => {
                     />
                  </View>
               ) : (
-                        <MessageText 
-                          content={translatedMessages[message.id] || message.content} 
-                          style={{ color: isDark ? '#E0E0E0' : '#1C1C1E' }}
-                          isOwnMessage={false}
-                        />
+                <>
+                  <MessageText 
+                    content={
+                      translationEnabled && translatedMessages[message.id] && translatedMessages[message.id] !== message.content
+                        ? (showingOriginal[message.id] ? message.content : translatedMessages[message.id]!)
+                        : message.content
+                    } 
+                    style={{ color: isDark ? '#E0E0E0' : '#1C1C1E' }}
+                    isOwnMessage={false}
+                  />
+                  {/* Translation indicator for TL;DR */}
+                  {translationEnabled && translatedMessages[message.id] && translatedMessages[message.id] !== message.content && (
+                    <Pressable
+                      onPress={() => handleToggleShowOriginal(message.id)}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingTop: 6,
+                        gap: 4,
+                      }}
+                    >
+                      <Languages size={12} color={colors.textSecondary} />
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: "500" }}>
+                        {showingOriginal[message.id] ? "Show Translation" : "Show Original"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
               )}
             </View>
           </View>
@@ -7469,6 +7401,42 @@ const ChatScreen = () => {
       const isHighlighted = highlightedMessageId === message.id;
       const messageVibe = message.vibeType;
       const vibeConfig = messageVibe ? VIBE_CONFIG[messageVibe] : null;
+      
+      // Translation helpers
+      const isMessageTranslated = translationEnabled && translatedMessages[message.id] && translatedMessages[message.id] !== message.content;
+      const isShowingOriginal = showingOriginal[message.id] === true;
+      const getDisplayContent = () => {
+        if (!translationEnabled || !translatedMessages[message.id]) {
+          return message.content;
+        }
+        // If user wants to see original, show original
+        if (isShowingOriginal) {
+          return message.content;
+        }
+        // Otherwise show translated
+        return translatedMessages[message.id]!;
+      };
+      
+      // Translation indicator component
+      const TranslationIndicator = () => {
+        if (!isMessageTranslated) return null;
+        return (
+          <Pressable
+            onPress={() => handleToggleShowOriginal(message.id)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingTop: 6,
+              gap: 4,
+            }}
+          >
+            <Languages size={12} color={colors.textSecondary} />
+            <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: "500" }}>
+              {isShowingOriginal ? "Show Translation" : "Show Original"}
+            </Text>
+          </Pressable>
+        );
+      };
       
       // Dynamic border radius for grouped messages
       // Inner corners (4px) where messages connect, outer corners (20px) at boundaries
@@ -7674,14 +7642,13 @@ const ChatScreen = () => {
                     expandButtonColor={isCurrentUser ? colors.primary : colors.text}
                   >
                     <MessageText
-                      content={translationEnabled && translatedMessages[message.id] 
-                        ? translatedMessages[message.id]! 
-                        : message.content}
+                      content={getDisplayContent()}
                       mentions={message.mentions}
                       style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
                     />
                   </TruncatedText>
+                  <TranslationIndicator />
                 </View>
               )}
             </View>
@@ -7730,14 +7697,13 @@ const ChatScreen = () => {
                     expandButtonColor={isCurrentUser ? colors.primary : colors.text}
                   >
                     <MessageText
-                      content={translationEnabled && translatedMessages[message.id] 
-                        ? translatedMessages[message.id]! 
-                        : message.content}
+                      content={getDisplayContent()}
                       mentions={message.mentions}
                       style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
                     />
                   </TruncatedText>
+                  <TranslationIndicator />
                 </View>
               )}
             </View>
@@ -7891,14 +7857,13 @@ const ChatScreen = () => {
                     expandButtonColor={isCurrentUser ? colors.primary : colors.text}
                   >
                     <MessageText
-                      content={translationEnabled && translatedMessages[message.id] 
-                        ? translatedMessages[message.id]! 
-                        : message.content}
+                      content={getDisplayContent()}
                       mentions={message.mentions}
                       style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                       isOwnMessage={isCurrentUser}
                     />
                   </TruncatedText>
+                  <TranslationIndicator />
                 </View>
               )}
             </View>
@@ -7993,11 +7958,10 @@ const ChatScreen = () => {
                         >
                           {translationEnabled && translatingMessages.has(message.id) 
                             ? "Translating..."
-                            : translationEnabled && translatedMessages[message.id] 
-                              ? translatedMessages[message.id]! 
-                              : message.content}
+                            : getDisplayContent()}
                         </Markdown>
                       </TruncatedText>
+                      <TranslationIndicator />
                       {message.editedAt && (
                         <Text style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)", fontStyle: "italic", marginTop: 4 }}>
                           Edited
@@ -8020,15 +7984,14 @@ const ChatScreen = () => {
                           />
                         ) : (
                           <MessageText
-                            content={translationEnabled && translatedMessages[message.id] 
-                              ? translatedMessages[message.id]! 
-                              : message.content}
+                            content={getDisplayContent()}
                             mentions={message.mentions}
                             style={{ fontSize: 15, color: colors.text, lineHeight: 20 }}
                             isOwnMessage={isCurrentUser}
                           />
                         )}
                       </TruncatedText>
+                      <TranslationIndicator />
                       {message.editedAt && (
                         <Text style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)", fontStyle: "italic", marginTop: 4 }}>
                           Edited
@@ -10908,7 +10871,7 @@ const ChatScreen = () => {
           chatInputHeight={chatInputHeight}
         />
 
-        {/* Translation Settings Modal */}
+        {/* Auto-Translate Settings Modal */}
         <Modal
           visible={showTranslationModal}
           transparent
@@ -10953,7 +10916,7 @@ const ChatScreen = () => {
                   style={{ padding: 24 }}
                 >
                   {/* Header */}
-                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
                     <View style={{
                       width: 36,
                       height: 36,
@@ -10967,7 +10930,7 @@ const ChatScreen = () => {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontSize: 20, fontWeight: "700" }}>
-                        Translation Settings
+                        Auto-Translate
                       </Text>
                     </View>
                     <Pressable onPress={() => setShowTranslationModal(false)}>
@@ -10975,13 +10938,79 @@ const ChatScreen = () => {
                     </Pressable>
                   </View>
 
-                  {/* Translation Toggle */}
-                  <TranslationToggle
-                    enabled={translationEnabled}
-                    selectedLanguage={translationLanguage}
-                    onToggle={handleTranslationToggle}
-                    onLanguageSelect={handleLanguageSelect}
-                  />
+                  {/* Global Status */}
+                  <View style={{
+                    backgroundColor: globalAutoTranslateEnabled 
+                      ? (isDark ? "rgba(52, 199, 89, 0.15)" : "rgba(52, 199, 89, 0.1)")
+                      : (isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)"),
+                    borderRadius: 12,
+                    padding: 14,
+                    marginBottom: 16,
+                    borderWidth: 1,
+                    borderColor: globalAutoTranslateEnabled ? "rgba(52, 199, 89, 0.3)" : colors.border,
+                  }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <View style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: globalAutoTranslateEnabled ? "#34C759" : colors.textTertiary,
+                      }} />
+                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: "500", flex: 1 }}>
+                        {globalAutoTranslateEnabled 
+                          ? `Auto-translating to ${translationLanguage === "en" ? "English" : translationLanguage}`
+                          : "Auto-translate is off"}
+                      </Text>
+                    </View>
+                    {!globalAutoTranslateEnabled && (
+                      <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 8, lineHeight: 18 }}>
+                        Enable auto-translate in Profile Settings to automatically translate messages in all chats.
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Per-Chat Override (only show if global is enabled) */}
+                  {globalAutoTranslateEnabled && (
+                    <View style={{
+                      backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+                      borderRadius: 12,
+                      padding: 14,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}>
+                            Disable for this chat
+                          </Text>
+                          <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>
+                            Turn off auto-translate only in this conversation
+                          </Text>
+                        </View>
+                        <Switch
+                          value={autoTranslateDisabledForChat}
+                          onValueChange={handleToggleAutoTranslateForChat}
+                          trackColor={{ false: "#333333", true: "#FF9500" }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Current status info */}
+                  {globalAutoTranslateEnabled && (
+                    <Text style={{ 
+                      color: colors.textSecondary, 
+                      fontSize: 12, 
+                      marginTop: 16, 
+                      textAlign: "center",
+                      lineHeight: 18,
+                    }}>
+                      {autoTranslateDisabledForChat 
+                        ? "Messages in this chat will not be translated." 
+                        : "Messages in other languages will be automatically translated. Tap a translated message to see the original."}
+                    </Text>
+                  )}
                 </LinearGradient>
               </BlurView>
             </Pressable>

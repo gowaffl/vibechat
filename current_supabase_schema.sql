@@ -425,3 +425,12 @@ CREATE POLICY "Users can create their own agent usage" ON user_agent_usage
 CREATE POLICY "Users can update their own agent usage" ON user_agent_usage
   FOR UPDATE USING (auth.uid()::text = "userId");
 
+-- ============================================================================
+-- AUTO-TRANSLATE PREFERENCES (2026-01-08)
+-- ============================================================================
+-- User columns for auto-translate feature:
+-- - translationPreference: "enabled" | "disabled" (default: "disabled")
+-- - preferredLanguage: ISO 639-1 language code (default: "en")
+--
+-- Updated default value from 'off' to 'disabled' for consistency with new schema
+ALTER TABLE "user" ALTER COLUMN "translationPreference" SET DEFAULT 'disabled';
