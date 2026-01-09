@@ -226,8 +226,8 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     } else {
       // Create new conversation and navigate
       try {
-        const newConversation = await createConversation.mutateAsync({});
-        navigation.navigate("PersonalChat", { conversationId: newConversation.id });
+        const result = await createConversation.mutateAsync({});
+        navigation.navigate("PersonalChat", { conversationId: result.conversation.id });
       } catch (error) {
         console.error("[PersonalChatListView] Error creating conversation:", error);
         Alert.alert("Error", "Failed to create new conversation");

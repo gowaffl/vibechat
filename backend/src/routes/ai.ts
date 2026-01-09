@@ -4,12 +4,12 @@ import type { AppType } from "../types";
 import { db } from "../db";
 import { openai } from "../env";
 import { z } from "zod";
+import type OpenAI from "openai";
 import * as fs from "fs/promises";
 import * as path from "path";
 import {
   acquireAIResponseLock,
   releaseAIResponseLock,
-  isAIResponseLocked,
 } from "../services/ai-locks";
 import { executeGPT51Response } from "../services/gpt-responses";
 import { saveResponseImages } from "../services/image-storage";
@@ -212,7 +212,7 @@ ai.post("/chat", zValidator("json", aiChatRequestSchema), async (c) => {
       .limit(100);
 
     // Decrypt any encrypted messages
-    const decryptedMessages = await decryptMessages(allMessages);
+    const decryptedMessages = await decryptMessages(allMessages || []);
 
     // Reverse to get chronological order
     const messagesInOrder = decryptedMessages.reverse();
@@ -346,7 +346,7 @@ Respond naturally and concisely based on the conversation.`;
       }, 400);
     }
 
-    const tools = [
+    const tools: OpenAI.Responses.Tool[] = [
       { type: "web_search" },
       { type: "image_generation" },
       { type: "code_interpreter", container: { type: "auto" } },
@@ -363,12 +363,12 @@ Respond naturally and concisely based on the conversation.`;
     
     let response;
     try {
+      // Note: gpt-5.1 does not support temperature parameter
       response = await executeGPT51Response({
         systemPrompt,
         userPrompt: userInput,
         tools,
         reasoningEffort: "none",
-        temperature: 1,
         maxTokens: 2048,
       });
     } catch (gptError: any) {
@@ -673,7 +673,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
         errorData = JSON.parse(errorText);
       } catch {
         // Not JSON, use raw text
-        return c.json({ error: "Failed to generate image", details: errorText }, response.status);
+        return c.json({ error: "Failed to generate image", details: errorText }, response.status as 400 | 401 | 403 | 404 | 429 | 500);
       }
 
       // Check for rate limiting (429)
@@ -700,10 +700,10 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       return c.json({
         error: "Failed to generate image",
         details: errorData.error?.message || errorText
-      }, response.status);
+      }, response.status as 400 | 401 | 403 | 404 | 429 | 500);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     console.log("[AI Image] Response data:", JSON.stringify(data, null, 2));
 
     const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
@@ -971,7 +971,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
         errorData = JSON.parse(errorText);
       } catch {
         // Not JSON, use raw text
-        return c.json({ error: "Failed to generate meme", details: errorText }, response.status);
+        return c.json({ error: "Failed to generate meme", details: errorText }, response.status as 400 | 401 | 403 | 404 | 429 | 500);
       }
 
       // Check for rate limiting (429)
@@ -998,10 +998,10 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       return c.json({
         error: "Failed to generate meme",
         details: errorData.error?.message || errorText
-      }, response.status);
+      }, response.status as 400 | 401 | 403 | 404 | 429 | 500);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     console.log("[AI Meme] Response data:", JSON.stringify(data, null, 2));
 
     const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
@@ -1274,7 +1274,7 @@ ai.post("/edit-image", zValidator("json", editImageRequestSchema), async (c) => 
       return c.json({ error: "Failed to edit image", details: errorText }, 500);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
 
     if (!imagePart) {
@@ -1376,7 +1376,7 @@ ai.post("/generate-group-avatar", async (c) => {
       .limit(100);
 
     // Decrypt any encrypted messages
-    const decryptedRecentMessages = await decryptMessages(recentMessages);
+    const decryptedRecentMessages = await decryptMessages(recentMessages || []);
 
     let prompt: string;
 
@@ -1436,7 +1436,7 @@ ai.post("/generate-group-avatar", async (c) => {
         errorData = JSON.parse(errorText);
       } catch {
         // Not JSON, use raw text
-        return c.json({ error: "Failed to generate avatar", details: errorText }, response.status);
+        return c.json({ error: "Failed to generate avatar", details: errorText }, response.status as 400 | 401 | 403 | 404 | 429 | 500);
       }
 
       // Check for rate limiting (429)
@@ -1463,10 +1463,10 @@ ai.post("/generate-group-avatar", async (c) => {
       return c.json({
         error: "Failed to generate avatar",
         details: errorData.error?.message || errorText
-      }, response.status);
+      }, response.status as 400 | 401 | 403 | 404 | 429 | 500);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const imagePart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
 
     if (!imagePart) {
@@ -1612,7 +1612,7 @@ Coffee time? ☕`,
     // Parse the replies with enhanced cleaning
     let replies = responseText
       .split("\n")
-      .map(r => {
+      .map((r: string) => {
         // Remove common prefixes/suffixes that AI might add
         let cleaned = r.trim();
         // Remove numbered lists (1., 2., etc.)
@@ -1623,7 +1623,7 @@ Coffee time? ☕`,
         cleaned = cleaned.replace(/^["'](.*)["']$/, "$1");
         return cleaned.trim();
       })
-      .filter(r => {
+      .filter((r: string) => {
         // Filter criteria:
         // - Must have content
         // - Not too short (at least 1 char)
@@ -1768,7 +1768,7 @@ ai.post("/tldr", zValidator("json", tldrRequestSchema), async (c) => {
         .limit(500);
 
       // Decrypt first
-      const decryptedBatch = await decryptMessages(batch);
+      const decryptedBatch = await decryptMessages(batch || []);
 
       // Filter in memory (simplified logic matching threads.ts)
       messagesToSummarize = decryptedBatch.filter((m: any) => {
@@ -1801,7 +1801,7 @@ ai.post("/tldr", zValidator("json", tldrRequestSchema), async (c) => {
         .order("createdAt", { ascending: false })
         .limit(limit);
 
-      messagesToSummarize = await decryptMessages(recentMessages);
+      messagesToSummarize = await decryptMessages(recentMessages || []);
     }
 
     if (messagesToSummarize.length === 0) {
@@ -1832,30 +1832,60 @@ ai.post("/tldr", zValidator("json", tldrRequestSchema), async (c) => {
     const aiName = aiFriend?.name || "AI Assistant";
     const aiPersonality = aiFriend?.personality ? `\nPersonality: ${aiFriend.personality}` : "";
 
+    // Dynamic limits based on message count - keeps summaries proportionally brief
+    const messageCount = messagesToSummarize.length;
+    let maxBulletPoints: number;
+    let maxTokens: number;
+    let brevityInstruction: string;
+    
+    if (messageCount <= 10) {
+      maxBulletPoints = 3;
+      maxTokens = 300;
+      brevityInstruction = "Be extremely brief. This is a quick glance summary - just the essentials.";
+    } else if (messageCount <= 25) {
+      maxBulletPoints = 4;
+      maxTokens = 400;
+      brevityInstruction = "Be concise. Capture only the most important points.";
+    } else if (messageCount <= 50) {
+      maxBulletPoints = 5;
+      maxTokens = 500;
+      brevityInstruction = "Be focused. Include key decisions and important moments only.";
+    } else {
+      maxBulletPoints = 6;
+      maxTokens = 600;
+      brevityInstruction = "Be comprehensive but efficient. Cover major themes without excessive detail.";
+    }
+
     const systemPrompt = `You are ${aiName}, a helpful AI assistant in a group chat.${aiPersonality}
     
-YOUR TASK: Create a "TL;DR" (Too Long; Didn't Read) summary of the provided conversation messages.
+YOUR TASK: Create a "TL;DR" (Too Long; Didn't Read) summary of ${messageCount} messages.
 
 CONTEXT: ${contextDescription}
-MESSAGE COUNT: ${messagesToSummarize.length}
 
-INSTRUCTIONS:
-1.  **Summary**: Provide a concise, bulleted summary of the key points, decisions, or funny moments.
-2.  **Format**: Use clean Markdown. Use bold for emphasis.
-3.  **Tone**: Casual, helpful, and matching your personality.
-4.  **Citations**: When referring to specific important points, mention who said it (e.g., "Alice suggested...").
-5.  **Structure**:
-    *   **Headline**: A fun, 1-line title for the summary.
-    *   **Key Points**: Bullet points of what happened.
-    *   **Takeaway**: A 1-sentence conclusion or "vibe check" of the conversation.
+CRITICAL RULES:
+- Maximum ${maxBulletPoints} bullet points. No more.
+- ${brevityInstruction}
+- The whole point of TL;DR is to SAVE time. If someone wanted to read everything, they wouldn't ask for a summary.
 
-Do not be overly formal. Keep it useful for someone catching up.`;
+FORMAT (keep it tight):
+**[Catchy 1-line headline]**
 
-    const userPrompt = `Here are the last ${messagesToSummarize.length} messages from the ${threadId ? 'thread' : 'chat'}:
+• Key point 1
+• Key point 2
+${maxBulletPoints >= 3 ? '• Key point 3' : ''}
+${maxBulletPoints >= 4 ? '• Key point 4 (if truly important)' : ''}
 
-${messageText}
+**Bottom line:** [One sentence takeaway]
 
-Please summarize this for me.`;
+STYLE:
+- Casual, not formal
+- Mention names only when essential (e.g., "Alex proposed...")
+- Skip small talk, greetings, and filler
+- Bold only the headline and "Bottom line"`;
+
+    const userPrompt = `Summarize these ${messageCount} messages. Remember: MAX ${maxBulletPoints} bullets.
+
+${messageText}`;
 
     // Set typing indicator - DISABLED for TLDR to allow custom loading UI on frontend
     /*
@@ -1865,13 +1895,13 @@ Please summarize this for me.`;
     */
 
     // Call GPT-5.1 (using same service as chat)
+    // Note: gpt-5.1 does not support temperature parameter
     const response = await executeGPT51Response({
       systemPrompt,
       userPrompt,
       tools: [],
       reasoningEffort: "none",
-      temperature: 0.7,
-      maxTokens: 1000,
+      maxTokens,
     });
 
     const summaryText = response.content || "Could not generate summary.";

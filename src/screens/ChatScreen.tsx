@@ -4796,14 +4796,40 @@ const ChatScreen = () => {
     
     const limit = messageCount === "all" ? 999 : messageCount;
     
-    // Get messages for context
-    const recentMessages = (allMessages || [])
-      .filter((m): m is Message => !("isDateDivider" in m))
-      .slice(0, limit);
+    // Clear any typing indicators
+    setIsAITyping(false);
+    
+    const tldrLoadingId = `tldr-loading-${Date.now()}`;
+    
+    // Create temporary loading message (matches original /tldr implementation)
+    const loadingMessage: Message = {
+      id: tldrLoadingId,
+      chatId: chatId,
+      userId: "system", 
+      content: "",
+      messageType: "system",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      user: {
+        id: "system",
+        name: "TL;DR",
+        phone: "",
+        hasCompletedOnboarding: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        bio: null,
+        image: null
+      },
+      metadata: { isTldr: true, isLoading: true } as any, 
+      reactions: [],
+      isUnsent: false,
+    };
 
-    if (recentMessages.length === 0) {
-      Alert.alert("No Messages", "There are no messages to summarize.");
-      return;
+    // Inject loading message into the appropriate list
+    if (currentThreadId) {
+      setAllThreadMessages(prev => [loadingMessage, ...prev]);
+    } else {
+      setAllMessages(prev => [loadingMessage, ...prev]);
     }
 
     try {
@@ -4813,40 +4839,49 @@ const ChatScreen = () => {
         threadId: currentThreadId || null,
         limit,
       });
-
-      if (response && typeof response === 'object' && 'summary' in response) {
-        const summaryResponse = response as { summary: string };
-        
-        // Create a local TLDR message to display
-        const tldrMessage: PendingMessage = {
-          id: `tldr-${Date.now()}`,
-          chatId,
-          userId: "ai-assistant",
-          content: `📋 **Summary of the last ${recentMessages.length} messages:**\n\n${summaryResponse.summary}`,
-          messageType: "text",
+      
+      // Create final TLDR message (matches original /tldr implementation)
+      const tldrMessage: Message = {
+        id: `tldr-${Date.now()}`,
+        chatId: chatId,
+        userId: "system", 
+        content: response.content,
+        messageType: "system",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        user: {
+          id: "system",
+          name: "TL;DR",
+          phone: "",
+          hasCompletedOnboarding: true,
           createdAt: new Date().toISOString(),
-          user: {
-            id: "ai-assistant",
-            displayName: "AI Assistant",
-            username: "ai",
-            avatarUrl: null,
-            createdAt: new Date().toISOString(),
-          },
-          reactions: [],
-          mentions: [],
-          isPending: false,
-        };
+          updatedAt: new Date().toISOString(),
+          bio: null,
+          image: null
+        },
+        metadata: { isTldr: true } as any,
+        reactions: [],
+        isUnsent: false,
+      };
 
-        // Add to local messages
-        queryClient.setQueryData<Message[]>(["messages", chatId], (old) => {
-          if (!old) return [tldrMessage as Message];
-          return [tldrMessage as Message, ...old];
-        });
-
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Replace loading message with real message
+      if (currentThreadId) {
+        setAllThreadMessages(prev => [tldrMessage, ...prev.filter(m => m.id !== tldrLoadingId)]);
+      } else {
+        setAllMessages(prev => [tldrMessage, ...prev.filter(m => m.id !== tldrLoadingId)]);
       }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error("[ChatScreen] TLDR error:", error);
+      
+      // Remove loading message on error
+      if (currentThreadId) {
+        setAllThreadMessages(prev => prev.filter(m => m.id !== tldrLoadingId));
+      } else {
+        setAllMessages(prev => prev.filter(m => m.id !== tldrLoadingId));
+      }
+      
       Alert.alert("Error", "Failed to generate summary. Please try again.");
     }
   };

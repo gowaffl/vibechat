@@ -239,18 +239,18 @@ export const ImageGeneratorSheet: React.FC<ImageGeneratorSheetProps> = ({
     }
   }, [isVisible, mode]);
 
-  // Update phase based on imageUrl and isProcessing
+  // Update phase based on imageUrl and isProcessing (only in generate mode)
   useEffect(() => {
-    if (mode === "generate" || internalPhase !== "prompt") {
+    // Only manage phase transitions when NOT in prompt mode
+    // This prevents overriding the prompt phase set by the previous effect
+    if (mode !== "prompt") {
       if (imageUrl && !isProcessing) {
         setInternalPhase("preview");
       } else if (isProcessing || !imageUrl) {
-        if (internalPhase !== "prompt") {
-          setInternalPhase("generating");
-        }
+        setInternalPhase("generating");
       }
     }
-  }, [imageUrl, isProcessing, mode, internalPhase]);
+  }, [imageUrl, isProcessing, mode]);
 
   // Handle visibility changes
   useEffect(() => {
