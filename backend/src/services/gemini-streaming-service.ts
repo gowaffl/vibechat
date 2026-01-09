@@ -146,6 +146,16 @@ export function analyzePromptComplexity(userPrompt: string): ThinkingLevel {
 }
 
 /**
+ * Map complexity level to Gemini thinking level
+ * This provides a clean mapping interface for external callers
+ */
+export function mapToGeminiThinkingLevel(complexity: ThinkingLevel): ThinkingLevel {
+  // Gemini 3 uses the same thinking level names as our complexity analysis
+  // This function serves as a mapping layer in case Gemini API changes
+  return complexity;
+}
+
+/**
  * Parse SSE data from Gemini streaming response
  */
 function parseSSEData(line: string): any | null {
