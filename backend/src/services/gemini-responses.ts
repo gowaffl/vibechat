@@ -50,6 +50,11 @@ export interface GeminiImageGenerationOptions {
   prompt: string;
   numberOfImages?: number;
   aspectRatio?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
+  /** Optional reference images to use as basis for image generation */
+  referenceImages?: Array<{
+    base64: string;
+    mimeType: string;
+  }>;
 }
 
 export interface GeminiResponse {
@@ -242,7 +247,8 @@ export async function generateGeminiImage(options: GeminiImageGenerationOptions)
   const {
     prompt,
     numberOfImages = 1,
-    aspectRatio = '1:1'
+    aspectRatio = '1:1',
+    referenceImages = []
   } = options;
 
   const apiKey = process.env.GOOGLE_API_KEY;
@@ -252,12 +258,42 @@ export async function generateGeminiImage(options: GeminiImageGenerationOptions)
 
   console.log('[Gemini Image] Generating image with prompt:', prompt.substring(0, 100) + '...');
   console.log('[Gemini Image] Config: aspectRatio:', aspectRatio, 'numberOfImages:', numberOfImages);
+  console.log('[Gemini Image] Reference images:', referenceImages.length);
+  
+  // Build parts array - reference images first, then text prompt
+  // CRITICAL: Add reference images FIRST in the parts array
+  // The model pays most attention to the first parts for image-to-image generation
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+  
+  // Add all reference images first
+  for (const img of referenceImages) {
+    parts.push({
+      inlineData: {
+        mimeType: img.mimeType,
+        data: img.base64
+      }
+    });
+  }
+  
+  if (referenceImages.length > 0) {
+    console.log(`[Gemini Image] ✅ Including ${referenceImages.length} reference image(s) in request`);
+  }
+  
+  // Build the text prompt with explicit instructions about reference images
+  const finalPrompt = referenceImages.length > 0
+    ? `Using the provided reference image(s) as the PRIMARY BASIS and starting point, ${prompt}. IMPORTANT: You MUST use the reference image(s) as the foundation. Keep the main elements, composition, and style from the reference image(s) and apply the requested modifications.`
+    : prompt;
+  
+  // Add the text prompt
+  parts.push({ text: finalPrompt });
+  
+  console.log(`[Gemini Image] Final parts array has ${parts.length} parts (${referenceImages.length} images + 1 text prompt)`);
   
   // Build request body per Gemini 3 API documentation
   // Reference: https://ai.google.dev/gemini-api/docs/image-generation
   const requestBody: Record<string, any> = {
     contents: [{
-      parts: [{ text: prompt }]
+      parts
     }],
     generationConfig: {
       imageConfig: {

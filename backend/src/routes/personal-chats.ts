@@ -1381,6 +1381,20 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     content: msg.content,
   }));
 
+  // Build metadata for user message - include attached files info
+  const userMessageMetadata: Record<string, any> = {};
+  if (attachedImageUrl) {
+    userMessageMetadata.attachedImageUrls = [attachedImageUrl];
+  }
+  if (files && files.length > 0) {
+    // Store file metadata (name, mimeType) - don't store base64 to save space
+    userMessageMetadata.attachedFiles = files.map(f => ({
+      name: f.name,
+      mimeType: f.mimeType,
+    }));
+    console.log(`[PersonalChats] [Streaming] User message includes ${files.length} attached file(s)`);
+  }
+
   // Save user message immediately
   const { data: userMessage, error: userMsgError } = await db
     .from("personal_message")
@@ -1389,6 +1403,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
       content,
       role: "user",
       imageUrl: attachedImageUrl || null,
+      metadata: Object.keys(userMessageMetadata).length > 0 ? userMessageMetadata : null,
     })
     .select()
     .single();
@@ -1449,6 +1464,12 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
   userPrompt += `User: ${content}`;
   if (attachedImageUrl) {
     userPrompt += `\n[User attached an image: ${attachedImageUrl}]`;
+  }
+  // Add description of attached files to help AI understand what files are attached
+  if (files && files.length > 0) {
+    const fileDescriptions = files.map(f => `${f.name} (${f.mimeType})`).join(', ');
+    userPrompt += `\n[User attached files: ${fileDescriptions}]`;
+    console.log(`[PersonalChats] Added file descriptions to prompt: ${fileDescriptions}`);
   }
 
   // Analyze prompt complexity for adaptive thinking level
@@ -1520,6 +1541,25 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         console.log("[PersonalChats] [Streaming] Image generation request detected");
         metadata.toolsUsed.push("image_generation");
         
+        // Extract image files from attachments to use as reference images
+        const referenceImages: Array<{ base64: string; mimeType: string }> = [];
+        if (files && files.length > 0) {
+          for (const file of files) {
+            // Only include image files as reference images
+            if (file.mimeType?.startsWith('image/') && file.base64) {
+              referenceImages.push({
+                base64: file.base64,
+                mimeType: file.mimeType,
+              });
+              console.log(`[PersonalChats] [Image] Added reference image: ${file.name} (${file.mimeType})`);
+            }
+          }
+        }
+        
+        if (referenceImages.length > 0) {
+          console.log(`[PersonalChats] [Streaming] Using ${referenceImages.length} reference image(s) for generation`);
+        }
+        
         // Notify client that image generation is starting
         await stream.writeSSE({
           event: "tool_call_start",
@@ -1545,6 +1585,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             prompt: content,
             numberOfImages: 1,
             aspectRatio: '1:1',
+            referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
           });
           
           // Clear the frequent ping interval now that generation is complete

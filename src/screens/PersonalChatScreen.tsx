@@ -1575,7 +1575,16 @@ export default function PersonalChatScreen() {
             <View
               style={[
                 styles.userBubble,
-                { backgroundColor: "#6366f1" },
+                { 
+                  backgroundColor: isDark ? "#2D2D2D" : "#3A3A3A",
+                  borderWidth: 1,
+                  borderColor: "rgba(0, 198, 255, 0.3)",
+                  shadowColor: "#00C6FF",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 8,
+                  elevation: 8,
+                },
               ]}
             >
               <Text style={styles.userMessageText}>{message.content}</Text>
@@ -1722,8 +1731,15 @@ export default function PersonalChatScreen() {
     [colors, isDark]
   );
 
+  // Memoize whether to show empty state - prevents flicker on keystroke
+  const shouldShowEmptyState = useMemo(
+    () => messagesWithDividers.length === 0 && !streaming.isStreaming,
+    [messagesWithDividers.length, streaming.isStreaming]
+  );
+
   // Empty state component - positioned towards top for keyboard visibility
-  const EmptyState = () => (
+  // Memoized to prevent recreation on every keystroke
+  const emptyStateComponent = useMemo(() => (
     <View style={styles.emptyStateContainer}>
       <View style={styles.emptyStateContent}>
         <View style={[styles.emptyStateIcon, { backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)" }]}>
@@ -1743,7 +1759,7 @@ export default function PersonalChatScreen() {
         </Text>
       </View>
     </View>
-  );
+  ), [selectedAgent, colors.text, colors.textSecondary, isDark]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1807,8 +1823,8 @@ export default function PersonalChatScreen() {
 
       {/* Messages List */}
       <View style={styles.messagesContainer}>
-        {messagesWithDividers.length === 0 && !streaming.isStreaming ? (
-          <EmptyState />
+        {shouldShowEmptyState ? (
+          emptyStateComponent
         ) : (
           <FlashList
             ref={flatListRef}
