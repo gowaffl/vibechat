@@ -309,29 +309,33 @@ function ImageGenerationShimmer({ isDark, colors }: { isDark: boolean; colors: a
     };
   });
   
+  // Charcoal gray color scheme
+  const charcoalMain = isDark ? "#8a8a8a" : "#4a4a4a";
+  const charcoalShimmer = isDark ? "#a0a0a0" : "#5a5a5a";
+  
   return (
     <Reanimated.View 
       entering={FadeInUp.duration(300)}
       exiting={FadeOut.duration(200)}
       style={[styles.imageGenerationContainer, { 
-        backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.08)",
-        borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)",
+        backgroundColor: isDark ? "rgba(90,90,90,0.15)" : "rgba(74,74,74,0.08)",
+        borderColor: isDark ? "rgba(90,90,90,0.25)" : "rgba(74,74,74,0.15)",
       }]}
     >
       <Reanimated.View style={[styles.imageGenerationPlaceholder, shimmerStyle]}>
         <LinearGradient
           colors={isDark 
-            ? ['#1a1a2e', '#252540', '#1a1a2e']
-            : ['#e8e8f5', '#f5f5fa', '#e8e8f5']
+            ? ['#1a1a1a', '#2a2a2a', '#1a1a1a']
+            : ['#e8e8e8', '#f2f2f2', '#e8e8e8']
           }
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.imageGenerationContent}>
-          <Sparkles size={24} color="#6366f1" strokeWidth={2} />
+          <Sparkles size={24} color={charcoalMain} strokeWidth={2} />
           <ShimmeringText
             text="Creating image..."
-            style={[styles.imageGenerationText, { color: "#6366f1" }]}
-            shimmerColor={isDark ? "#a5a6ff" : "#6366f1"}
+            style={[styles.imageGenerationText, { color: charcoalMain }]}
+            shimmerColor={charcoalShimmer}
             duration={1500}
           />
         </View>
@@ -1130,6 +1134,43 @@ export default function PersonalChatScreen() {
             }
           })
         );
+      }
+
+      // IMPORTANT: Also convert attached images to base64 so they can be used by AI for analysis/generation
+      // Images are local file URIs that need to be converted to base64 for the backend
+      if (images.length > 0) {
+        console.log(`[PersonalChat] Converting ${images.length} attached image(s) to base64`);
+        const imageFilesWithBase64 = await Promise.all(
+          images.map(async (imageUri, index) => {
+            try {
+              const base64 = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              // Determine mime type from URI or default to jpeg
+              const extension = imageUri.split('.').pop()?.toLowerCase();
+              let mimeType = 'image/jpeg';
+              if (extension === 'png') mimeType = 'image/png';
+              else if (extension === 'gif') mimeType = 'image/gif';
+              else if (extension === 'webp') mimeType = 'image/webp';
+              else if (extension === 'heic' || extension === 'heif') mimeType = 'image/heic';
+              
+              console.log(`[PersonalChat] Converted image ${index + 1}: ${mimeType}, base64 length: ${base64.length}`);
+              return {
+                uri: imageUri,
+                name: `image_${index + 1}.${extension || 'jpg'}`,
+                mimeType,
+                base64,
+              };
+            } catch (error) {
+              console.error(`[PersonalChat] Failed to read image ${imageUri}:`, error);
+              return null;
+            }
+          })
+        );
+        // Add successfully converted images to files array
+        const validImageFiles = imageFilesWithBase64.filter((f): f is NonNullable<typeof f> => f !== null);
+        filesWithBase64 = [...filesWithBase64, ...validImageFiles];
+        console.log(`[PersonalChat] Total files to send: ${filesWithBase64.length}`);
       }
 
       // Start SSE streaming
