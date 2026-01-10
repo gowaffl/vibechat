@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { Plus } from "lucide-react-native";
 import Animated, { 
   FadeIn, 
   useAnimatedStyle, 
@@ -28,6 +29,7 @@ import type { AIFriend } from "@/shared/contracts";
 
 interface QuickStartAgentsProps {
   onAgentPress: (agent: AIFriend) => void;
+  onCreateAgent: () => void;
 }
 
 /**
@@ -165,9 +167,113 @@ const AgentAvatar = React.memo(({
 });
 
 /**
+ * Create Agent Avatar Component - Shows "+" icon for creating new agents
+ */
+const CreateAgentAvatar = React.memo(({
+  onPress,
+  isDark,
+  index,
+}: {
+  onPress: () => void;
+  isDark: boolean;
+  index: number;
+}) => {
+  const scale = useSharedValue(1);
+  
+  // Brand cyan color for create button
+  const brandColor = "#00C6FF";
+  const glowColor = "rgba(0, 198, 255, 0.25)";
+  const borderColor = "rgba(0, 198, 255, 0.4)";
+  const iconColor = "rgba(0, 198, 255, 0.9)";
+  
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  
+  const handlePressIn = () => {
+    scale.value = withSpring(0.92, { damping: 15, stiffness: 400 });
+  };
+  
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+  };
+  
+  return (
+    <Animated.View
+      entering={FadeIn.duration(400).delay(index * 80)}
+      style={animatedStyle}
+    >
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onPress();
+        }}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <View style={styles.agentContainer}>
+          {/* Outer glow effect */}
+          <View style={[styles.glowOuter, { shadowColor: brandColor }]}>
+            {/* Glass container */}
+            <View style={[styles.glassContainer, { borderColor }]}>
+              {/* Blur background for glass effect */}
+              <BlurView
+                intensity={isDark ? 40 : 30}
+                tint={isDark ? "dark" : "light"}
+                style={styles.blurFill}
+              />
+              
+              {/* Subtle gradient overlay for depth */}
+              <LinearGradient
+                colors={[
+                  isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.5)",
+                  isDark ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.1)",
+                  isDark ? "rgba(0,0,0,0.05)" : "rgba(0,0,0,0.02)",
+                ]}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
+                style={styles.gradientOverlay}
+              />
+              
+              {/* Inner highlight for glass effect */}
+              <View style={[
+                styles.innerHighlight,
+                { borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.6)" }
+              ]} />
+              
+              {/* Accent color glow at bottom */}
+              <View style={[styles.accentGlow, { backgroundColor: glowColor }]} />
+              
+              {/* Plus Icon */}
+              <Plus
+                size={28}
+                color={iconColor}
+                strokeWidth={2.5}
+                style={{ zIndex: 1 }}
+              />
+            </View>
+          </View>
+          
+          {/* Label */}
+          <Text
+            style={[
+              styles.agentName,
+              { color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }
+            ]}
+            numberOfLines={2}
+          >
+            Create new agent
+          </Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+});
+
+/**
  * QuickStartAgents - Centered row of liquid glass agent avatars
  */
-export default function QuickStartAgents({ onAgentPress }: QuickStartAgentsProps) {
+export default function QuickStartAgents({ onAgentPress, onCreateAgent }: QuickStartAgentsProps) {
   const { isDark, colors } = useTheme();
   
   // Get top 3 most-used agents
@@ -188,10 +294,8 @@ export default function QuickStartAgents({ onAgentPress }: QuickStartAgentsProps
     return [];
   }, [topAgents, allAgents]);
   
-  // Don't render if no agents to display
-  if (displayAgents.length === 0) {
-    return null;
-  }
+  // Calculate how many slots we need to fill with "Create new agent"
+  const needsCreateButton = displayAgents.length < 3;
   
   return (
     <Animated.View
@@ -202,6 +306,7 @@ export default function QuickStartAgents({ onAgentPress }: QuickStartAgentsProps
         QUICK START
       </Text>
       <View style={styles.agentsRow}>
+        {/* Display existing agents */}
         {displayAgents.map((agent, index) => (
           <AgentAvatar
             key={agent.id}
@@ -211,6 +316,15 @@ export default function QuickStartAgents({ onAgentPress }: QuickStartAgentsProps
             index={index}
           />
         ))}
+        
+        {/* Add "Create new agent" button if less than 3 agents */}
+        {needsCreateButton && (
+          <CreateAgentAvatar
+            onPress={onCreateAgent}
+            isDark={isDark}
+            index={displayAgents.length}
+          />
+        )}
       </View>
     </Animated.View>
   );

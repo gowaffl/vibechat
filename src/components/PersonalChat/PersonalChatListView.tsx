@@ -19,7 +19,7 @@ import {
   RefreshControl,
   Alert,
   ActionSheetIOS,
-  SectionList,
+  FlatList,
 } from "react-native";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
@@ -32,6 +32,7 @@ import {
   FolderPlus,
   Folder,
   Check,
+  MessageSquare,
 } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -45,26 +46,19 @@ import {
   useCreatePersonalConversation,
   useFolders,
   useCreateFolder,
+  useUpdateFolder,
   useDeleteFolder,
+  useMoveConversationToFolder,
   useBulkDeletePersonalConversations,
 } from "@/hooks/usePersonalChats";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { CustomRefreshControl } from "@/components/CustomRefreshControl";
 import QuickStartAgents from "./QuickStartAgents";
 import AddToFolderModal from "./AddToFolderModal";
+import { EditFolderModal } from "./EditFolderModal";
 import type { PersonalConversation, PersonalChatFolder, AIFriend } from "@/shared/contracts";
 import type { RootStackScreenProps } from "@/navigation/types";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// Section types for SectionList
-type ConversationSection = {
-  title: string;
-  folderId: string | null;
-  isFolder: boolean;
-  isCollapsed?: boolean;
-  conversationCount: number;
-  data: PersonalConversation[];
-};
 
 // Conversation item component with swipe-to-more
 const ConversationItem = React.memo(({
@@ -273,56 +267,103 @@ const ConversationItem = React.memo(({
   );
 });
 
-// Folder Header Component
-const FolderHeader = React.memo(({
+// Folder Card Component - Exact same size and layout as conversation card
+const FolderCard = React.memo(({
   folder,
-  isCollapsed,
-  onToggle,
-  onLongPress,
+  onPress,
+  onMore,
+  conversationCount,
   colors,
   isDark,
 }: {
   folder: PersonalChatFolder;
-  isCollapsed: boolean;
-  onToggle: () => void;
-  onLongPress: () => void;
+  onPress: () => void;
+  onMore: () => void;
+  conversationCount: number;
   colors: any;
   isDark: boolean;
-}) => (
-  <Pressable
-    onPress={() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      onToggle();
-    }}
-    onLongPress={() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      onLongPress();
-    }}
-    style={({ pressed }) => [
-      styles.folderHeader,
-      {
-        backgroundColor: pressed
-          ? isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"
-          : "transparent",
-      }
-    ]}
-  >
-    <View style={styles.folderHeaderContent}>
-      {isCollapsed ? (
-        <ChevronRight size={18} color={colors.textSecondary} />
-      ) : (
-        <ChevronDown size={18} color={colors.textSecondary} />
-      )}
-      <Folder size={18} color="#6366f1" />
-      <Text style={[styles.folderName, { color: colors.text }]} numberOfLines={1}>
-        {folder.name}
-      </Text>
-      <Text style={[styles.folderCount, { color: colors.textSecondary }]}>
-        {folder.conversationCount || 0}
-      </Text>
-    </View>
-  </Pressable>
-));
+}) => {
+  const brandCyan = "#00C6FF";
+  const swipeableRef = React.useRef<Swipeable>(null);
+
+  const handleMorePress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    swipeableRef.current?.close();
+    onMore();
+  }, [onMore]);
+
+  const renderRightActions = () => {
+    return (
+      <Pressable
+        onPress={handleMorePress}
+        style={[styles.moreAction, { backgroundColor: isDark ? "rgba(0, 198, 255, 0.2)" : "rgba(0, 198, 255, 0.15)" }]}
+      >
+        <MoreHorizontal size={24} color={brandCyan} />
+      </Pressable>
+    );
+  };
+  
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      rightThreshold={40}
+      overshootRight={false}
+    >
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onPress();
+        }}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <View style={styles.itemContainer}>
+          <BlurView
+            intensity={Platform.OS === "ios" ? (isDark ? 40 : 60) : 80}
+            tint={isDark ? "dark" : "light"}
+            style={[
+              styles.itemBlur,
+              {
+                borderColor: "rgba(0, 198, 255, 0.25)",
+                backgroundColor: isDark ? "transparent" : "rgba(255, 255, 255, 0.85)",
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={
+                isDark
+                  ? ["rgba(0, 198, 255, 0.15)", "rgba(0, 198, 255, 0.08)"]
+                  : ["rgba(0, 198, 255, 0.1)", "rgba(0, 198, 255, 0.05)"]
+              }
+              style={StyleSheet.absoluteFill}
+            />
+            
+            <View style={styles.itemContent}>
+              {/* Content - Same layout as conversation card */}
+              <View style={styles.textContainer}>
+                <View style={styles.titleRow}>
+                  <Text
+                    style={[styles.title, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {folder.name}
+                  </Text>
+                  <Text style={[styles.time, { color: brandCyan, fontWeight: "600" }]}>
+                    {conversationCount}
+                  </Text>
+                </View>
+              </View>
+
+              <ChevronRight size={18} color={brandCyan} strokeWidth={2.5} />
+            </View>
+          </BlurView>
+        </View>
+      </Pressable>
+    </Swipeable>
+  );
+});
 
 // Empty state component
 const EmptyState = ({ colors, isDark }: { 
@@ -420,7 +461,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
   const insets = useSafeAreaInsets();
   
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addToFolderModal, setAddToFolderModal] = useState<{
@@ -428,6 +469,10 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     conversationId: string;
     currentFolderId: string | null;
   }>({ visible: false, conversationId: "", currentFolderId: null });
+  const [editFolderModal, setEditFolderModal] = useState<{
+    visible: boolean;
+    folder: PersonalChatFolder | null;
+  }>({ visible: false, folder: null });
   
   const { data: conversations, isLoading, refetch } = usePersonalConversations();
   const { data: folders = [] } = useFolders();
@@ -435,46 +480,55 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
   const bulkDelete = useBulkDeletePersonalConversations();
   const createConversation = useCreatePersonalConversation();
   const createFolder = useCreateFolder();
+  const updateFolder = useUpdateFolder();
   const deleteFolder = useDeleteFolder();
+  const moveConversationToFolder = useMoveConversationToFolder();
 
-  // Build sections: folders first, then regular conversations
-  const sections = useMemo<ConversationSection[]>(() => {
+  // Build flat list: either folder view or conversation view
+  const displayItems = useMemo<Array<{ type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation }>>(() => {
     if (!conversations) return [];
     
-    const result: ConversationSection[] = [];
-    
-    // Add folder sections
-    folders.forEach((folder: PersonalChatFolder) => {
-      const folderConversations = conversations.filter(
-        (c) => c.folderId === folder.id
-      );
-      if (folderConversations.length > 0 || true) { // Always show folders
-        const isCollapsed = collapsedFolders.has(folder.id);
-        result.push({
-          title: folder.name,
-          folderId: folder.id,
-          isFolder: true,
-          isCollapsed,
-          conversationCount: folderConversations.length,
-          data: isCollapsed ? [] : folderConversations,
-        });
-      }
-    });
-    
-    // Add regular conversations (no folder)
-    const regularConversations = conversations.filter((c) => !c.folderId);
-    if (regularConversations.length > 0) {
-      result.push({
-        title: "",
-        folderId: null,
-        isFolder: false,
-        conversationCount: regularConversations.length,
-        data: regularConversations,
-      });
+    // If viewing a specific folder, show only its conversations
+    if (currentFolderId) {
+      const folderConversations = conversations.filter((c) => c.folderId === currentFolderId);
+      return folderConversations.map((conv) => ({ type: 'conversation' as const, data: conv }));
     }
     
+    // Otherwise, show folders + regular conversations
+    const result: Array<{ type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation }> = [];
+    
+    // Always add folders header (unless viewing a specific folder)
+    result.push({ type: 'folders_header' as const });
+    
+    // Add folders as cards OR empty state
+    if (folders.length > 0) {
+      folders.forEach((folder: PersonalChatFolder) => {
+        result.push({ type: 'folder', data: folder });
+      });
+    } else {
+      // Empty state for folders
+      result.push({ type: 'empty_folders_state' as const });
+    }
+    
+    // Add conversations header (if we have regular conversations)
+    const regularConversations = conversations.filter((c) => !c.folderId);
+    if (regularConversations.length > 0) {
+      result.push({ type: 'conversations_header' as const });
+    }
+    
+    // Add regular conversations (no folder)
+    regularConversations.forEach((conv) => {
+      result.push({ type: 'conversation', data: conv });
+    });
+    
     return result;
-  }, [conversations, folders, collapsedFolders]);
+  }, [conversations, folders, currentFolderId]);
+  
+  // Get current folder name for header
+  const currentFolder = useMemo(() => {
+    if (!currentFolderId) return null;
+    return folders.find((f: PersonalChatFolder) => f.id === currentFolderId);
+  }, [currentFolderId, folders]);
 
   // All conversations flat list for counting
   const allConversations = conversations || [];
@@ -514,28 +568,32 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     setAddToFolderModal({ visible: false, conversationId: "", currentFolderId: null });
   }, []);
 
-  const handleToggleFolder = useCallback((folderId: string) => {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(folderId)) {
-        next.delete(folderId);
-      } else {
-        next.add(folderId);
-      }
-      return next;
-    });
+  const handleFolderPress = useCallback((folderId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCurrentFolderId(folderId);
+  }, []);
+  
+  const handleBackToMainList = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCurrentFolderId(null);
   }, []);
 
-  const handleFolderLongPress = useCallback((folder: PersonalChatFolder) => {
-    Alert.alert(
-      folder.name,
-      "What would you like to do with this folder?",
-      [
-        { text: "Cancel", style: "cancel" },
+  const handleFolderMore = useCallback((folder: PersonalChatFolder) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
         {
-          text: "Delete Folder",
-          style: "destructive",
-          onPress: () => {
+          options: ["Cancel", "Edit Folder", "Delete Folder"],
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: 2,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            // Edit
+            setEditFolderModal({ visible: true, folder });
+          } else if (buttonIndex === 2) {
+            // Delete
             Alert.alert(
               "Delete Folder",
               "Conversations in this folder will be moved to the main list. This cannot be undone.",
@@ -548,11 +606,53 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
                 },
               ]
             );
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        folder.name,
+        "What would you like to do?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Edit Folder", 
+            onPress: () => setEditFolderModal({ visible: true, folder })
           },
-        },
-      ]
-    );
+          {
+            text: "Delete Folder",
+            style: "destructive",
+            onPress: () => {
+              Alert.alert(
+                "Delete Folder",
+                "Conversations in this folder will be moved to the main list.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { 
+                    text: "Delete", 
+                    style: "destructive", 
+                    onPress: () => deleteFolder.mutate(folder.id) 
+                  },
+                ]
+              );
+            },
+          },
+        ]
+      );
+    }
   }, [deleteFolder]);
+
+  const handleUpdateFolderName = useCallback((folderId: string, newName: string) => {
+    updateFolder.mutate({ folderId, name: newName });
+  }, [updateFolder]);
+
+  const handleRemoveConversationFromFolder = useCallback((conversationId: string) => {
+    moveConversationToFolder.mutate({ conversationId, folderId: null });
+  }, [moveConversationToFolder]);
+
+  const handleCloseEditFolder = useCallback(() => {
+    setEditFolderModal({ visible: false, folder: null });
+  }, []);
 
   // Bulk selection handlers
   const handleBulkToggle = useCallback((conversationId: string) => {
@@ -624,6 +724,18 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     }
   }, [createConversation, navigation]);
 
+  const handleCreateNewAgent = useCallback(async () => {
+    try {
+      // Create conversation without agent, user can select/create agent in chat
+      const result = await createConversation.mutateAsync({});
+      navigation.navigate("PersonalChat", { conversationId: result.conversation.id });
+    } catch (error) {
+      console.error("[PersonalChatListView] Error creating conversation:", error);
+      // Still navigate to allow user to start fresh
+      navigation.navigate("PersonalChat", { conversationId: "" });
+    }
+  }, [createConversation, navigation]);
+
   const handleCreateFolder = useCallback(() => {
     Alert.prompt(
       "Create Folder",
@@ -643,65 +755,136 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     );
   }, [createFolder]);
 
-  const renderSectionHeader = useCallback(({ section }: { section: ConversationSection }) => {
-    if (!section.isFolder) return null;
-    
-    const folder = folders.find((f: PersonalChatFolder) => f.id === section.folderId);
-    if (!folder) return null;
-    
-    return (
-      <FolderHeader
-        folder={folder}
-        isCollapsed={section.isCollapsed || false}
-        onToggle={() => handleToggleFolder(folder.id)}
-        onLongPress={() => handleFolderLongPress(folder)}
-        colors={colors}
-        isDark={isDark}
-      />
-    );
-  }, [folders, handleToggleFolder, handleFolderLongPress, colors, isDark]);
-
-  const renderItem = useCallback(({ item }: { item: PersonalConversation }) => (
-    <ConversationItem
-      item={item}
-      onPress={handleSelectConversation}
-      onDelete={handleDelete}
-      onAddToFolder={handleAddToFolder}
-      isInBulkMode={bulkMode}
-      isBulkSelected={selectedIds.has(item.id)}
-      onBulkToggle={handleBulkToggle}
-      colors={colors}
-      isDark={isDark}
-    />
-  ), [handleSelectConversation, handleDelete, handleAddToFolder, bulkMode, selectedIds, handleBulkToggle, colors, isDark]);
-
-  const ListHeaderComponent = useMemo(() => (
-    <View>
-      {/* Quick Start Agents */}
-      <QuickStartAgents onAgentPress={handleAgentQuickStart} />
-      
-      {/* Folders Header with Create Button */}
-      {folders.length > 0 && (
-        <View style={[
-          styles.foldersHeaderRow,
-          { borderBottomColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }
-        ]}>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-            Folders
-          </Text>
+  const renderItem = useCallback(({ item }: { item: { type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation } }) => {
+    if (item.type === 'folders_header') {
+      return (
+        <View style={styles.foldersHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <LinearGradient
+              colors={["#00C6FF", "#0075FF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.foldersSectionIconContainer}
+            >
+              <Folder size={14} color="#FFFFFF" strokeWidth={2.5} />
+            </LinearGradient>
+            <Text style={[styles.sectionLabel, { color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }]}>
+              FOLDERS
+            </Text>
+          </View>
           <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              handleCreateFolder();
-            }}
+            onPress={handleCreateFolder}
             style={({ pressed }) => [
               styles.createFolderButton,
               { opacity: pressed ? 0.7 : 1 }
             ]}
           >
-            <FolderPlus size={18} color="#6366f1" />
+            <LinearGradient
+              colors={["#00C6FF", "#0075FF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.createFolderGradient}
+            >
+              <FolderPlus size={16} color="#FFFFFF" strokeWidth={2.5} />
+            </LinearGradient>
           </Pressable>
         </View>
+      );
+    } else if (item.type === 'empty_folders_state') {
+      return (
+        <View style={styles.emptyFoldersState}>
+          <Text style={[styles.emptyFoldersText, { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" }]}>
+            No folders yet. Create one to organize your conversations.
+          </Text>
+        </View>
+      );
+    } else if (item.type === 'folder') {
+      const folder = item.data as PersonalChatFolder;
+      const folderConversations = conversations?.filter((c) => c.folderId === folder.id) || [];
+      
+      return (
+        <FolderCard
+          folder={folder}
+          onPress={() => handleFolderPress(folder.id)}
+          onMore={() => handleFolderMore(folder)}
+          conversationCount={folderConversations.length}
+          colors={colors}
+          isDark={isDark}
+        />
+      );
+    } else if (item.type === 'conversations_header') {
+      return (
+        <View style={styles.foldersHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <LinearGradient
+              colors={["#00C6FF", "#0075FF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.foldersSectionIconContainer}
+            >
+              <MessageSquare size={14} color="#FFFFFF" strokeWidth={2.5} />
+            </LinearGradient>
+            <Text style={[styles.sectionLabel, { color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }]}>
+              CONVERSATIONS
+            </Text>
+          </View>
+        </View>
+      );
+    } else {
+      const conversation = item.data as PersonalConversation;
+      return (
+        <ConversationItem
+          item={conversation}
+          onPress={handleSelectConversation}
+          onDelete={handleDelete}
+          onAddToFolder={handleAddToFolder}
+          isInBulkMode={bulkMode}
+          isBulkSelected={selectedIds.has(conversation.id)}
+          onBulkToggle={handleBulkToggle}
+          colors={colors}
+          isDark={isDark}
+        />
+      );
+    }
+  }, [conversations, handleFolderPress, handleFolderMore, handleSelectConversation, handleDelete, handleAddToFolder, bulkMode, selectedIds, handleBulkToggle, colors, isDark, handleCreateFolder]);
+
+  const ListHeaderComponent = useMemo(() => (
+    <View>
+      {/* Back Button (when inside folder) */}
+      {currentFolderId && currentFolder && (
+        <Pressable
+          onPress={handleBackToMainList}
+          style={({ pressed }) => [
+            styles.backButton,
+            {
+              backgroundColor: pressed
+                ? isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)"
+                : "transparent",
+            }
+          ]}
+        >
+          <View style={styles.backButtonContent}>
+            <View style={[
+              styles.backIconContainer,
+              { backgroundColor: isDark ? "rgba(0, 198, 255, 0.15)" : "rgba(0, 198, 255, 0.1)" }
+            ]}>
+              <ChevronRight 
+                size={18} 
+                color="#00C6FF" 
+                strokeWidth={2.5}
+                style={{ transform: [{ rotate: '180deg' }] }}
+              />
+            </View>
+            <Text style={[styles.backButtonText, { color: colors.text }]}>
+              {currentFolder.name}
+            </Text>
+          </View>
+        </Pressable>
+      )}
+      
+      {/* Quick Start Agents (only on main list) */}
+      {!currentFolderId && (
+        <QuickStartAgents onAgentPress={handleAgentQuickStart} onCreateAgent={handleCreateNewAgent} />
       )}
       
       {/* Bulk Actions Bar */}
@@ -717,7 +900,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
         />
       )}
     </View>
-  ), [folders.length, handleAgentQuickStart, handleCreateFolder, bulkMode, selectedIds.size, allConversations.length, handleSelectAll, handleBulkDelete, handleCancelBulk, colors, isDark]);
+  ), [currentFolderId, currentFolder, folders.length, handleBackToMainList, handleAgentQuickStart, handleCreateNewAgent, handleCreateFolder, bulkMode, selectedIds.size, allConversations.length, handleSelectAll, handleBulkDelete, handleCancelBulk, colors, isDark]);
 
   if (isLoading) {
     return (
@@ -735,15 +918,22 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
         topOffset={insets.top + 80}
       />
       
-      {allConversations.length > 0 ? (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
+      {displayItems.length > 0 || currentFolderId ? (
+        <FlatList
+          style={{ flex: 1 }}
+          data={displayItems}
+          keyExtractor={(item) => {
+            if (item.type === 'folders_header') return 'folders-header';
+            if (item.type === 'empty_folders_state') return 'empty-folders-state';
+            if (item.type === 'folder') return `folder-${item.data?.id}`;
+            if (item.type === 'conversations_header') return 'conversations-header';
+            return `conv-${item.data?.id}`;
+          }}
           renderItem={renderItem}
-          renderSectionHeader={renderSectionHeader}
           ListHeaderComponent={ListHeaderComponent}
-          stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.listContent}
+          scrollEnabled={true}
+          showsVerticalScrollIndicator={true}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -756,7 +946,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
       ) : (
         <View style={{ flex: 1 }}>
           {/* Show Quick Start even when empty */}
-          <QuickStartAgents onAgentPress={handleAgentQuickStart} />
+          <QuickStartAgents onAgentPress={handleAgentQuickStart} onCreateAgent={handleCreateNewAgent} />
           
           {/* Create folder button when no folders exist */}
           {folders.length === 0 && (
@@ -791,6 +981,16 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
         currentFolderId={addToFolderModal.currentFolderId}
         onClose={handleCloseAddToFolder}
       />
+
+      {/* Edit Folder Modal */}
+      <EditFolderModal
+        visible={editFolderModal.visible}
+        folder={editFolderModal.folder}
+        conversations={editFolderModal.folder ? (conversations || []).filter((c) => c.folderId === editFolderModal.folder?.id) : []}
+        onClose={handleCloseEditFolder}
+        onUpdateName={handleUpdateFolderName}
+        onRemoveConversation={handleRemoveConversationFromFolder}
+      />
     </View>
   );
 };
@@ -806,6 +1006,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 100,
+    flexGrow: 1,
   },
   itemContainer: {
     marginHorizontal: 16,
@@ -881,35 +1082,80 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
+  foldersSectionIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#00C6FF",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sectionLabel: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 1.5,
   },
   createFolderButton: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    flexShrink: 0,
   },
-  folderHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 4,
+  createFolderGradient: {
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
   },
-  folderHeaderContent: {
+  emptyFoldersState: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 12,
+  },
+  emptyFoldersText: {
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 20,
+    textAlign: "center",
+    letterSpacing: -0.2,
+  },
+  // Back Button
+  backButton: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderRadius: 14,
+  },
+  backButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
-  folderName: {
-    flex: 1,
-    fontSize: 15,
+  backIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  backButtonText: {
+    fontSize: 17,
     fontWeight: "600",
-  },
-  folderCount: {
-    fontSize: 13,
+    letterSpacing: -0.3,
   },
   createFirstFolder: {
     flexDirection: "row",
