@@ -94,6 +94,7 @@ const CloneModal: React.FC<CloneModalProps> = ({
 
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
+  const [cloneToPersonal, setCloneToPersonal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -131,7 +132,7 @@ const CloneModal: React.FC<CloneModalProps> = ({
   };
 
   const handleClone = async () => {
-    if (!user || !item || selectedChats.size === 0) return;
+    if (!user || !item || (!cloneToPersonal && selectedChats.size === 0)) return;
 
     setCloning(true);
     setError(null);
@@ -143,7 +144,8 @@ const CloneModal: React.FC<CloneModalProps> = ({
           userId: user.id,
           itemType,
           communityItemId: item.id,
-          targetChatIds: Array.from(selectedChats),
+          targetChatIds: cloneToPersonal ? [] : Array.from(selectedChats),
+          cloneToPersonal,
         }
       );
 
@@ -166,6 +168,7 @@ const CloneModal: React.FC<CloneModalProps> = ({
 
   const handleClose = () => {
     setSelectedChats(new Set());
+    setCloneToPersonal(false);
     setSuccess(false);
     setError(null);
     onClose();
@@ -314,81 +317,156 @@ const CloneModal: React.FC<CloneModalProps> = ({
             </View>
           </ScrollView>
 
-          {/* Chat Selection */}
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Select chats to add to:</Text>
+          {/* Selection Options */}
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Select where to add:</Text>
 
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : chats.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MessageCircle size={32} color={colors.textTertiary} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No chats available
+          {/* Personal Agents Option (only for AI friends) */}
+          {isPersona && (
+            <TouchableOpacity
+              onPress={() => {
+                setCloneToPersonal(!cloneToPersonal);
+                if (!cloneToPersonal) {
+                  // Deselect all chats when selecting personal agents
+                  setSelectedChats(new Set());
+                }
+              }}
+              style={[
+                styles.chatItem,
+                {
+                  backgroundColor: cloneToPersonal
+                    ? `${colors.primary}26`
+                    : "transparent",
+                  borderColor: cloneToPersonal
+                    ? colors.primary
+                    : isDark
+                    ? colors.glassBorder
+                    : "rgba(0, 0, 0, 0.06)",
+                  marginBottom: 12,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.chatIcon,
+                  {
+                    backgroundColor: cloneToPersonal
+                      ? `${colors.primary}33`
+                      : isDark
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(0,0,0,0.05)",
+                  },
+                ]}
+              >
+                <User size={18} color={cloneToPersonal ? colors.primary : colors.textSecondary} />
+              </View>
+              <Text
+                style={[
+                  styles.chatName,
+                  {
+                    color: cloneToPersonal ? colors.primary : colors.text,
+                    fontWeight: cloneToPersonal ? "600" : "400",
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                Personal Agents
               </Text>
-            </View>
-          ) : (
-            <ScrollView style={styles.chatList} showsVerticalScrollIndicator={false}>
-              {chats.map((chat) => {
-                const isSelected = selectedChats.has(chat.id);
-                return (
-                  <TouchableOpacity
-                    key={chat.id}
-                    onPress={() => handleChatToggle(chat.id)}
-                    style={[
-                      styles.chatItem,
-                      {
-                        backgroundColor: isSelected
-                          ? `${colors.primary}26`
-                          : "transparent",
-                        borderColor: isSelected
-                          ? colors.primary
-                          : isDark
-                          ? colors.glassBorder
-                          : "rgba(0, 0, 0, 0.06)",
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.chatIcon,
-                        {
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.1)"
-                            : "rgba(0,0,0,0.05)",
-                        },
-                      ]}
-                    >
-                      {chat.type === "group" ? (
-                        <Users size={18} color={colors.textSecondary} />
-                      ) : (
-                        <MessageCircle size={18} color={colors.textSecondary} />
-                      )}
-                    </View>
-                    <Text
-                      style={[
-                        styles.chatName,
-                        {
-                          color: isSelected ? colors.primary : colors.text,
-                          fontWeight: isSelected ? "600" : "400",
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {chat.name}
-                    </Text>
-                    {isSelected && (
-                      <View
-                        style={[styles.checkmark, { backgroundColor: colors.primary }]}
+              {cloneToPersonal && (
+                <View
+                  style={[styles.checkmark, { backgroundColor: colors.primary }]}
+                >
+                  <Check size={14} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Chat Selection */}
+          {!cloneToPersonal && (
+            <>
+              {isPersona && (
+                <Text style={[styles.orDivider, { color: colors.textTertiary }]}>or select chats:</Text>
+              )}
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : chats.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <MessageCircle size={32} color={colors.textTertiary} />
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    No chats available
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.chatList} showsVerticalScrollIndicator={false}>
+                  {chats.map((chat) => {
+                    const isSelected = selectedChats.has(chat.id);
+                    return (
+                      <TouchableOpacity
+                        key={chat.id}
+                        onPress={() => {
+                          handleChatToggle(chat.id);
+                          // Deselect personal agents when selecting a chat
+                          if (cloneToPersonal) {
+                            setCloneToPersonal(false);
+                          }
+                        }}
+                        style={[
+                          styles.chatItem,
+                          {
+                            backgroundColor: isSelected
+                              ? `${colors.primary}26`
+                              : "transparent",
+                            borderColor: isSelected
+                              ? colors.primary
+                              : isDark
+                              ? colors.glassBorder
+                              : "rgba(0, 0, 0, 0.06)",
+                          },
+                        ]}
                       >
-                        <Check size={14} color="#fff" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                        <View
+                          style={[
+                            styles.chatIcon,
+                            {
+                              backgroundColor: isDark
+                                ? "rgba(255,255,255,0.1)"
+                                : "rgba(0,0,0,0.05)",
+                            },
+                          ]}
+                        >
+                          {chat.type === "group" ? (
+                            <Users size={18} color={colors.textSecondary} />
+                          ) : (
+                            <MessageCircle size={18} color={colors.textSecondary} />
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.chatName,
+                            {
+                              color: isSelected ? colors.primary : colors.text,
+                              fontWeight: isSelected ? "600" : "400",
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {chat.name}
+                        </Text>
+                        {isSelected && (
+                          <View
+                            style={[styles.checkmark, { backgroundColor: colors.primary }]}
+                          >
+                            <Check size={14} color="#fff" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </>
           )}
 
           {/* Error message */}
@@ -409,12 +487,12 @@ const CloneModal: React.FC<CloneModalProps> = ({
           {/* Action Button */}
           <TouchableOpacity
             onPress={handleClone}
-            disabled={selectedChats.size === 0 || cloning || success}
+            disabled={(selectedChats.size === 0 && !cloneToPersonal) || cloning || success}
             style={[
               styles.cloneButton,
               {
                 backgroundColor:
-                  selectedChats.size === 0 || cloning || success
+                  (selectedChats.size === 0 && !cloneToPersonal) || cloning || success
                     ? isDark
                       ? "rgba(255,255,255,0.1)"
                       : "rgba(0,0,0,0.1)"
@@ -428,7 +506,9 @@ const CloneModal: React.FC<CloneModalProps> = ({
               <>
                 <Download size={20} color="#fff" />
                 <Text style={styles.cloneButtonText}>
-                  Clone to {selectedChats.size} Chat{selectedChats.size !== 1 ? "s" : ""}
+                  {cloneToPersonal
+                    ? "Clone to Personal Agents"
+                    : `Clone to ${selectedChats.size} Chat${selectedChats.size !== 1 ? "s" : ""}`}
                 </Text>
               </>
             )}
@@ -618,6 +698,13 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  orDivider: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });
 

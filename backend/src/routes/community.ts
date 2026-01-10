@@ -48,8 +48,12 @@ const cloneItemSchema = z.object({
   userId: z.string(),
   itemType: z.enum(["ai_friend", "command", "workflow"]),
   communityItemId: z.string(),
-  targetChatIds: z.array(z.string()).min(1).max(10),
-});
+  targetChatIds: z.array(z.string()).max(10).optional().default([]),
+  cloneToPersonal: z.boolean().optional().default(false),
+}).refine(
+  (data) => data.cloneToPersonal || data.targetChatIds.length > 0,
+  { message: "Either cloneToPersonal must be true or targetChatIds must not be empty" }
+);
 
 // ==========================================
 // Browse Community Items
@@ -581,22 +585,24 @@ app.post("/workflows", zValidator("json", shareWorkflowSchema), async (c) => {
 // Clone Items
 // ==========================================
 
-// POST /api/community/clone - Clone item to user's chat(s)
+// POST /api/community/clone - Clone item to user's chat(s) or personal agents
 app.post("/clone", zValidator("json", cloneItemSchema), async (c) => {
   const data = c.req.valid("json");
 
   try {
-    // Verify user is member of all target chats
-    for (const chatId of data.targetChatIds) {
-      const { data: membership } = await db
-        .from("chat_member")
-        .select("*")
-        .eq("chatId", chatId)
-        .eq("userId", data.userId)
-        .single();
+    // Verify user is member of all target chats (only if not cloning to personal)
+    if (!data.cloneToPersonal) {
+      for (const chatId of data.targetChatIds) {
+        const { data: membership } = await db
+          .from("chat_member")
+          .select("*")
+          .eq("chatId", chatId)
+          .eq("userId", data.userId)
+          .single();
 
-      if (!membership) {
-        return c.json({ error: `Not a member of chat ${chatId}` }, 403);
+        if (!membership) {
+          return c.json({ error: `Not a member of chat ${chatId}` }, 403);
+        }
       }
     }
 
@@ -615,61 +621,146 @@ app.post("/clone", zValidator("json", cloneItemSchema), async (c) => {
         return c.json({ error: "Community persona not found" }, 404);
       }
 
-      // Clone to each target chat
-      for (const chatId of data.targetChatIds) {
-        // Check if already cloned to this chat
-        const { data: existingClone } = await db
-          .from("community_clone")
+      if (data.cloneToPersonal) {
+        // Clone to personal agents
+        // Check if already cloned to personal agents
+        const { data: existingPersonalAgent } = await db
+          .from("ai_friend")
           .select("id")
-          .eq("userId", data.userId)
-          .eq("communityItemId", data.communityItemId)
-          .eq("targetChatId", chatId)
+          .eq("isPersonal", true)
+          .eq("ownerUserId", data.userId)
+          .eq("name", communityItem.name)
+          .eq("personality", communityItem.personality)
           .single();
 
-        if (existingClone) {
-          continue; // Skip if already cloned
+        if (existingPersonalAgent) {
+          return c.json({ 
+            error: "You already have a personal agent with the same name and personality" 
+          }, 400);
         }
 
-        // Get existing AI friends count for sort order and color (exclude personal agents)
-        const { data: existingFriends } = await db
+        // Get user's existing personal agents to determine color assignment
+        const { data: existingAgents } = await db
           .from("ai_friend")
           .select("color")
-          .eq("chatId", chatId)
-          .or("isPersonal.is.null,isPersonal.eq.false");
+          .eq("isPersonal", true)
+          .eq("ownerUserId", data.userId);
 
-        const usedColors = new Set((existingFriends || []).map((f: any) => f.color));
+        const usedColors = new Set((existingAgents || []).map((a: any) => a.color));
         const colors = ["#34C759", "#007AFF", "#FF9F0A", "#AF52DE", "#FF453A", "#FFD60A", "#64D2FF", "#FF375F"];
-        let assignedColor = colors.find((c) => !usedColors.has(c)) || colors[0];
+        
+        // Find the first unused color, or cycle back to the beginning
+        let assignedColor = colors[0];
+        for (const color of colors) {
+          if (!usedColors.has(color)) {
+            assignedColor = color;
+            break;
+          }
+        }
+        // If all colors are used, use the next color in rotation
+        if (usedColors.size >= colors.length) {
+          assignedColor = colors[(existingAgents?.length || 0) % colors.length];
+        }
 
-        // Create AI friend in target chat
-        const { data: newFriend, error: insertError } = await db
+        // Get user's first chat for the chatId (required field, but won't be used for personal agents)
+        const { data: memberships } = await db
+          .from("chat_member")
+          .select("chatId")
+          .eq("userId", data.userId)
+          .limit(1);
+
+        // Use a placeholder chatId if user has no chats (edge case)
+        const chatId = memberships?.[0]?.chatId || "personal-placeholder";
+
+        // Create personal AI agent
+        const { data: newAgent, error: insertError } = await db
           .from("ai_friend")
           .insert({
-            chatId: chatId,
+            chatId,
             name: communityItem.name,
             personality: communityItem.personality,
             tone: communityItem.tone,
             engagementMode: "on-call",
             color: assignedColor,
-            sortOrder: existingFriends?.length || 0,
+            sortOrder: 0,
+            createdBy: data.userId,
+            isPersonal: true,
+            ownerUserId: data.userId,
           })
           .select()
           .single();
 
         if (insertError) {
-          console.error("[Community] Error cloning AI friend:", insertError);
-          continue;
+          console.error("[Community] Error cloning AI friend to personal:", insertError);
+          return c.json({ error: "Failed to clone to personal agents" }, 500);
         }
 
-        // Record the clone
+        // Record the clone (with null targetChatId for personal agents)
         await db.from("community_clone").insert({
           userId: data.userId,
           itemType: "ai_friend",
           communityItemId: data.communityItemId,
-          targetChatId: chatId,
+          targetChatId: null,
         });
 
-        clonedItems.push({ chatId, aiFriendId: newFriend.id });
+        clonedItems.push({ personal: true, aiFriendId: newAgent.id });
+      } else {
+        // Clone to each target chat
+        for (const chatId of data.targetChatIds) {
+          // Check if already cloned to this chat
+          const { data: existingClone } = await db
+            .from("community_clone")
+            .select("id")
+            .eq("userId", data.userId)
+            .eq("communityItemId", data.communityItemId)
+            .eq("targetChatId", chatId)
+            .single();
+
+          if (existingClone) {
+            continue; // Skip if already cloned
+          }
+
+          // Get existing AI friends count for sort order and color (exclude personal agents)
+          const { data: existingFriends } = await db
+            .from("ai_friend")
+            .select("color")
+            .eq("chatId", chatId)
+            .or("isPersonal.is.null,isPersonal.eq.false");
+
+          const usedColors = new Set((existingFriends || []).map((f: any) => f.color));
+          const colors = ["#34C759", "#007AFF", "#FF9F0A", "#AF52DE", "#FF453A", "#FFD60A", "#64D2FF", "#FF375F"];
+          let assignedColor = colors.find((c) => !usedColors.has(c)) || colors[0];
+
+          // Create AI friend in target chat
+          const { data: newFriend, error: insertError } = await db
+            .from("ai_friend")
+            .insert({
+              chatId: chatId,
+              name: communityItem.name,
+              personality: communityItem.personality,
+              tone: communityItem.tone,
+              engagementMode: "on-call",
+              color: assignedColor,
+              sortOrder: existingFriends?.length || 0,
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error("[Community] Error cloning AI friend:", insertError);
+            continue;
+          }
+
+          // Record the clone
+          await db.from("community_clone").insert({
+            userId: data.userId,
+            itemType: "ai_friend",
+            communityItemId: data.communityItemId,
+            targetChatId: chatId,
+          });
+
+          clonedItems.push({ chatId, aiFriendId: newFriend.id });
+        }
       }
     } else if (data.itemType === "command") {
       // Get community command

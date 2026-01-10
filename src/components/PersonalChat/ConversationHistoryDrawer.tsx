@@ -31,14 +31,10 @@ import {
 } from "react-native-gesture-handler";
 import {
   ChevronLeft,
-  ChevronDown,
-  ChevronRight,
   Trash2,
   Check,
   Plus,
   MoreHorizontal,
-  FolderPlus,
-  Folder,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,12 +44,8 @@ import {
   usePersonalConversations,
   useDeletePersonalConversation,
   useBulkDeletePersonalConversations,
-  useFolders,
-  useCreateFolder,
-  useDeleteFolder,
-  useMoveConversationToFolder,
 } from "@/hooks/usePersonalChats";
-import type { PersonalConversation, PersonalChatFolder } from "@/shared/contracts";
+import type { PersonalConversation } from "@/shared/contracts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
@@ -353,238 +345,12 @@ function ConversationItem({
 }
 
 // ============================================================================
-// ADD TO FOLDER MODAL
-// ============================================================================
-
-interface AddToFolderModalProps {
-  visible: boolean;
-  onClose: () => void;
-  conversationId: string | null;
-  folders: PersonalChatFolder[];
-  onSelectFolder: (folderId: string | null) => void;
-  onCreateFolder: (name: string) => void;
-  isDark: boolean;
-  colors: any;
-}
-
-function AddToFolderModal({
-  visible,
-  onClose,
-  conversationId,
-  folders,
-  onSelectFolder,
-  onCreateFolder,
-  isDark,
-  colors,
-}: AddToFolderModalProps) {
-  const [isCreating, setIsCreating] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  
-  const handleCreateFolder = () => {
-    if (newFolderName.trim()) {
-      onCreateFolder(newFolderName.trim());
-      setNewFolderName("");
-      setIsCreating(false);
-    }
-  };
-  
-  const handleClose = () => {
-    setIsCreating(false);
-    setNewFolderName("");
-    onClose();
-  };
-  
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-    >
-      <Pressable style={folderModalStyles.overlay} onPress={handleClose}>
-        <Pressable
-          style={[
-            folderModalStyles.container,
-            { backgroundColor: isDark ? "#1c1c1e" : "#fff" },
-          ]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <Text style={[folderModalStyles.title, { color: colors.text }]}>
-            Add to Folder
-          </Text>
-          
-          {/* Remove from folder option */}
-          <Pressable
-            style={[
-              folderModalStyles.option,
-              { borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
-            ]}
-            onPress={() => onSelectFolder(null)}
-          >
-            <Text style={[folderModalStyles.optionText, { color: colors.textSecondary }]}>
-              No Folder (Remove)
-            </Text>
-          </Pressable>
-          
-          {/* Existing folders */}
-          {folders.map((folder) => (
-            <Pressable
-              key={folder.id}
-              style={[
-                folderModalStyles.option,
-                { borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
-              ]}
-              onPress={() => onSelectFolder(folder.id)}
-            >
-              <View style={folderModalStyles.optionRow}>
-                <Folder size={18} color={colors.primary} />
-                <Text style={[folderModalStyles.optionText, { color: colors.text }]}>
-                  {folder.name}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-          
-          {/* Create new folder */}
-          {isCreating ? (
-            <View style={folderModalStyles.createContainer}>
-              <TextInput
-                value={newFolderName}
-                onChangeText={setNewFolderName}
-                placeholder="Folder name..."
-                placeholderTextColor={colors.textTertiary}
-                style={[
-                  folderModalStyles.input,
-                  {
-                    backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
-                    color: colors.text,
-                  },
-                ]}
-                autoFocus
-                onSubmitEditing={handleCreateFolder}
-              />
-              <View style={folderModalStyles.createButtons}>
-                <Pressable
-                  onPress={() => setIsCreating(false)}
-                  style={folderModalStyles.cancelBtn}
-                >
-                  <Text style={{ color: colors.textSecondary }}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleCreateFolder}
-                  style={[folderModalStyles.createBtn, { backgroundColor: colors.primary }]}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "600" }}>Create</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <Pressable
-              style={folderModalStyles.option}
-              onPress={() => setIsCreating(true)}
-            >
-              <View style={folderModalStyles.optionRow}>
-                <FolderPlus size={18} color="#22c55e" />
-                <Text style={[folderModalStyles.optionText, { color: "#22c55e" }]}>
-                  Create New Folder
-                </Text>
-              </View>
-            </Pressable>
-          )}
-          
-          {/* Close button */}
-          <Pressable
-            style={[folderModalStyles.closeButton, { borderTopColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }]}
-            onPress={handleClose}
-          >
-            <Text style={[folderModalStyles.closeText, { color: colors.primary }]}>
-              Cancel
-            </Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-const folderModalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 40,
-  },
-  container: {
-    width: "100%",
-    maxWidth: 300,
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: "600",
-    textAlign: "center",
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(128,128,128,0.3)",
-  },
-  option: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  optionText: {
-    fontSize: 16,
-  },
-  createContainer: {
-    padding: 16,
-  },
-  input: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  createButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-  },
-  cancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  createBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  closeButton: {
-    paddingVertical: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  closeText: {
-    fontSize: 17,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-});
-
-// ============================================================================
 // MORE OPTIONS MODAL
 // ============================================================================
 
 interface MoreOptionsModalProps {
   visible: boolean;
   onClose: () => void;
-  onAddToFolder: () => void;
   onDelete: () => void;
   isDark: boolean;
   colors: any;
@@ -593,7 +359,6 @@ interface MoreOptionsModalProps {
 function MoreOptionsModal({
   visible,
   onClose,
-  onAddToFolder,
   onDelete,
   isDark,
   colors,
@@ -612,24 +377,6 @@ function MoreOptionsModal({
             { backgroundColor: isDark ? "#1c1c1e" : "#fff" },
           ]}
         >
-          <Pressable
-            style={[
-              moreModalStyles.option,
-              { borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
-            ]}
-            onPress={() => {
-              onClose();
-              onAddToFolder();
-            }}
-          >
-            <View style={moreModalStyles.optionRow}>
-              <FolderPlus size={20} color={colors.primary} />
-              <Text style={[moreModalStyles.optionText, { color: colors.text }]}>
-                Add to Folder
-              </Text>
-            </View>
-          </Pressable>
-          
           <Pressable
             style={moreModalStyles.option}
             onPress={() => {
@@ -699,133 +446,6 @@ const moreModalStyles = StyleSheet.create({
 });
 
 // ============================================================================
-// FOLDER SECTION COMPONENT
-// ============================================================================
-
-interface FolderSectionProps {
-  folder: PersonalChatFolder;
-  conversations: PersonalConversation[];
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
-  currentConversationId: string | null;
-  bulkMode: boolean;
-  selectedIds: Set<string>;
-  onSelectConversation: (conversation: PersonalConversation) => void;
-  onBulkToggle: (id: string) => void;
-  onMorePress: (conversationId: string) => void;
-  onDeleteFolder: () => void;
-  isDark: boolean;
-  colors: any;
-}
-
-function FolderSection({
-  folder,
-  conversations,
-  isCollapsed,
-  onToggleCollapse,
-  currentConversationId,
-  bulkMode,
-  selectedIds,
-  onSelectConversation,
-  onBulkToggle,
-  onMorePress,
-  onDeleteFolder,
-  isDark,
-  colors,
-}: FolderSectionProps) {
-  return (
-    <View style={folderStyles.container}>
-      <Pressable
-        onPress={onToggleCollapse}
-        onLongPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          Alert.alert(
-            "Delete Folder",
-            `Delete "${folder.name}"? Conversations will be moved out of this folder.`,
-            [
-              { text: "Cancel", style: "cancel" },
-              { text: "Delete", style: "destructive", onPress: onDeleteFolder },
-            ]
-          );
-        }}
-        style={({ pressed }) => [
-          folderStyles.header,
-          {
-            backgroundColor: pressed
-              ? isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"
-              : isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
-          },
-        ]}
-      >
-        <View style={folderStyles.headerLeft}>
-          {isCollapsed ? (
-            <ChevronRight size={18} color={colors.textSecondary} />
-          ) : (
-            <ChevronDown size={18} color={colors.textSecondary} />
-          )}
-          <Folder size={18} color={colors.primary} />
-          <Text style={[folderStyles.folderName, { color: colors.text }]}>
-            {folder.name}
-          </Text>
-        </View>
-        <Text style={[folderStyles.count, { color: colors.textTertiary }]}>
-          {conversations.length}
-        </Text>
-      </Pressable>
-      
-      {!isCollapsed && (
-        <View style={folderStyles.conversationsList}>
-          {conversations.map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              isSelected={conv.id === currentConversationId}
-              isInBulkMode={bulkMode}
-              isBulkSelected={selectedIds.has(conv.id)}
-              onPress={() => onSelectConversation(conv)}
-              onBulkToggle={() => onBulkToggle(conv.id)}
-              onMorePress={() => onMorePress(conv.id)}
-              isDark={isDark}
-              colors={colors}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-const folderStyles = StyleSheet.create({
-  container: {
-    marginBottom: 8,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 8,
-    borderRadius: 10,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  folderName: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  count: {
-    fontSize: 13,
-  },
-  conversationsList: {
-    marginLeft: 8,
-  },
-});
-
-// ============================================================================
 // MAIN DRAWER COMPONENT
 // ============================================================================
 
@@ -843,39 +463,13 @@ export default function ConversationHistoryDrawer({
   // State
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [moreOptionsVisible, setMoreOptionsVisible] = useState(false);
-  const [addToFolderVisible, setAddToFolderVisible] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   
   // Data hooks
   const { data: conversations = [], isLoading } = usePersonalConversations();
-  const { data: folders = [] } = useFolders();
   const deleteConversation = useDeletePersonalConversation();
   const bulkDelete = useBulkDeletePersonalConversations();
-  const createFolder = useCreateFolder();
-  const deleteFolder = useDeleteFolder();
-  const moveToFolder = useMoveConversationToFolder();
-  
-  // Group conversations by folder
-  const { folderedConversations, unfolderedConversations } = useMemo(() => {
-    const foldered: Record<string, PersonalConversation[]> = {};
-    const unfoldered: PersonalConversation[] = [];
-    
-    folders.forEach((folder: PersonalChatFolder) => {
-      foldered[folder.id] = [];
-    });
-    
-    conversations.forEach((conv: PersonalConversation) => {
-      if (conv.folderId && foldered[conv.folderId]) {
-        foldered[conv.folderId].push(conv);
-      } else {
-        unfoldered.push(conv);
-      }
-    });
-    
-    return { folderedConversations: foldered, unfolderedConversations: unfoldered };
-  }, [conversations, folders]);
   
   // Handlers
   const handleClose = useCallback(() => {
@@ -974,49 +568,6 @@ export default function ConversationHistoryDrawer({
     setSelectedConversationId(conversationId);
     setMoreOptionsVisible(true);
   }, []);
-  
-  const handleToggleFolderCollapse = useCallback((folderId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(folderId)) {
-        next.delete(folderId);
-      } else {
-        next.add(folderId);
-      }
-      return next;
-    });
-  }, []);
-  
-  const handleCreateFolder = useCallback((name: string) => {
-    createFolder.mutate(name, {
-      onSuccess: (newFolder) => {
-        if (selectedConversationId && newFolder?.id) {
-          moveToFolder.mutate({
-            conversationId: selectedConversationId,
-            folderId: newFolder.id,
-          });
-        }
-        setAddToFolderVisible(false);
-        setSelectedConversationId(null);
-      },
-    });
-  }, [createFolder, moveToFolder, selectedConversationId]);
-  
-  const handleSelectFolder = useCallback((folderId: string | null) => {
-    if (selectedConversationId) {
-      moveToFolder.mutate({
-        conversationId: selectedConversationId,
-        folderId,
-      });
-    }
-    setAddToFolderVisible(false);
-    setSelectedConversationId(null);
-  }, [moveToFolder, selectedConversationId]);
-  
-  const handleDeleteFolder = useCallback((folderId: string) => {
-    deleteFolder.mutate(folderId);
-  }, [deleteFolder]);
   
   const handleQuickStart = useCallback((agentId: string) => {
     handleClose();
@@ -1173,39 +724,6 @@ export default function ConversationHistoryDrawer({
                   </Pressable>
                 </View>
                 
-                {/* Create Folder Button */}
-                <Pressable
-                  onPress={() => {
-                    Alert.prompt(
-                      "Create Folder",
-                      "Enter a name for the new folder:",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Create",
-                          onPress: (name) => {
-                            if (name?.trim()) {
-                              createFolder.mutate(name.trim());
-                            }
-                          },
-                        },
-                      ],
-                      "plain-text"
-                    );
-                  }}
-                  style={({ pressed }) => [
-                    styles.createFolderButton,
-                    {
-                      backgroundColor: pressed
-                        ? isDark ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.05)"
-                        : "transparent",
-                    }
-                  ]}
-                >
-                  <FolderPlus size={18} color="#22c55e" />
-                  <Text style={styles.createFolderText}>Create Folder</Text>
-                </Pressable>
-                
                 {/* Divider */}
                 <View style={[
                   styles.divider,
@@ -1233,28 +751,8 @@ export default function ConversationHistoryDrawer({
                   </View>
                 ) : (
                   <>
-                    {/* Folders First */}
-                    {folders.map((folder: PersonalChatFolder) => (
-                      <FolderSection
-                        key={folder.id}
-                        folder={folder}
-                        conversations={folderedConversations[folder.id] || []}
-                        isCollapsed={collapsedFolders.has(folder.id)}
-                        onToggleCollapse={() => handleToggleFolderCollapse(folder.id)}
-                        currentConversationId={currentConversationId}
-                        bulkMode={bulkMode}
-                        selectedIds={selectedIds}
-                        onSelectConversation={handleSelectConversation}
-                        onBulkToggle={handleToggleBulkSelection}
-                        onMorePress={handleMorePress}
-                        onDeleteFolder={() => handleDeleteFolder(folder.id)}
-                        isDark={isDark}
-                        colors={colors}
-                      />
-                    ))}
-                    
-                    {/* Unfoldered Conversations */}
-                    {unfolderedConversations.map((conv: PersonalConversation) => (
+                    {/* All Conversations */}
+                    {conversations.map((conv: PersonalConversation) => (
                       <ConversationItem
                         key={conv.id}
                         conversation={conv}
@@ -1280,28 +778,12 @@ export default function ConversationHistoryDrawer({
       <MoreOptionsModal
         visible={moreOptionsVisible}
         onClose={() => setMoreOptionsVisible(false)}
-        onAddToFolder={() => setAddToFolderVisible(true)}
         onDelete={() => {
           if (selectedConversationId) {
             handleDeleteSingle(selectedConversationId);
           }
           setSelectedConversationId(null);
         }}
-        isDark={isDark}
-        colors={colors}
-      />
-      
-      {/* Add to Folder Modal */}
-      <AddToFolderModal
-        visible={addToFolderVisible}
-        onClose={() => {
-          setAddToFolderVisible(false);
-          setSelectedConversationId(null);
-        }}
-        conversationId={selectedConversationId}
-        folders={folders}
-        onSelectFolder={handleSelectFolder}
-        onCreateFolder={handleCreateFolder}
         isDark={isDark}
         colors={colors}
       />
@@ -1443,18 +925,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#4FC3F7",
     marginLeft: 12,
-  },
-  createFolderButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingLeft: 25,
-    gap: 12,
-  },
-  createFolderText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#22c55e",
   },
   divider: {
     height: StyleSheet.hairlineWidth,

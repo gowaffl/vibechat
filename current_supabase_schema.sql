@@ -381,6 +381,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_friend_owner_user_id ON public.ai_friend("owne
 COMMENT ON COLUMN ai_friend."isPersonal" IS 'True if this is a personal AI agent created in personal chats, false for group chat agents';
 COMMENT ON COLUMN ai_friend."ownerUserId" IS 'For personal agents only: the user who owns this agent. NULL for group chat agents.';
 
+-- ============================================================================
+-- COMMUNITY CLONE TO PERSONAL AGENTS (2026-01-10)
+-- ============================================================================
+-- Allow targetChatId to be NULL for personal agent clones
+-- When cloning a community AI friend to personal agents, targetChatId will be NULL
+ALTER TABLE public.community_clone ALTER COLUMN "targetChatId" DROP NOT NULL;
+COMMENT ON COLUMN community_clone."targetChatId" IS 'The chat where the item was cloned to. NULL for personal agent clones.';
+
 -- Indexes for user_agent_usage
 CREATE INDEX IF NOT EXISTS user_agent_usage_user_idx ON user_agent_usage("userId");
 CREATE INDEX IF NOT EXISTS user_agent_usage_count_idx ON user_agent_usage("usageCount" DESC);
