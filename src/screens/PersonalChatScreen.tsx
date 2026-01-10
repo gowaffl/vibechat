@@ -74,6 +74,7 @@ import { api } from "@/lib/api";
 import { BACKEND_URL } from "@/config";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
+import { formatLocalTime, formatDateDivider } from "@/utils/dateHelpers";
 import { AgentSelectorDropdown, ConversationHistoryDrawer, PersonalAttachmentsMenu } from "@/components/PersonalChat";
 import { CreateAIFriendModal } from "@/components/AIFriends";
 import { ImageGeneratorSheet, ImageGenerationPill } from "@/components/ImageGeneratorSheet";
@@ -1531,25 +1532,6 @@ export default function PersonalChatScreen() {
     textInputRef.current?.focus();
   }, []);
 
-  // Format date for dividers
-  const formatDateDivider = (date: Date) => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return "Today";
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return "Yesterday";
-    } else {
-      return date.toLocaleDateString(undefined, {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      });
-    }
-  };
-
   // Render message item
   const renderMessage = useCallback(
     ({ item, index }: { item: MessageListItem; index: number }) => {
@@ -1599,10 +1581,7 @@ export default function PersonalChatScreen() {
               <Text style={styles.userMessageText}>{message.content}</Text>
             </View>
             <Text style={[styles.messageTime, { color: colors.textTertiary, textAlign: "right" }]}>
-              {new Date(message.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatLocalTime(message.createdAt)}
             </Text>
           </Reanimated.View>
         );
@@ -1735,10 +1714,7 @@ export default function PersonalChatScreen() {
           )}
 
           <Text style={[styles.messageTime, { color: colors.textTertiary }]}>
-            {new Date(message.createdAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatLocalTime(message.createdAt)}
           </Text>
         </Reanimated.View>
       );

@@ -1611,6 +1611,7 @@ export const personalConversationSchema = z.object({
   id: z.string(),
   userId: z.string(),
   aiFriendId: z.string().nullable(),
+  folderId: z.string().nullable().optional(), // Folder this conversation belongs to
   title: z.string(),
   lastMessageAt: z.string().nullable(),
   createdAt: z.string(),
@@ -1766,3 +1767,70 @@ export const trackAgentUsageRequestSchema = z.object({
 export type TrackAgentUsageRequest = z.infer<typeof trackAgentUsageRequestSchema>;
 export const trackAgentUsageResponseSchema = userAgentUsageSchema;
 export type TrackAgentUsageResponse = z.infer<typeof trackAgentUsageResponseSchema>;
+
+// ============================================================================
+// PERSONAL CHAT FOLDER SCHEMAS
+// ============================================================================
+
+// Personal Chat Folder schema
+export const personalChatFolderSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  name: z.string(),
+  sortOrder: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  conversationCount: z.number().optional(), // Added by backend
+});
+export type PersonalChatFolder = z.infer<typeof personalChatFolderSchema>;
+
+// GET /api/personal-chats/folders - Get all folders for a user
+export const getFoldersRequestSchema = z.object({
+  userId: z.string(),
+});
+export type GetFoldersRequest = z.infer<typeof getFoldersRequestSchema>;
+export const getFoldersResponseSchema = z.array(personalChatFolderSchema);
+export type GetFoldersResponse = z.infer<typeof getFoldersResponseSchema>;
+
+// POST /api/personal-chats/folders - Create a new folder
+export const createFolderRequestSchema = z.object({
+  userId: z.string(),
+  name: z.string().min(1).max(100),
+});
+export type CreateFolderRequest = z.infer<typeof createFolderRequestSchema>;
+export const createFolderResponseSchema = personalChatFolderSchema;
+export type CreateFolderResponse = z.infer<typeof createFolderResponseSchema>;
+
+// PATCH /api/personal-chats/folders/:folderId - Update a folder
+export const updateFolderRequestSchema = z.object({
+  userId: z.string(),
+  name: z.string().min(1).max(100).optional(),
+  sortOrder: z.number().optional(),
+});
+export type UpdateFolderRequest = z.infer<typeof updateFolderRequestSchema>;
+export const updateFolderResponseSchema = personalChatFolderSchema;
+export type UpdateFolderResponse = z.infer<typeof updateFolderResponseSchema>;
+
+// DELETE /api/personal-chats/folders/:folderId - Delete a folder
+export const deleteFolderRequestSchema = z.object({
+  userId: z.string(),
+});
+export type DeleteFolderRequest = z.infer<typeof deleteFolderRequestSchema>;
+export const deleteFolderResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+export type DeleteFolderResponse = z.infer<typeof deleteFolderResponseSchema>;
+
+// PATCH /api/personal-chats/:conversationId/folder - Move conversation to folder
+export const moveConversationToFolderRequestSchema = z.object({
+  userId: z.string(),
+  folderId: z.string().nullable(), // null to remove from folder
+});
+export type MoveConversationToFolderRequest = z.infer<typeof moveConversationToFolderRequestSchema>;
+export const moveConversationToFolderResponseSchema = z.object({
+  success: z.boolean(),
+  conversationId: z.string(),
+  folderId: z.string().nullable(),
+});
+export type MoveConversationToFolderResponse = z.infer<typeof moveConversationToFolderResponseSchema>;

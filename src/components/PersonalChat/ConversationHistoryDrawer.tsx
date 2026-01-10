@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,13 @@ import {
   Platform,
   Dimensions,
   Alert,
+  ScrollView,
+  TextInput,
+  Modal,
 } from "react-native";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { FlashList } from "@shopify/flash-list";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -21,7 +23,6 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
-  runOnJS,
 } from "react-native-reanimated";
 import {
   Gesture,
@@ -30,21 +31,33 @@ import {
 } from "react-native-gesture-handler";
 import {
   ChevronLeft,
-  X,
+  ChevronDown,
+  ChevronRight,
   Trash2,
   Check,
   Plus,
+  MoreHorizontal,
+  FolderPlus,
+  Folder,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import { usePersonalConversations, useDeletePersonalConversation, useBulkDeletePersonalConversations } from "@/hooks/usePersonalChats";
-import type { PersonalConversation } from "@/shared/contracts";
+import {
+  usePersonalConversations,
+  useDeletePersonalConversation,
+  useBulkDeletePersonalConversations,
+  useFolders,
+  useCreateFolder,
+  useDeleteFolder,
+  useMoveConversationToFolder,
+} from "@/hooks/usePersonalChats";
+import type { PersonalConversation, PersonalChatFolder } from "@/shared/contracts";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
-const DELETE_THRESHOLD = -80;
+const SWIPE_THRESHOLD = -60;
 
 interface ConversationHistoryDrawerProps {
   isOpen: boolean;
@@ -52,6 +65,7 @@ interface ConversationHistoryDrawerProps {
   currentConversationId: string | null;
   onSelectConversation: (conversation: PersonalConversation) => void;
   onNewConversation?: () => void;
+  onQuickStartAgent?: (agentId: string) => void;
 }
 
 interface ConversationItemProps {
@@ -61,10 +75,173 @@ interface ConversationItemProps {
   isBulkSelected: boolean;
   onPress: () => void;
   onBulkToggle: () => void;
-  onDelete: () => void;
+  onMorePress: () => void;
   isDark: boolean;
   colors: any;
 }
+
+// ============================================================================
+// QUICK START AGENTS COMPONENT
+// ============================================================================
+
+interface QuickStartAgentsProps {
+  conversations: PersonalConversation[];
+  onQuickStart: (agentId: string) => void;
+  isDark: boolean;
+  colors: any;
+}
+
+function QuickStartAgents({ conversations, onQuickStart, isDark, colors }: QuickStartAgentsProps) {
+  // Calculate top 3 most-used agents based on conversation count
+  const topAgents = useMemo(() => {
+    const agentCounts: Record<string, { count: number; name: string; avatarUrl?: string }> = {};
+    
+    conversations.forEach((conv) => {
+      if (conv.agentId) {
+        if (!agentCounts[conv.agentId]) {
+          agentCounts[conv.agentId] = {
+            count: 0,
+            name: conv.agentName || "Agent",
+            avatarUrl: conv.agentAvatarUrl,
+          };
+        }
+        agentCounts[conv.agentId].count++;
+      }
+    });
+    
+    return Object.entries(agentCounts)
+      .sort(([, a], [, b]) => b.count - a.count)
+      .slice(0, 3)
+      .map(([agentId, data]) => ({
+        agentId,
+        name: data.name,
+        avatarUrl: data.avatarUrl,
+        count: data.count,
+      }));
+  }, [conversations]);
+  
+  if (topAgents.length === 0) return null;
+  
+  const getInitials = (name: string) => {
+    const words = name.split(" ").filter(Boolean);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+  
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", 
+      "#f97316", "#eab308", "#22c55e", "#14b8a6",
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+  
+  return (
+    <View style={quickStartStyles.container}>
+      <Text style={[quickStartStyles.sectionTitle, { color: colors.textSecondary }]}>
+        Quick Start
+      </Text>
+      <View style={quickStartStyles.agentsRow}>
+        {topAgents.map((agent) => (
+          <Pressable
+            key={agent.agentId}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onQuickStart(agent.agentId);
+            }}
+            style={({ pressed }) => [
+              quickStartStyles.agentItem,
+              pressed && quickStartStyles.agentItemPressed,
+            ]}
+          >
+            {agent.avatarUrl ? (
+              <Image
+                source={{ uri: agent.avatarUrl }}
+                style={quickStartStyles.agentAvatar}
+                contentFit="cover"
+              />
+            ) : (
+              <View
+                style={[
+                  quickStartStyles.agentAvatar,
+                  { backgroundColor: getAvatarColor(agent.name) },
+                ]}
+              >
+                <Text style={quickStartStyles.agentInitials}>
+                  {getInitials(agent.name)}
+                </Text>
+              </View>
+            )}
+            <Text
+              style={[quickStartStyles.agentName, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {agent.name}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const quickStartStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128,128,128,0.2)",
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  agentsRow: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    gap: 20,
+  },
+  agentItem: {
+    alignItems: "center",
+    width: 70,
+  },
+  agentItemPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
+  },
+  agentAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginBottom: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  agentInitials: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  agentName: {
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+});
+
+// ============================================================================
+// CONVERSATION ITEM COMPONENT
+// ============================================================================
 
 function ConversationItem({
   conversation,
@@ -73,30 +250,30 @@ function ConversationItem({
   isBulkSelected,
   onPress,
   onBulkToggle,
-  onDelete,
+  onMorePress,
   isDark,
   colors,
 }: ConversationItemProps) {
   const translateX = useSharedValue(0);
-  const deleteOpacity = useSharedValue(0);
+  const moreOpacity = useSharedValue(0);
   
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-10, 10])
     .onUpdate((event) => {
       if (isInBulkMode) return;
-      const newValue = Math.min(0, Math.max(event.translationX, -100));
+      const newValue = Math.min(0, Math.max(event.translationX, -80));
       translateX.value = newValue;
-      deleteOpacity.value = Math.min(1, Math.abs(newValue) / Math.abs(DELETE_THRESHOLD));
+      moreOpacity.value = Math.min(1, Math.abs(newValue) / Math.abs(SWIPE_THRESHOLD));
     })
-    .onEnd((event) => {
+    .onEnd(() => {
       if (isInBulkMode) return;
-      if (translateX.value < DELETE_THRESHOLD) {
-        translateX.value = withTiming(-100, { duration: 200 });
-        deleteOpacity.value = 1;
+      if (translateX.value < SWIPE_THRESHOLD) {
+        translateX.value = withTiming(-70, { duration: 200 });
+        moreOpacity.value = 1;
       } else {
         translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
-        deleteOpacity.value = withTiming(0, { duration: 200 });
+        moreOpacity.value = withTiming(0, { duration: 200 });
       }
     });
   
@@ -104,40 +281,23 @@ function ConversationItem({
     transform: [{ translateX: translateX.value }],
   }));
   
-  const deleteButtonStyle = useAnimatedStyle(() => ({
-    opacity: deleteOpacity.value,
+  const moreButtonStyle = useAnimatedStyle(() => ({
+    opacity: moreOpacity.value,
   }));
   
-  const handleDeletePress = useCallback(() => {
+  const handleMorePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
-    deleteOpacity.value = withTiming(0, { duration: 200 });
-    onDelete();
-  }, [onDelete]);
-  
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } else if (diffDays === 1) {
-      return "Yesterday";
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: "short" });
-    } else {
-      return date.toLocaleDateString([], { month: "short", day: "numeric" });
-    }
-  };
+    moreOpacity.value = withTiming(0, { duration: 200 });
+    onMorePress();
+  }, [onMorePress]);
   
   return (
     <View style={styles.conversationItemContainer}>
-      {/* Delete Button (revealed on swipe) */}
-      <Animated.View style={[styles.deleteButtonContainer, deleteButtonStyle]}>
-        <Pressable onPress={handleDeletePress} style={styles.deleteButton}>
-          <Trash2 size={20} color="#fff" />
+      {/* More Button (revealed on swipe) */}
+      <Animated.View style={[styles.moreButtonContainer, moreButtonStyle]}>
+        <Pressable onPress={handleMorePress} style={styles.moreButton}>
+          <MoreHorizontal size={20} color="#fff" />
         </Pressable>
       </Animated.View>
       
@@ -192,32 +352,532 @@ function ConversationItem({
   );
 }
 
-/**
- * ConversationHistoryDrawer - Left slide-out drawer for conversation history
- * 
- * Features:
- * - Swipe from left edge to open
- * - Swipe left on items to reveal delete
- * - Long-press for bulk selection mode
- * - Liquid glass styling
- * - Back button to return to main screen
- */
+// ============================================================================
+// ADD TO FOLDER MODAL
+// ============================================================================
+
+interface AddToFolderModalProps {
+  visible: boolean;
+  onClose: () => void;
+  conversationId: string | null;
+  folders: PersonalChatFolder[];
+  onSelectFolder: (folderId: string | null) => void;
+  onCreateFolder: (name: string) => void;
+  isDark: boolean;
+  colors: any;
+}
+
+function AddToFolderModal({
+  visible,
+  onClose,
+  conversationId,
+  folders,
+  onSelectFolder,
+  onCreateFolder,
+  isDark,
+  colors,
+}: AddToFolderModalProps) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  
+  const handleCreateFolder = () => {
+    if (newFolderName.trim()) {
+      onCreateFolder(newFolderName.trim());
+      setNewFolderName("");
+      setIsCreating(false);
+    }
+  };
+  
+  const handleClose = () => {
+    setIsCreating(false);
+    setNewFolderName("");
+    onClose();
+  };
+  
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
+      <Pressable style={folderModalStyles.overlay} onPress={handleClose}>
+        <Pressable
+          style={[
+            folderModalStyles.container,
+            { backgroundColor: isDark ? "#1c1c1e" : "#fff" },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text style={[folderModalStyles.title, { color: colors.text }]}>
+            Add to Folder
+          </Text>
+          
+          {/* Remove from folder option */}
+          <Pressable
+            style={[
+              folderModalStyles.option,
+              { borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
+            ]}
+            onPress={() => onSelectFolder(null)}
+          >
+            <Text style={[folderModalStyles.optionText, { color: colors.textSecondary }]}>
+              No Folder (Remove)
+            </Text>
+          </Pressable>
+          
+          {/* Existing folders */}
+          {folders.map((folder) => (
+            <Pressable
+              key={folder.id}
+              style={[
+                folderModalStyles.option,
+                { borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
+              ]}
+              onPress={() => onSelectFolder(folder.id)}
+            >
+              <View style={folderModalStyles.optionRow}>
+                <Folder size={18} color={colors.primary} />
+                <Text style={[folderModalStyles.optionText, { color: colors.text }]}>
+                  {folder.name}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+          
+          {/* Create new folder */}
+          {isCreating ? (
+            <View style={folderModalStyles.createContainer}>
+              <TextInput
+                value={newFolderName}
+                onChangeText={setNewFolderName}
+                placeholder="Folder name..."
+                placeholderTextColor={colors.textTertiary}
+                style={[
+                  folderModalStyles.input,
+                  {
+                    backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                    color: colors.text,
+                  },
+                ]}
+                autoFocus
+                onSubmitEditing={handleCreateFolder}
+              />
+              <View style={folderModalStyles.createButtons}>
+                <Pressable
+                  onPress={() => setIsCreating(false)}
+                  style={folderModalStyles.cancelBtn}
+                >
+                  <Text style={{ color: colors.textSecondary }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleCreateFolder}
+                  style={[folderModalStyles.createBtn, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600" }}>Create</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              style={folderModalStyles.option}
+              onPress={() => setIsCreating(true)}
+            >
+              <View style={folderModalStyles.optionRow}>
+                <FolderPlus size={18} color="#22c55e" />
+                <Text style={[folderModalStyles.optionText, { color: "#22c55e" }]}>
+                  Create New Folder
+                </Text>
+              </View>
+            </Pressable>
+          )}
+          
+          {/* Close button */}
+          <Pressable
+            style={[folderModalStyles.closeButton, { borderTopColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }]}
+            onPress={handleClose}
+          >
+            <Text style={[folderModalStyles.closeText, { color: colors.primary }]}>
+              Cancel
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const folderModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  container: {
+    width: "100%",
+    maxWidth: 300,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128,128,128,0.3)",
+  },
+  option: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  optionText: {
+    fontSize: 16,
+  },
+  createContainer: {
+    padding: 16,
+  },
+  input: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  createButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  createBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  closeButton: {
+    paddingVertical: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  closeText: {
+    fontSize: 17,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+});
+
+// ============================================================================
+// MORE OPTIONS MODAL
+// ============================================================================
+
+interface MoreOptionsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onAddToFolder: () => void;
+  onDelete: () => void;
+  isDark: boolean;
+  colors: any;
+}
+
+function MoreOptionsModal({
+  visible,
+  onClose,
+  onAddToFolder,
+  onDelete,
+  isDark,
+  colors,
+}: MoreOptionsModalProps) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={moreModalStyles.overlay} onPress={onClose}>
+        <View
+          style={[
+            moreModalStyles.container,
+            { backgroundColor: isDark ? "#1c1c1e" : "#fff" },
+          ]}
+        >
+          <Pressable
+            style={[
+              moreModalStyles.option,
+              { borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
+            ]}
+            onPress={() => {
+              onClose();
+              onAddToFolder();
+            }}
+          >
+            <View style={moreModalStyles.optionRow}>
+              <FolderPlus size={20} color={colors.primary} />
+              <Text style={[moreModalStyles.optionText, { color: colors.text }]}>
+                Add to Folder
+              </Text>
+            </View>
+          </Pressable>
+          
+          <Pressable
+            style={moreModalStyles.option}
+            onPress={() => {
+              onClose();
+              onDelete();
+            }}
+          >
+            <View style={moreModalStyles.optionRow}>
+              <Trash2 size={20} color="#ef4444" />
+              <Text style={[moreModalStyles.optionText, { color: "#ef4444" }]}>
+                Delete
+              </Text>
+            </View>
+          </Pressable>
+          
+          <Pressable
+            style={[
+              moreModalStyles.closeButton,
+              { borderTopColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
+            ]}
+            onPress={onClose}
+          >
+            <Text style={[moreModalStyles.closeText, { color: colors.textSecondary }]}>
+              Cancel
+            </Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const moreModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+    paddingBottom: 40,
+    paddingHorizontal: 10,
+  },
+  container: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  option: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  optionText: {
+    fontSize: 17,
+  },
+  closeButton: {
+    paddingVertical: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  closeText: {
+    fontSize: 17,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+});
+
+// ============================================================================
+// FOLDER SECTION COMPONENT
+// ============================================================================
+
+interface FolderSectionProps {
+  folder: PersonalChatFolder;
+  conversations: PersonalConversation[];
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  currentConversationId: string | null;
+  bulkMode: boolean;
+  selectedIds: Set<string>;
+  onSelectConversation: (conversation: PersonalConversation) => void;
+  onBulkToggle: (id: string) => void;
+  onMorePress: (conversationId: string) => void;
+  onDeleteFolder: () => void;
+  isDark: boolean;
+  colors: any;
+}
+
+function FolderSection({
+  folder,
+  conversations,
+  isCollapsed,
+  onToggleCollapse,
+  currentConversationId,
+  bulkMode,
+  selectedIds,
+  onSelectConversation,
+  onBulkToggle,
+  onMorePress,
+  onDeleteFolder,
+  isDark,
+  colors,
+}: FolderSectionProps) {
+  return (
+    <View style={folderStyles.container}>
+      <Pressable
+        onPress={onToggleCollapse}
+        onLongPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          Alert.alert(
+            "Delete Folder",
+            `Delete "${folder.name}"? Conversations will be moved out of this folder.`,
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Delete", style: "destructive", onPress: onDeleteFolder },
+            ]
+          );
+        }}
+        style={({ pressed }) => [
+          folderStyles.header,
+          {
+            backgroundColor: pressed
+              ? isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"
+              : isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+          },
+        ]}
+      >
+        <View style={folderStyles.headerLeft}>
+          {isCollapsed ? (
+            <ChevronRight size={18} color={colors.textSecondary} />
+          ) : (
+            <ChevronDown size={18} color={colors.textSecondary} />
+          )}
+          <Folder size={18} color={colors.primary} />
+          <Text style={[folderStyles.folderName, { color: colors.text }]}>
+            {folder.name}
+          </Text>
+        </View>
+        <Text style={[folderStyles.count, { color: colors.textTertiary }]}>
+          {conversations.length}
+        </Text>
+      </Pressable>
+      
+      {!isCollapsed && (
+        <View style={folderStyles.conversationsList}>
+          {conversations.map((conv) => (
+            <ConversationItem
+              key={conv.id}
+              conversation={conv}
+              isSelected={conv.id === currentConversationId}
+              isInBulkMode={bulkMode}
+              isBulkSelected={selectedIds.has(conv.id)}
+              onPress={() => onSelectConversation(conv)}
+              onBulkToggle={() => onBulkToggle(conv.id)}
+              onMorePress={() => onMorePress(conv.id)}
+              isDark={isDark}
+              colors={colors}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const folderStyles = StyleSheet.create({
+  container: {
+    marginBottom: 8,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 8,
+    borderRadius: 10,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  folderName: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  count: {
+    fontSize: 13,
+  },
+  conversationsList: {
+    marginLeft: 8,
+  },
+});
+
+// ============================================================================
+// MAIN DRAWER COMPONENT
+// ============================================================================
+
 export default function ConversationHistoryDrawer({
   isOpen,
   onClose,
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  onQuickStartAgent,
 }: ConversationHistoryDrawerProps) {
   const { isDark, colors } = useTheme();
   const insets = useSafeAreaInsets();
+  
+  // State
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [moreOptionsVisible, setMoreOptionsVisible] = useState(false);
+  const [addToFolderVisible, setAddToFolderVisible] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   
-  const { data: conversations = [], isLoading, refetch } = usePersonalConversations();
+  // Data hooks
+  const { data: conversations = [], isLoading } = usePersonalConversations();
+  const { data: folders = [] } = useFolders();
   const deleteConversation = useDeletePersonalConversation();
   const bulkDelete = useBulkDeletePersonalConversations();
+  const createFolder = useCreateFolder();
+  const deleteFolder = useDeleteFolder();
+  const moveToFolder = useMoveConversationToFolder();
   
+  // Group conversations by folder
+  const { folderedConversations, unfolderedConversations } = useMemo(() => {
+    const foldered: Record<string, PersonalConversation[]> = {};
+    const unfoldered: PersonalConversation[] = [];
+    
+    folders.forEach((folder: PersonalChatFolder) => {
+      foldered[folder.id] = [];
+    });
+    
+    conversations.forEach((conv: PersonalConversation) => {
+      if (conv.folderId && foldered[conv.folderId]) {
+        foldered[conv.folderId].push(conv);
+      } else {
+        unfoldered.push(conv);
+      }
+    });
+    
+    return { folderedConversations: foldered, unfolderedConversations: unfoldered };
+  }, [conversations, folders]);
+  
+  // Handlers
   const handleClose = useCallback(() => {
     setBulkMode(false);
     setSelectedIds(new Set());
@@ -259,9 +919,7 @@ export default function ConversationHistoryDrawer({
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
-            deleteConversation.mutate(conversationId);
-          },
+          onPress: () => deleteConversation.mutate(conversationId),
         },
       ]
     );
@@ -296,7 +954,7 @@ export default function ConversationHistoryDrawer({
       setSelectedIds(new Set());
       setBulkMode(false);
     } else {
-      setSelectedIds(new Set(conversations.map((c) => c.id)));
+      setSelectedIds(new Set(conversations.map((c: PersonalConversation) => c.id)));
     }
   }, [selectedIds, conversations]);
   
@@ -305,12 +963,65 @@ export default function ConversationHistoryDrawer({
     setBulkMode(false);
     setSelectedIds(new Set());
   }, []);
-
+  
   const handleNewConversation = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     handleClose();
     onNewConversation?.();
   }, [handleClose, onNewConversation]);
+  
+  const handleMorePress = useCallback((conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    setMoreOptionsVisible(true);
+  }, []);
+  
+  const handleToggleFolderCollapse = useCallback((folderId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  }, []);
+  
+  const handleCreateFolder = useCallback((name: string) => {
+    createFolder.mutate(name, {
+      onSuccess: (newFolder) => {
+        if (selectedConversationId && newFolder?.id) {
+          moveToFolder.mutate({
+            conversationId: selectedConversationId,
+            folderId: newFolder.id,
+          });
+        }
+        setAddToFolderVisible(false);
+        setSelectedConversationId(null);
+      },
+    });
+  }, [createFolder, moveToFolder, selectedConversationId]);
+  
+  const handleSelectFolder = useCallback((folderId: string | null) => {
+    if (selectedConversationId) {
+      moveToFolder.mutate({
+        conversationId: selectedConversationId,
+        folderId,
+      });
+    }
+    setAddToFolderVisible(false);
+    setSelectedConversationId(null);
+  }, [moveToFolder, selectedConversationId]);
+  
+  const handleDeleteFolder = useCallback((folderId: string) => {
+    deleteFolder.mutate(folderId);
+  }, [deleteFolder]);
+  
+  const handleQuickStart = useCallback((agentId: string) => {
+    handleClose();
+    onQuickStartAgent?.(agentId);
+  }, [handleClose, onQuickStartAgent]);
   
   if (!isOpen) return null;
   
@@ -344,9 +1055,8 @@ export default function ConversationHistoryDrawer({
             }
             style={[styles.drawerGradient, { paddingTop: insets.top + 12 }]}
           >
-            {/* Header with Back Button */}
+            {/* Header */}
             <View style={styles.header}>
-              {/* Back Button - prominent on left side */}
               <Pressable 
                 onPress={handleClose} 
                 style={({ pressed }) => [
@@ -359,12 +1069,9 @@ export default function ConversationHistoryDrawer({
                 ]}
               >
                 <ChevronLeft size={22} color="#6366f1" strokeWidth={2.5} />
-                <Text style={styles.backButtonText}>
-                  Back
-                </Text>
+                <Text style={styles.backButtonText}>Back</Text>
               </Pressable>
 
-              {/* Title */}
               <View style={styles.headerCenter}>
                 <Image
                   source={require("../../../assets/vibechat icon main.png")}
@@ -376,7 +1083,6 @@ export default function ConversationHistoryDrawer({
                 </Text>
               </View>
 
-              {/* New Chat Button */}
               <Pressable 
                 onPress={handleNewConversation} 
                 style={({ pressed }) => [
@@ -429,79 +1135,176 @@ export default function ConversationHistoryDrawer({
               </Animated.View>
             )}
             
-            {/* Create New Chat Button */}
-            <View style={styles.createChatButtonContainer}>
-              <Pressable
-                onPress={handleNewConversation}
-                style={({ pressed }) => [
-                  styles.createChatButton,
-                  {
-                    backgroundColor: pressed
-                      ? isDark ? "rgba(79,195,247,0.1)" : "rgba(79,195,247,0.05)"
-                      : "transparent",
-                  }
-                ]}
-              >
-                <View style={styles.createChatButtonInner}>
-                  <Plus size={20} color="#4FC3F7" strokeWidth={2.5} />
-                  <Text style={styles.createChatButtonText}>
-                    Create New Chat
-                  </Text>
-                </View>
-              </Pressable>
-              {/* Divider */}
-              <View style={[
-                styles.divider,
-                { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }
-              ]} />
-            </View>
-            
-            {/* Conversations List */}
+            {/* Scrollable Content */}
             <GestureHandlerRootView style={styles.listContainer}>
-              {conversations.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <View style={[
-                    styles.emptyIconContainer,
-                    { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }
-                  ]}>
-                    <Image
-                      source={require("../../../assets/vibechat icon main.png")}
-                      style={styles.emptyIcon}
-                      contentFit="cover"
-                    />
-                  </View>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    No conversations yet
-                  </Text>
-                  <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>
-                    Start a new chat to begin
-                  </Text>
+              <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Quick Start Agents */}
+                {conversations.length > 0 && (
+                  <QuickStartAgents
+                    conversations={conversations}
+                    onQuickStart={handleQuickStart}
+                    isDark={isDark}
+                    colors={colors}
+                  />
+                )}
+                
+                {/* Create New Chat Button */}
+                <View style={styles.createChatButtonContainer}>
+                  <Pressable
+                    onPress={handleNewConversation}
+                    style={({ pressed }) => [
+                      styles.createChatButton,
+                      {
+                        backgroundColor: pressed
+                          ? isDark ? "rgba(79,195,247,0.1)" : "rgba(79,195,247,0.05)"
+                          : "transparent",
+                      }
+                    ]}
+                  >
+                    <View style={styles.createChatButtonInner}>
+                      <Plus size={20} color="#4FC3F7" strokeWidth={2.5} />
+                      <Text style={styles.createChatButtonText}>
+                        Create New Chat
+                      </Text>
+                    </View>
+                  </Pressable>
                 </View>
-              ) : (
-                <FlashList
-                  data={conversations}
-                  keyExtractor={(item) => item.id}
-                  estimatedItemSize={64}
-                  renderItem={({ item }) => (
-                    <ConversationItem
-                      conversation={item}
-                      isSelected={item.id === currentConversationId}
-                      isInBulkMode={bulkMode}
-                      isBulkSelected={selectedIds.has(item.id)}
-                      onPress={() => handleSelectConversation(item)}
-                      onBulkToggle={() => handleToggleBulkSelection(item.id)}
-                      onDelete={() => handleDeleteSingle(item.id)}
-                      isDark={isDark}
-                      colors={colors}
-                    />
-                  )}
-                  contentContainerStyle={styles.listContent}
-                />
-              )}
+                
+                {/* Create Folder Button */}
+                <Pressable
+                  onPress={() => {
+                    Alert.prompt(
+                      "Create Folder",
+                      "Enter a name for the new folder:",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Create",
+                          onPress: (name) => {
+                            if (name?.trim()) {
+                              createFolder.mutate(name.trim());
+                            }
+                          },
+                        },
+                      ],
+                      "plain-text"
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.createFolderButton,
+                    {
+                      backgroundColor: pressed
+                        ? isDark ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.05)"
+                        : "transparent",
+                    }
+                  ]}
+                >
+                  <FolderPlus size={18} color="#22c55e" />
+                  <Text style={styles.createFolderText}>Create Folder</Text>
+                </Pressable>
+                
+                {/* Divider */}
+                <View style={[
+                  styles.divider,
+                  { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }
+                ]} />
+                
+                {conversations.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <View style={[
+                      styles.emptyIconContainer,
+                      { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }
+                    ]}>
+                      <Image
+                        source={require("../../../assets/vibechat icon main.png")}
+                        style={styles.emptyIcon}
+                        contentFit="cover"
+                      />
+                    </View>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No conversations yet
+                    </Text>
+                    <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>
+                      Start a new chat to begin
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* Folders First */}
+                    {folders.map((folder: PersonalChatFolder) => (
+                      <FolderSection
+                        key={folder.id}
+                        folder={folder}
+                        conversations={folderedConversations[folder.id] || []}
+                        isCollapsed={collapsedFolders.has(folder.id)}
+                        onToggleCollapse={() => handleToggleFolderCollapse(folder.id)}
+                        currentConversationId={currentConversationId}
+                        bulkMode={bulkMode}
+                        selectedIds={selectedIds}
+                        onSelectConversation={handleSelectConversation}
+                        onBulkToggle={handleToggleBulkSelection}
+                        onMorePress={handleMorePress}
+                        onDeleteFolder={() => handleDeleteFolder(folder.id)}
+                        isDark={isDark}
+                        colors={colors}
+                      />
+                    ))}
+                    
+                    {/* Unfoldered Conversations */}
+                    {unfolderedConversations.map((conv: PersonalConversation) => (
+                      <ConversationItem
+                        key={conv.id}
+                        conversation={conv}
+                        isSelected={conv.id === currentConversationId}
+                        isInBulkMode={bulkMode}
+                        isBulkSelected={selectedIds.has(conv.id)}
+                        onPress={() => handleSelectConversation(conv)}
+                        onBulkToggle={() => handleToggleBulkSelection(conv.id)}
+                        onMorePress={() => handleMorePress(conv.id)}
+                        isDark={isDark}
+                        colors={colors}
+                      />
+                    ))}
+                  </>
+                )}
+              </ScrollView>
             </GestureHandlerRootView>
           </LinearGradient>
         </BlurView>
       </Animated.View>
+      
+      {/* More Options Modal */}
+      <MoreOptionsModal
+        visible={moreOptionsVisible}
+        onClose={() => setMoreOptionsVisible(false)}
+        onAddToFolder={() => setAddToFolderVisible(true)}
+        onDelete={() => {
+          if (selectedConversationId) {
+            handleDeleteSingle(selectedConversationId);
+          }
+          setSelectedConversationId(null);
+        }}
+        isDark={isDark}
+        colors={colors}
+      />
+      
+      {/* Add to Folder Modal */}
+      <AddToFolderModal
+        visible={addToFolderVisible}
+        onClose={() => {
+          setAddToFolderVisible(false);
+          setSelectedConversationId(null);
+        }}
+        conversationId={selectedConversationId}
+        folders={folders}
+        onSelectFolder={handleSelectFolder}
+        onCreateFolder={handleCreateFolder}
+        isDark={isDark}
+        colors={colors}
+      />
     </View>
   );
 }
@@ -616,20 +1419,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  listContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
   createChatButtonContainer: {
     paddingHorizontal: 0,
     paddingTop: 16,
-    paddingBottom: 12,
   },
   createChatButton: {
-    paddingVertical: 18,
+    paddingVertical: 14,
     paddingRight: 16,
-    minHeight: 64,
   },
   createChatButtonInner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 25, // ✅ Moving the inner content to align with the text below
+    paddingLeft: 25,
   },
   createChatButtonText: {
     fontSize: 16,
@@ -637,35 +1444,42 @@ const styles = StyleSheet.create({
     color: "#4FC3F7",
     marginLeft: 12,
   },
+  createFolderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingLeft: 25,
+    gap: 12,
+  },
+  createFolderText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#22c55e",
+  },
   divider: {
     height: StyleSheet.hairlineWidth,
     width: "100%",
-    marginTop: 14,
-  },
-  listContainer: {
-    flex: 1,
-  },
-  listContent: {
-    paddingVertical: 20,
+    marginTop: 12,
+    marginBottom: 16,
   },
   conversationItemContainer: {
     position: "relative",
-    marginBottom: 12, // ✅ Increased margin between items
+    marginBottom: 8,
   },
-  deleteButtonContainer: {
+  moreButtonContainer: {
     position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
-    width: 80,
+    width: 70,
     justifyContent: "center",
     alignItems: "center",
   },
-  deleteButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#ef4444",
+  moreButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#6366f1",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -675,10 +1489,10 @@ const styles = StyleSheet.create({
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 15, // ✅ Increased padding even more to ensure change is visible
+    paddingVertical: 14,
     paddingLeft: 24,
     paddingRight: 16,
-    minHeight: 76, // ✅ Increased minHeight even more to ensure change is visible
+    minHeight: 56,
   },
   checkboxContainer: {
     marginRight: 4,
@@ -711,6 +1525,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 40,
+    paddingTop: 60,
   },
   emptyIconContainer: {
     width: 80,

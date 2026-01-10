@@ -17,6 +17,12 @@ import type {
   GetTopAgentsResponse,
   GetAllUserAgentsResponse,
   AIFriend,
+  PersonalChatFolder,
+  GetFoldersResponse,
+  CreateFolderResponse,
+  UpdateFolderResponse,
+  DeleteFolderResponse,
+  MoveConversationToFolderResponse,
 } from "@/shared/contracts";
 
 // Query keys for personal chats
@@ -26,6 +32,7 @@ export const personalChatsKeys = {
   conversation: (conversationId: string) => [...personalChatsKeys.all, "conversation", conversationId] as const,
   topAgents: (userId: string) => [...personalChatsKeys.all, "top-agents", userId] as const,
   allAgents: (userId: string) => [...personalChatsKeys.all, "all-agents", userId] as const,
+  folders: (userId: string) => [...personalChatsKeys.all, "folders", userId] as const,
 };
 
 /**
@@ -222,3 +229,128 @@ export function useUpdatePersonalConversation() {
   });
 }
 
+
+// ============================================================================
+// FOLDER HOOKS
+// ============================================================================
+
+/**
+ * Hook to fetch all folders for the current user
+ */
+export function useFolders() {
+  const { user } = useUser();
+  
+  return useQuery({
+    queryKey: personalChatsKeys.folders(user?.id || ""),
+    queryFn: async () => {
+      if (!user?.id) throw new Error("User not authenticated");
+      const response = await api.get<PersonalChatFolder[]>(
+        `/api/personal-chats/folders?userId=${user.id}`
+      );
+      return response || [];
+    },
+    enabled: !!user?.id,
+    staleTime: 30000, // 30 seconds
+  });
+}
+
+/**
+ * Hook to create a new folder
+ */
+export function useCreateFolder() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (name: string) => {
+      if (!user?.id) throw new Error("User not authenticated");
+      return api.post<CreateFolderResponse>("/api/personal-chats/folders", {
+        userId: user.id,
+        name,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.folders(user?.id || "")
+      });
+    },
+  });
+}
+
+/**
+ * Hook to update a folder (rename)
+ */
+export function useUpdateFolder() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: { folderId: string; name?: string; sortOrder?: number }) => {
+      if (!user?.id) throw new Error("User not authenticated");
+      const { folderId, ...updateData } = data;
+      return api.patch<UpdateFolderResponse>(
+        `/api/personal-chats/folders/${folderId}`,
+        { userId: user.id, ...updateData }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.folders(user?.id || "")
+      });
+    },
+  });
+}
+
+/**
+ * Hook to delete a folder
+ */
+export function useDeleteFolder() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (folderId: string) => {
+      if (!user?.id) throw new Error("User not authenticated");
+      return api.delete<DeleteFolderResponse>(
+        `/api/personal-chats/folders/${folderId}`,
+        { userId: user.id }
+      );
+    },
+    onSuccess: () => {
+      // Invalidate both folders and conversations (conversations may have moved)
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.folders(user?.id || "")
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.conversations(user?.id || "")
+      });
+    },
+  });
+}
+
+/**
+ * Hook to move a conversation to a folder (or remove from folder)
+ */
+export function useMoveConversationToFolder() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: { conversationId: string; folderId: string | null }) => {
+      if (!user?.id) throw new Error("User not authenticated");
+      return api.patch<MoveConversationToFolderResponse>(
+        `/api/personal-chats/${data.conversationId}/folder`,
+        { userId: user.id, folderId: data.folderId }
+      );
+    },
+    onSuccess: () => {
+      // Invalidate conversations and folders
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.conversations(user?.id || "")
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: personalChatsKeys.folders(user?.id || "")
+      });
+    },
+  });
+}

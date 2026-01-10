@@ -45,6 +45,12 @@ import {
   getTopAgentsRequestSchema,
   getAllUserAgentsRequestSchema,
   trackAgentUsageRequestSchema,
+  // Folder schemas
+  getFoldersRequestSchema,
+  createFolderRequestSchema,
+  updateFolderRequestSchema,
+  deleteFolderRequestSchema,
+  moveConversationToFolderRequestSchema,
 } from "@shared/contracts";
 
 const personalChats = new Hono();
@@ -85,6 +91,7 @@ personalChats.get("/", zValidator("query", getPersonalConversationsRequestSchema
         id: conv.id,
         userId: conv.userId,
         aiFriendId: conv.aiFriendId,
+        folderId: conv.folderId || null,
         title: conv.title,
         lastMessageAt: conv.lastMessageAt ? formatTimestamp(conv.lastMessageAt) : null,
         createdAt: formatTimestamp(conv.createdAt),
@@ -460,6 +467,206 @@ personalChats.post("/create-agent", async (c) => {
 });
 
 // ============================================================================
+// FOLDER ENDPOINTS (Must be before /:conversationId to avoid route conflicts)
+// ============================================================================
+
+// GET /api/personal-chats/folders - Get all folders for a user
+personalChats.get("/folders", zValidator("query", getFoldersRequestSchema), async (c) => {
+  const { userId } = c.req.valid("query");
+
+  try {
+    // Get all folders with conversation count
+    const { data: folders, error } = await db
+      .from("personal_chat_folder")
+      .select("*")
+      .eq("userId", userId)
+      .order("sortOrder", { ascending: true });
+
+    if (error) {
+      console.error("[PersonalChats] Error fetching folders:", error);
+      return c.json({ error: "Failed to fetch folders" }, 500);
+    }
+
+    // Get conversation counts for each folder
+    const folderIds = folders.map((f) => f.id);
+    let conversationCounts: Record<string, number> = {};
+    
+    if (folderIds.length > 0) {
+      const { data: counts, error: countError } = await db
+        .from("personal_conversation")
+        .select("folderId")
+        .eq("userId", userId)
+        .in("folderId", folderIds);
+
+      if (!countError && counts) {
+        conversationCounts = counts.reduce((acc, conv) => {
+          if (conv.folderId) {
+            acc[conv.folderId] = (acc[conv.folderId] || 0) + 1;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+      }
+    }
+
+    return c.json(
+      folders.map((folder) => ({
+        id: folder.id,
+        userId: folder.userId,
+        name: folder.name,
+        sortOrder: folder.sortOrder,
+        createdAt: formatTimestamp(folder.createdAt),
+        updatedAt: formatTimestamp(folder.updatedAt),
+        conversationCount: conversationCounts[folder.id] || 0,
+      }))
+    );
+  } catch (error) {
+    console.error("[PersonalChats] Error fetching folders:", error);
+    return c.json({ error: "Failed to fetch folders" }, 500);
+  }
+});
+
+// POST /api/personal-chats/folders - Create a new folder
+personalChats.post("/folders", zValidator("json", createFolderRequestSchema), async (c) => {
+  const { userId, name } = c.req.valid("json");
+
+  try {
+    // Get the max sortOrder for existing folders
+    const { data: existingFolders } = await db
+      .from("personal_chat_folder")
+      .select("sortOrder")
+      .eq("userId", userId)
+      .order("sortOrder", { ascending: false })
+      .limit(1);
+
+    const nextSortOrder = (existingFolders?.[0]?.sortOrder ?? -1) + 1;
+
+    // Create the folder
+    const { data: folder, error } = await db
+      .from("personal_chat_folder")
+      .insert({
+        userId,
+        name,
+        sortOrder: nextSortOrder,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[PersonalChats] Error creating folder:", error);
+      return c.json({ error: "Failed to create folder" }, 500);
+    }
+
+    return c.json({
+      id: folder.id,
+      userId: folder.userId,
+      name: folder.name,
+      sortOrder: folder.sortOrder,
+      createdAt: formatTimestamp(folder.createdAt),
+      updatedAt: formatTimestamp(folder.updatedAt),
+      conversationCount: 0,
+    });
+  } catch (error) {
+    console.error("[PersonalChats] Error creating folder:", error);
+    return c.json({ error: "Failed to create folder" }, 500);
+  }
+});
+
+// PATCH /api/personal-chats/folders/:folderId - Update a folder
+personalChats.patch("/folders/:folderId", zValidator("json", updateFolderRequestSchema), async (c) => {
+  const folderId = c.req.param("folderId");
+  const { userId, name, sortOrder } = c.req.valid("json");
+
+  try {
+    // Verify folder belongs to user
+    const { data: existingFolder, error: fetchError } = await db
+      .from("personal_chat_folder")
+      .select("id")
+      .eq("id", folderId)
+      .eq("userId", userId)
+      .single();
+
+    if (fetchError || !existingFolder) {
+      return c.json({ error: "Folder not found" }, 404);
+    }
+
+    // Build update object
+    const updates: Record<string, any> = { updatedAt: new Date().toISOString() };
+    if (name !== undefined) updates.name = name;
+    if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+
+    // Update the folder
+    const { data: folder, error } = await db
+      .from("personal_chat_folder")
+      .update(updates)
+      .eq("id", folderId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[PersonalChats] Error updating folder:", error);
+      return c.json({ error: "Failed to update folder" }, 500);
+    }
+
+    return c.json({
+      id: folder.id,
+      userId: folder.userId,
+      name: folder.name,
+      sortOrder: folder.sortOrder,
+      createdAt: formatTimestamp(folder.createdAt),
+      updatedAt: formatTimestamp(folder.updatedAt),
+    });
+  } catch (error) {
+    console.error("[PersonalChats] Error updating folder:", error);
+    return c.json({ error: "Failed to update folder" }, 500);
+  }
+});
+
+// DELETE /api/personal-chats/folders/:folderId - Delete a folder (conversations move to no folder)
+personalChats.delete("/folders/:folderId", zValidator("json", deleteFolderRequestSchema), async (c) => {
+  const folderId = c.req.param("folderId");
+  const { userId } = c.req.valid("json");
+
+  try {
+    // Verify folder belongs to user
+    const { data: existingFolder, error: fetchError } = await db
+      .from("personal_chat_folder")
+      .select("id")
+      .eq("id", folderId)
+      .eq("userId", userId)
+      .single();
+
+    if (fetchError || !existingFolder) {
+      return c.json({ error: "Folder not found" }, 404);
+    }
+
+    // Move all conversations in this folder to no folder (folderId = null)
+    await db
+      .from("personal_conversation")
+      .update({ folderId: null })
+      .eq("folderId", folderId);
+
+    // Delete the folder
+    const { error } = await db
+      .from("personal_chat_folder")
+      .delete()
+      .eq("id", folderId);
+
+    if (error) {
+      console.error("[PersonalChats] Error deleting folder:", error);
+      return c.json({ error: "Failed to delete folder" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: "Folder deleted successfully",
+    });
+  } catch (error) {
+    console.error("[PersonalChats] Error deleting folder:", error);
+    return c.json({ error: "Failed to delete folder" }, 500);
+  }
+});
+
+// ============================================================================
 // CONVERSATION DETAIL ENDPOINTS
 // ============================================================================
 
@@ -644,6 +851,60 @@ personalChats.patch("/:conversationId", zValidator("json", updatePersonalConvers
   } catch (error) {
     console.error("[PersonalChats] Error updating conversation:", error);
     return c.json({ error: "Failed to update conversation" }, 500);
+  }
+});
+
+// PATCH /api/personal-chats/:conversationId/folder - Move conversation to folder
+personalChats.patch("/:conversationId/folder", zValidator("json", moveConversationToFolderRequestSchema), async (c) => {
+  const conversationId = c.req.param("conversationId");
+  const { userId, folderId } = c.req.valid("json");
+
+  try {
+    // Verify conversation belongs to user
+    const { data: existingConv, error: convError } = await db
+      .from("personal_conversation")
+      .select("id")
+      .eq("id", conversationId)
+      .eq("userId", userId)
+      .single();
+
+    if (convError || !existingConv) {
+      return c.json({ error: "Conversation not found" }, 404);
+    }
+
+    // If folderId is provided, verify the folder exists and belongs to user
+    if (folderId) {
+      const { data: folder, error: folderError } = await db
+        .from("personal_chat_folder")
+        .select("id")
+        .eq("id", folderId)
+        .eq("userId", userId)
+        .single();
+
+      if (folderError || !folder) {
+        return c.json({ error: "Folder not found" }, 404);
+      }
+    }
+
+    // Update the conversation's folderId
+    const { error: updateError } = await db
+      .from("personal_conversation")
+      .update({ folderId: folderId, updatedAt: new Date().toISOString() })
+      .eq("id", conversationId);
+
+    if (updateError) {
+      console.error("[PersonalChats] Error moving conversation to folder:", updateError);
+      return c.json({ error: "Failed to move conversation" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      conversationId,
+      folderId,
+    });
+  } catch (error) {
+    console.error("[PersonalChats] Error moving conversation to folder:", error);
+    return c.json({ error: "Failed to move conversation" }, 500);
   }
 });
 

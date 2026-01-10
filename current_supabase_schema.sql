@@ -451,3 +451,46 @@ CREATE POLICY "Users can update their own agent usage" ON user_agent_usage
 --
 -- Updated default value from 'off' to 'disabled' for consistency with new schema
 ALTER TABLE "user" ALTER COLUMN "translationPreference" SET DEFAULT 'disabled';
+
+-- ============================================================================
+-- PERSONAL CHAT FOLDERS (2026-01-09)
+-- ============================================================================
+-- Folder system for organizing personal conversations
+-- Users can create folders to group related conversations together
+
+-- Personal Chat Folder Table
+CREATE TABLE IF NOT EXISTS personal_chat_folder (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "userId" text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  "sortOrder" integer DEFAULT 0,
+  "createdAt" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add folderId to personal_conversation for folder assignment
+ALTER TABLE personal_conversation 
+  ADD COLUMN IF NOT EXISTS "folderId" text REFERENCES personal_chat_folder(id) ON DELETE SET NULL;
+
+-- Indexes for personal_chat_folder
+CREATE INDEX IF NOT EXISTS personal_chat_folder_user_idx ON personal_chat_folder("userId");
+CREATE INDEX IF NOT EXISTS personal_chat_folder_sort_idx ON personal_chat_folder("sortOrder");
+
+-- Index for folder lookup on conversations
+CREATE INDEX IF NOT EXISTS personal_conversation_folder_idx ON personal_conversation("folderId");
+
+-- Enable RLS for personal_chat_folder
+ALTER TABLE personal_chat_folder ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for personal_chat_folder
+CREATE POLICY "Users can view their own folders" ON personal_chat_folder
+  FOR SELECT USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can create their own folders" ON personal_chat_folder
+  FOR INSERT WITH CHECK (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can update their own folders" ON personal_chat_folder
+  FOR UPDATE USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can delete their own folders" ON personal_chat_folder
+  FOR DELETE USING (auth.uid()::text = "userId");
