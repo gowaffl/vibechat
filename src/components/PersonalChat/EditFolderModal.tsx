@@ -109,26 +109,26 @@ export const EditFolderModal: React.FC<EditFolderModalProps> = ({
             exiting={SlideOutDown.springify().damping(25).stiffness(200)}
             style={styles.modalContainer}
           >
-            <BlurView
-              intensity={Platform.OS === "ios" ? 95 : 100}
-              tint={isDark ? "dark" : "light"}
-              style={styles.blurContainer}
+          <BlurView
+            intensity={Platform.OS === "ios" ? 95 : 100}
+            tint={isDark ? "dark" : "light"}
+            style={styles.blurContainer}
+          >
+            <LinearGradient
+              colors={
+                isDark
+                  ? ["rgba(18,18,22,0.96)", "rgba(12,12,16,0.98)"]
+                  : ["rgba(255,255,255,0.98)", "rgba(250,250,252,0.98)"]
+              }
+              style={styles.gradientContainer}
             >
-              <LinearGradient
-                colors={
-                  isDark
-                    ? ["rgba(18,18,22,0.96)", "rgba(12,12,16,0.98)"]
-                    : ["rgba(255,255,255,0.98)", "rgba(250,250,252,0.98)"]
-                }
-                style={styles.gradientContainer}
-              >
-                {/* Handle Bar */}
-                <View style={styles.handleContainer}>
-                  <View style={[
-                    styles.handleBar,
-                    { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }
-                  ]} />
-                </View>
+              {/* Handle Bar */}
+              <View style={styles.handleContainer}>
+                <View style={[
+                  styles.handleBar,
+                  { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }
+                ]} />
+              </View>
 
         {/* Header */}
         <View style={styles.header}>
@@ -143,12 +143,26 @@ export const EditFolderModal: React.FC<EditFolderModalProps> = ({
               Edit Folder
             </Text>
           </View>
-          <Pressable onPress={handleClose} style={styles.closeButton}>
-            <X size={24} color={colors.textSecondary} strokeWidth={2} />
+          <Pressable 
+            onPress={handleClose} 
+            style={({ pressed }) => [
+              styles.closeButton,
+              {
+                backgroundColor: isDark 
+                  ? pressed ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)"
+                  : pressed ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.04)",
+              }
+            ]}
+          >
+            <X size={22} color={colors.textSecondary} strokeWidth={2.5} />
           </Pressable>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Folder Name Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
@@ -267,7 +281,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContainer: {
-    maxHeight: "90%",
+    maxHeight: "80%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: "hidden",
@@ -278,13 +292,11 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   blurContainer: {
-    flex: 1,
     overflow: "hidden",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
   gradientContainer: {
-    flex: 1,
     paddingTop: 8,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
@@ -299,10 +311,11 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingTop: 8,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(128, 128, 128, 0.15)",
   },
@@ -326,13 +339,16 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
   },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
+  },
+  contentContainer: {
+    paddingBottom: 4,
+    flexGrow: 1,
   },
   section: {
     marginTop: 24,

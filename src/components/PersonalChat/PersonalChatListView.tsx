@@ -296,9 +296,14 @@ const FolderCard = React.memo(({
     return (
       <Pressable
         onPress={handleMorePress}
-        style={[styles.moreAction, { backgroundColor: isDark ? "rgba(0, 198, 255, 0.2)" : "rgba(0, 198, 255, 0.15)" }]}
+        style={styles.moreAction}
       >
-        <MoreHorizontal size={24} color={brandCyan} />
+        <LinearGradient
+          colors={isDark ? ["#3b3b4f", "#2d2d3d"] : ["#e5e7eb", "#d1d5db"]}
+          style={styles.moreGradient}
+        >
+          <MoreHorizontal size={22} color={isDark ? "#fff" : "#374151"} />
+        </LinearGradient>
       </Pressable>
     );
   };
@@ -1070,9 +1075,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   moreGradient: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     justifyContent: "center",
     alignItems: "center",
   },
