@@ -914,35 +914,8 @@ personalChats.patch("/:conversationId/folder", zValidator("json", moveConversati
   }
 });
 
-// DELETE /api/personal-chats/:conversationId - Delete a conversation
-personalChats.delete("/:conversationId", zValidator("json", deletePersonalConversationRequestSchema), async (c) => {
-  const conversationId = c.req.param("conversationId");
-  const { userId } = c.req.valid("json");
-
-  try {
-    // Verify ownership and delete (cascade will delete messages)
-    const { error } = await db
-      .from("personal_conversation")
-      .delete()
-      .eq("id", conversationId)
-      .eq("userId", userId);
-
-    if (error) {
-      console.error("[PersonalChats] Error deleting conversation:", error);
-      return c.json({ error: "Failed to delete conversation" }, 500);
-    }
-
-    return c.json({
-      success: true,
-      message: "Conversation deleted successfully",
-    });
-  } catch (error) {
-    console.error("[PersonalChats] Error deleting conversation:", error);
-    return c.json({ error: "Failed to delete conversation" }, 500);
-  }
-});
-
 // DELETE /api/personal-chats/bulk - Bulk delete conversations
+// NOTE: This route MUST come before /:conversationId to avoid matching "bulk" as a conversationId
 personalChats.delete("/bulk", zValidator("json", bulkDeletePersonalConversationsRequestSchema), async (c) => {
   const { userId, conversationIds } = c.req.valid("json");
 
@@ -970,6 +943,34 @@ personalChats.delete("/bulk", zValidator("json", bulkDeletePersonalConversations
   } catch (error) {
     console.error("[PersonalChats] Error bulk deleting conversations:", error);
     return c.json({ error: "Failed to delete conversations" }, 500);
+  }
+});
+
+// DELETE /api/personal-chats/:conversationId - Delete a conversation
+personalChats.delete("/:conversationId", zValidator("json", deletePersonalConversationRequestSchema), async (c) => {
+  const conversationId = c.req.param("conversationId");
+  const { userId } = c.req.valid("json");
+
+  try {
+    // Verify ownership and delete (cascade will delete messages)
+    const { error } = await db
+      .from("personal_conversation")
+      .delete()
+      .eq("id", conversationId)
+      .eq("userId", userId);
+
+    if (error) {
+      console.error("[PersonalChats] Error deleting conversation:", error);
+      return c.json({ error: "Failed to delete conversation" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: "Conversation deleted successfully",
+    });
+  } catch (error) {
+    console.error("[PersonalChats] Error deleting conversation:", error);
+    return c.json({ error: "Failed to delete conversation" }, 500);
   }
 });
 
