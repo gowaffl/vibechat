@@ -2215,25 +2215,21 @@ const ChatScreen = () => {
   // Sync translation settings from chat details (per-chat override)
   useEffect(() => {
     if (chatDetails) {
-        // Find my membership details if available in the response
-        // The endpoint returns chat object with 'members' array
-        const myMember = chatDetails.members?.find((m: any) => m.userId === user?.id);
+        // Use top-level translationEnabled field which is properly mapped by backend
+        // The backend returns translationEnabled (camelCase) based on the user's chat_member.translation_enabled
+        console.log("[Translation] Chat details loaded:", {
+          chatId,
+          translationEnabled: chatDetails.translationEnabled,
+          translationLanguage: chatDetails.translationLanguage,
+          memberCount: chatDetails.members?.length
+        });
         
-        if (myMember) {
-            // Per-chat override: translation_enabled === false means disabled for this chat
-            // If translation_enabled is true or undefined, use global preference
-            if (myMember.translationEnabled === false) {
-                setAutoTranslateDisabledForChat(true);
-                console.log("[Translation] Auto-translate explicitly disabled for this chat");
-            } else {
-                setAutoTranslateDisabledForChat(false);
-                console.log("[Translation] Using global auto-translate preference for this chat");
-            }
-        } else if (chatDetails.translationEnabled === false) {
-             // Fallback if returned at top level
+        if (chatDetails.translationEnabled === false) {
             setAutoTranslateDisabledForChat(true);
+            console.log("[Translation] Auto-translate explicitly disabled for this chat");
         } else {
             setAutoTranslateDisabledForChat(false);
+            console.log("[Translation] Using global auto-translate preference for this chat");
         }
     }
   }, [chatDetails, user?.id]);
@@ -2778,6 +2774,16 @@ const ChatScreen = () => {
             if (newMessage) {
               // Translate new message in real-time if translation is enabled AND a language is selected
               const currentLanguage = translationLanguageRef.current;
+              console.log('[Translation] Real-time message conditions:', {
+                translationEnabled,
+                currentLanguage,
+                hasContent: !!newMessage.content,
+                contentLength: newMessage.content?.length || 0,
+                globalAutoTranslateEnabled,
+                autoTranslateDisabledForChat,
+                userTranslationPref: user?.translationPreference,
+                userPreferredLanguage: user?.preferredLanguage
+              });
               if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "") {
                 // Backend handles language detection internally - this optimization reduces API calls from 2 to 1
                 setTranslatingMessages(prev => new Set(prev).add(newMessage.id));

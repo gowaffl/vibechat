@@ -54,6 +54,75 @@ export interface StreamEvent {
 }
 
 /**
+ * Determine if web search should be enabled for a given prompt
+ * Expanded patterns to catch more cases where web search would be helpful
+ */
+export function shouldEnableWebSearch(userPrompt: string): boolean {
+  // Time-sensitive information patterns
+  const timeSensitivePatterns = [
+    /\b(latest|current|recent|today|now|this\s+week|this\s+month|this\s+year)\b/i,
+    /\b(2024|2025|2026|2027)\b/i,
+    /\b(news|update|updates|announcement|release|launched|released)\b/i,
+    /\bwhat('s|s| is)\s+(new|happening|going\s+on|trending)\b/i,
+  ];
+  
+  // Explicit search/lookup patterns
+  const searchPatterns = [
+    /\b(search|find|look\s+up|google|lookup)\b/i,
+    /\b(search\s+for|find\s+out|research)\b/i,
+  ];
+  
+  // URL and website analysis patterns
+  const urlPatterns = [
+    /https?:\/\//i,
+    /\b(go\s+to|check\s+out|visit|open)\b.*\.(com|org|net|io|dev|co|gov|edu)/i,
+    /\b(website|site|page|article|blog|post)\b/i,
+    /\bwhat('s| is)\s+(on|at)\s+/i,
+    /\bsummarize\s+(this|the|that)\s+(website|site|page|article)/i,
+  ];
+  
+  // Real-world facts that may change
+  const dynamicFactPatterns = [
+    /\b(weather|temperature|forecast)\b/i,
+    /\b(stock|price|market|exchange\s+rate)\b/i,
+    /\b(score|results?|standings?|rankings?)\b/i,
+    /\b(schedule|event|concert|show|game)\b/i,
+    /\b(hours|open|closed|available)\b/i,
+    /\b(how\s+much|how\s+many|where\s+can\s+I)\b/i,
+    /\bwhat\s+is\s+the\s+(best|top|cheapest|fastest)\b/i,
+  ];
+  
+  // Question patterns that often need current info
+  const questionPatterns = [
+    /\bwho\s+is\s+the\s+(current|new|latest)\b/i,
+    /\bwhat\s+happened\s+(to|with|at|in)\b/i,
+    /\bis\s+.+\s+(still|open|available|working|alive)\b/i,
+    /\bwhen\s+(does|will|is)\s+.+\s+(open|start|end|release|launch)/i,
+    /\btell\s+me\s+about\b/i,
+    /\blearn\s+about\b/i,
+  ];
+  
+  // Company/product/person info (often needs fresh data)
+  const entityPatterns = [
+    /\b(Apple|Google|Microsoft|Amazon|Meta|Tesla|OpenAI|Anthropic)\b.*\b(latest|new|announced|released)/i,
+    /\bCEO\s+of\b/i,
+    /\b(founder|owner|president)\s+of\b/i,
+  ];
+  
+  // Check all pattern groups
+  const allPatterns = [
+    ...timeSensitivePatterns,
+    ...searchPatterns,
+    ...urlPatterns,
+    ...dynamicFactPatterns,
+    ...questionPatterns,
+    ...entityPatterns,
+  ];
+  
+  return allPatterns.some(pattern => pattern.test(userPrompt));
+}
+
+/**
  * Analyze the user's prompt to determine the appropriate thinking level
  * This allows the model to adaptively decide how much reasoning to do
  */
@@ -112,8 +181,7 @@ export function analyzePromptComplexity(userPrompt: string): ThinkingLevel {
   ];
   
   // Check for web search indicators - needs at least medium thinking
-  const needsWebSearch = /\b(latest|current|recent|today|now|2024|2025|2026|news|update)\b/i.test(userPrompt) ||
-                         /\b(search|find|look\s+up|google)\b/i.test(userPrompt);
+  const needsWebSearch = shouldEnableWebSearch(userPrompt);
   
   // Score the prompt
   let score = 0;

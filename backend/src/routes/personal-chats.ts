@@ -16,6 +16,7 @@ import {
   streamGeminiResponse,
   analyzePromptComplexity,
   mapToGeminiThinkingLevel,
+  shouldEnableWebSearch,
   type StreamEvent,
 } from "../services/gemini-streaming-service";
 import {
@@ -32,6 +33,18 @@ import {
   getSafetySystemPrompt,
   logSafetyEvent 
 } from "../services/content-safety";
+import {
+  extractURLsFromText,
+  extractMultipleURLs,
+  formatURLContentForPrompt,
+  isURLAnalysisRequest,
+} from "../services/url-content-extractor";
+import {
+  extractMultipleDocuments,
+  formatDocumentsForPrompt,
+  isExtractableDocument,
+  isImageFile,
+} from "../services/document-extractor";
 import {
   getPersonalConversationsRequestSchema,
   createPersonalConversationRequestSchema,
@@ -1186,9 +1199,23 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
           });
         }
       }
-    } catch (aiError) {
+    } catch (aiError: any) {
       console.error("[PersonalChats] Error generating AI response:", aiError);
-      aiResponseContent = "I apologize, but I encountered an error processing your request. Please try again.";
+      
+      // Provide more specific error messages based on the error type
+      const errorMessage = aiError?.message?.toLowerCase() || "";
+      
+      if (errorMessage.includes("rate limit") || errorMessage.includes("quota")) {
+        aiResponseContent = "I'm currently handling a lot of requests. Please wait a moment and try again.";
+      } else if (errorMessage.includes("timeout") || errorMessage.includes("abort")) {
+        aiResponseContent = "That request took too long to process. Could you try a shorter message or simpler request?";
+      } else if (errorMessage.includes("blocked") || errorMessage.includes("safety")) {
+        aiResponseContent = "I wasn't able to respond to that request. Could you try rephrasing your question?";
+      } else if (errorMessage.includes("network") || errorMessage.includes("connection")) {
+        aiResponseContent = "I had trouble connecting to my services. Please check your connection and try again.";
+      } else {
+        aiResponseContent = "I encountered an unexpected issue processing your request. Please try again, and if the problem persists, try rephrasing your message.";
+      }
     }
 
     // Save AI response
@@ -1538,10 +1565,134 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         }
       }, 10000);
 
+      // ===========================================================================
+      // URL CONTENT EXTRACTION - Fetch website content for AI analysis
+      // ===========================================================================
+      const urlsInMessage = extractURLsFromText(content);
+      let urlContentContext = "";
+      
+      if (urlsInMessage.length > 0 || isURLAnalysisRequest(content)) {
+        console.log(`[PersonalChats] [URL] Found ${urlsInMessage.length} URL(s) in message`);
+        
+        if (urlsInMessage.length > 0) {
+          // Notify client that we're fetching URL content
+          await stream.writeSSE({
+            event: "tool_call_start",
+            data: JSON.stringify({ toolName: "url_fetch", toolInput: urlsInMessage }),
+          });
+          metadata.toolsUsed.push("url_fetch");
+          
+          try {
+            const urlResults = await extractMultipleURLs(urlsInMessage);
+            urlContentContext = formatURLContentForPrompt(urlResults);
+            
+            // Log success/failure
+            const successCount = urlResults.filter(r => !r.error).length;
+            console.log(`[PersonalChats] [URL] Extracted content from ${successCount}/${urlsInMessage.length} URL(s)`);
+            
+            await stream.writeSSE({
+              event: "tool_call_end",
+              data: JSON.stringify({ 
+                toolName: "url_fetch",
+                urls: urlResults.map(r => ({
+                  url: r.url,
+                  title: r.title,
+                  success: !r.error,
+                  error: r.error,
+                  wordCount: r.wordCount,
+                })),
+              }),
+            });
+            
+            // Store URL metadata for the message
+            metadata.fetchedUrls = urlResults.map(r => ({
+              url: r.url,
+              title: r.title,
+              success: !r.error,
+              wordCount: r.wordCount,
+            }));
+          } catch (urlError) {
+            console.error("[PersonalChats] [URL] Error fetching URL content:", urlError);
+            await stream.writeSSE({
+              event: "tool_call_end",
+              data: JSON.stringify({ 
+                toolName: "url_fetch",
+                error: "Failed to fetch URL content",
+              }),
+            });
+          }
+        }
+      }
+
+      // ===========================================================================
+      // DOCUMENT CONTENT EXTRACTION - Extract text from PDF, CSV, etc.
+      // ===========================================================================
+      let documentContentContext = "";
+      
+      if (files && files.length > 0) {
+        // Filter for extractable documents (not images - those go to AI vision directly)
+        const documentFiles = files.filter(f => isExtractableDocument(f.mimeType));
+        
+        if (documentFiles.length > 0) {
+          console.log(`[PersonalChats] [Docs] Found ${documentFiles.length} extractable document(s)`);
+          
+          // Notify client that we're extracting document content
+          await stream.writeSSE({
+            event: "tool_call_start",
+            data: JSON.stringify({ 
+              toolName: "document_extract", 
+              toolInput: documentFiles.map(f => f.name),
+            }),
+          });
+          metadata.toolsUsed.push("document_extract");
+          
+          try {
+            const docResults = await extractMultipleDocuments(documentFiles);
+            documentContentContext = formatDocumentsForPrompt(docResults);
+            
+            // Log success/failure
+            const successCount = docResults.filter(r => !r.error).length;
+            console.log(`[PersonalChats] [Docs] Extracted content from ${successCount}/${documentFiles.length} document(s)`);
+            
+            await stream.writeSSE({
+              event: "tool_call_end",
+              data: JSON.stringify({ 
+                toolName: "document_extract",
+                documents: docResults.map(r => ({
+                  filename: r.filename,
+                  mimeType: r.mimeType,
+                  success: !r.error,
+                  error: r.error,
+                  wordCount: r.metadata.wordCount,
+                  truncated: r.metadata.truncated,
+                })),
+              }),
+            });
+            
+            // Store document metadata for the message
+            metadata.extractedDocuments = docResults.map(r => ({
+              filename: r.filename,
+              mimeType: r.mimeType,
+              success: !r.error,
+              wordCount: r.metadata.wordCount,
+            }));
+          } catch (docError) {
+            console.error("[PersonalChats] [Docs] Error extracting document content:", docError);
+            await stream.writeSSE({
+              event: "tool_call_end",
+              data: JSON.stringify({ 
+                toolName: "document_extract",
+                error: "Failed to extract document content",
+              }),
+            });
+          }
+        }
+      }
+
       // Detect if web search would be helpful for this request
-      const needsWebSearch = /\b(current|latest|recent|today|news|weather|stock|price|score|update|2024|2025|2026)\b/i.test(content) ||
-        /\bwhat is happening\b/i.test(content) ||
-        /\bsearch\b/i.test(content);
+      // Uses centralized pattern detection for consistency
+      const needsWebSearch = shouldEnableWebSearch(content) ||
+        (urlsInMessage.length > 0 && urlContentContext === ""); // Enable search if URL fetch failed
       
       // Detect if this is an image generation request
       // More flexible regex to match phrases like "create me an image", "make me a picture", etc.
@@ -1766,10 +1917,25 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         return;
       }
 
+      // Build the final user prompt with URL and document content if available
+      let finalUserPrompt = userPrompt;
+      
+      // Add URL content context
+      if (urlContentContext) {
+        finalUserPrompt = `${urlContentContext}\n\n${finalUserPrompt}`;
+        console.log(`[PersonalChats] Added URL content context (${urlContentContext.length} chars) to prompt`);
+      }
+      
+      // Add document content context
+      if (documentContentContext) {
+        finalUserPrompt = `${documentContentContext}\n\n${finalUserPrompt}`;
+        console.log(`[PersonalChats] Added document content context (${documentContentContext.length} chars) to prompt`);
+      }
+
       // Stream Gemini response using gemini-3-flash-preview for text/web search
       const responseStream = streamGeminiResponse({
         systemPrompt,
-        userPrompt,
+        userPrompt: finalUserPrompt,
         enableWebSearch: needsWebSearch,
         thinkingLevel,
         maxTokens: 8192,
@@ -2020,9 +2186,51 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
       // Clear the keep-alive interval on error
       clearInterval(keepAliveInterval);
       console.error("[PersonalChats] Streaming error:", error);
+      
+      // Categorize the error and provide a user-friendly message
+      let userFriendlyError = "An unexpected error occurred. Please try again.";
+      let errorCode = "UNKNOWN_ERROR";
+      
+      const errorMessage = error?.message?.toLowerCase() || "";
+      const errorStatus = error?.status || error?.code;
+      
+      if (errorMessage.includes("rate limit") || errorMessage.includes("quota") || errorStatus === 429) {
+        userFriendlyError = "The AI service is currently busy. Please wait a moment and try again.";
+        errorCode = "RATE_LIMIT";
+      } else if (errorMessage.includes("timeout") || errorMessage.includes("abort") || error?.name === "AbortError") {
+        userFriendlyError = "The request took too long. Try a shorter message or simpler request.";
+        errorCode = "TIMEOUT";
+      } else if (errorMessage.includes("blocked") || errorMessage.includes("safety") || errorMessage.includes("content policy")) {
+        userFriendlyError = "This request couldn't be processed due to content guidelines. Please rephrase your message.";
+        errorCode = "CONTENT_BLOCKED";
+      } else if (errorMessage.includes("network") || errorMessage.includes("connection") || errorMessage.includes("enotfound") || errorMessage.includes("econnrefused")) {
+        userFriendlyError = "Network connection issue. Please check your internet and try again.";
+        errorCode = "NETWORK_ERROR";
+      } else if (errorMessage.includes("api key") || errorMessage.includes("unauthorized") || errorMessage.includes("authentication") || errorStatus === 401 || errorStatus === 403) {
+        userFriendlyError = "Service configuration issue. Please contact support.";
+        errorCode = "AUTH_ERROR";
+      } else if (errorMessage.includes("invalid") || errorMessage.includes("malformed")) {
+        userFriendlyError = "There was an issue with your request. Please try rephrasing.";
+        errorCode = "INVALID_REQUEST";
+      } else if (errorMessage.includes("model") || errorMessage.includes("gemini") || errorMessage.includes("openai")) {
+        userFriendlyError = "The AI service encountered an issue. Please try again in a moment.";
+        errorCode = "AI_SERVICE_ERROR";
+      }
+      
+      // Log the full error for debugging
+      console.error(`[PersonalChats] Error categorized as ${errorCode}:`, {
+        originalMessage: error?.message,
+        status: errorStatus,
+        stack: error?.stack?.substring(0, 500),
+      });
+      
       await stream.writeSSE({
         event: "error",
-        data: JSON.stringify({ error: error?.message || "An error occurred" }),
+        data: JSON.stringify({ 
+          error: userFriendlyError,
+          code: errorCode,
+          retryable: ["RATE_LIMIT", "TIMEOUT", "NETWORK_ERROR", "AI_SERVICE_ERROR"].includes(errorCode),
+        }),
       });
     }
   });
