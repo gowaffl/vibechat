@@ -1646,6 +1646,7 @@ export const createPersonalConversationRequestSchema = z.object({
   userId: z.string(),
   aiFriendId: z.string().nullable().optional(),
   title: z.string().optional(),
+  folderId: z.string().nullable().optional(),
 });
 export type CreatePersonalConversationRequest = z.infer<typeof createPersonalConversationRequestSchema>;
 export const createPersonalConversationResponseSchema = personalConversationSchema;

@@ -359,6 +359,7 @@ const ChatListScreen = () => {
   
   // Tab state for Group vs Personal chats
   const [activeTab, setActiveTab] = useState<"group" | "personal">("group");
+  const [isInFolderView, setIsInFolderView] = useState(false);
   
   const chatTabs = [
     { key: "group", label: "Group" },
@@ -994,7 +995,7 @@ const ChatListScreen = () => {
       ) : activeTab === "personal" ? (
         // Personal Chat Mode
         <View style={{ flex: 1, paddingTop: insets.top + 140 }} pointerEvents="box-none">
-          <PersonalChatListView />
+          <PersonalChatListView onFolderViewChange={setIsInFolderView} />
         </View>
       ) : (
         // Group Chat List Mode
@@ -1081,7 +1082,7 @@ const ChatListScreen = () => {
       {/* FAB - Show different FAB based on active tab */}
       {activeTab === "group" ? (
         <CreateChatFAB />
-      ) : activeTab === "personal" ? (
+      ) : activeTab === "personal" && !isInFolderView ? (
         <PersonalChatFAB />
       ) : null}
 

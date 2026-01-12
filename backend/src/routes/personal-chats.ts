@@ -149,6 +149,7 @@ personalChats.post("/", zValidator("json", createPersonalConversationRequestSche
         userId: data.userId,
         aiFriendId: data.aiFriendId || null,
         title: data.title || "New Conversation",
+        folderId: data.folderId || null,
       })
       .select(`
         *,

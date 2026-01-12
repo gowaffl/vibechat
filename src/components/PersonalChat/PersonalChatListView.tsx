@@ -33,6 +33,7 @@ import {
   Folder,
   Check,
   MessageSquare,
+  Plus,
 } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -398,6 +399,30 @@ const EmptyState = ({ colors, isDark }: {
   </Animated.View>
 );
 
+// Empty state for folder with no conversations
+const FolderEmptyState = ({ colors, isDark }: { 
+  colors: any; 
+  isDark: boolean;
+}) => (
+  <Animated.View 
+    entering={FadeIn.duration(300)} 
+    style={styles.emptyContainer}
+  >
+    <View style={[
+      styles.emptyIconContainer,
+      { backgroundColor: isDark ? "rgba(0, 198, 255, 0.15)" : "rgba(0, 198, 255, 0.1)" }
+    ]}>
+      <MessageSquare size={48} color="#00C6FF" strokeWidth={1.5} />
+    </View>
+    <Text style={[styles.emptyTitle, { color: colors.text }]}>
+      No Conversations Yet
+    </Text>
+    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+      Create a new conversation in this folder using the + button above
+    </Text>
+  </Animated.View>
+);
+
 // Bulk Actions Bar Component
 const BulkActionsBar = React.memo(({
   selectedCount,
@@ -455,11 +480,13 @@ const BulkActionsBar = React.memo(({
 interface PersonalChatListViewProps {
   onSelectConversation?: (conversation: PersonalConversation) => void;
   onCreateNew?: () => void;
+  onFolderViewChange?: (isInFolderView: boolean) => void;
 }
 
 const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
   onSelectConversation,
   onCreateNew,
+  onFolderViewChange,
 }) => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<RootStackScreenProps<"ChatList">["navigation"]>();
@@ -515,11 +542,9 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
       result.push({ type: 'empty_folders_state' as const });
     }
     
-    // Add conversations header (if we have regular conversations)
+    // Always add conversations header in main view
     const regularConversations = conversations.filter((c) => !c.folderId);
-    if (regularConversations.length > 0) {
-      result.push({ type: 'conversations_header' as const });
-    }
+    result.push({ type: 'conversations_header' as const });
     
     // Add regular conversations (no folder)
     regularConversations.forEach((conv) => {
@@ -576,12 +601,14 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
   const handleFolderPress = useCallback((folderId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCurrentFolderId(folderId);
-  }, []);
+    onFolderViewChange?.(true);
+  }, [onFolderViewChange]);
   
   const handleBackToMainList = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCurrentFolderId(null);
-  }, []);
+    onFolderViewChange?.(false);
+  }, [onFolderViewChange]);
 
   const handleFolderMore = useCallback((folder: PersonalChatFolder) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -760,6 +787,19 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     );
   }, [createFolder]);
 
+  const handleCreateInFolder = useCallback(async () => {
+    if (!currentFolderId) return;
+    
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const result = await createConversation.mutateAsync({ folderId: currentFolderId });
+      navigation.navigate("PersonalChat", { conversationId: result.conversation.id });
+    } catch (error) {
+      console.error("[PersonalChatListView] Error creating conversation in folder:", error);
+      Alert.alert("Error", "Failed to create new conversation");
+    }
+  }, [currentFolderId, createConversation, navigation]);
+
   const renderItem = useCallback(({ item }: { item: { type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation } }) => {
     if (item.type === 'folders_header') {
       return (
@@ -855,36 +895,56 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
 
   const ListHeaderComponent = useMemo(() => (
     <View>
-      {/* Back Button (when inside folder) */}
+      {/* Back Button and Create Button (when inside folder) */}
       {currentFolderId && currentFolder && (
-        <Pressable
-          onPress={handleBackToMainList}
-          style={({ pressed }) => [
-            styles.backButton,
-            {
-              backgroundColor: pressed
-                ? isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)"
-                : "transparent",
-            }
-          ]}
-        >
-          <View style={styles.backButtonContent}>
-            <View style={[
-              styles.backIconContainer,
-              { backgroundColor: isDark ? "rgba(0, 198, 255, 0.15)" : "rgba(0, 198, 255, 0.1)" }
-            ]}>
-              <ChevronRight 
-                size={18} 
-                color="#00C6FF" 
-                strokeWidth={2.5}
-                style={{ transform: [{ rotate: '180deg' }] }}
-              />
+        <View style={styles.folderViewHeader}>
+          <Pressable
+            onPress={handleBackToMainList}
+            style={({ pressed }) => [
+              styles.backButton,
+              {
+                backgroundColor: pressed
+                  ? isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)"
+                  : "transparent",
+              }
+            ]}
+          >
+            <View style={styles.backButtonContent}>
+              <View style={[
+                styles.backIconContainer,
+                { backgroundColor: isDark ? "rgba(0, 198, 255, 0.15)" : "rgba(0, 198, 255, 0.1)" }
+              ]}>
+                <ChevronRight 
+                  size={18} 
+                  color="#00C6FF" 
+                  strokeWidth={2.5}
+                  style={{ transform: [{ rotate: '180deg' }] }}
+                />
+              </View>
+              <Text style={[styles.backButtonText, { color: colors.text }]}>
+                {currentFolder.name}
+              </Text>
             </View>
-            <Text style={[styles.backButtonText, { color: colors.text }]}>
-              {currentFolder.name}
-            </Text>
-          </View>
-        </Pressable>
+          </Pressable>
+          
+          {/* Create Conversation in Folder Button */}
+          <Pressable
+            onPress={handleCreateInFolder}
+            style={({ pressed }) => [
+              styles.createInFolderButton,
+              { opacity: pressed ? 0.7 : 1 }
+            ]}
+          >
+            <LinearGradient
+              colors={["#00C6FF", "#0075FF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.createInFolderGradient}
+            >
+              <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
+            </LinearGradient>
+          </Pressable>
+        </View>
       )}
       
       {/* Quick Start Agents (only on main list) */}
@@ -905,7 +965,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
         />
       )}
     </View>
-  ), [currentFolderId, currentFolder, folders.length, handleBackToMainList, handleAgentQuickStart, handleCreateNewAgent, handleCreateFolder, bulkMode, selectedIds.size, allConversations.length, handleSelectAll, handleBulkDelete, handleCancelBulk, colors, isDark]);
+  ), [currentFolderId, currentFolder, folders.length, handleBackToMainList, handleCreateInFolder, handleAgentQuickStart, handleCreateNewAgent, handleCreateFolder, bulkMode, selectedIds.size, allConversations.length, handleSelectAll, handleBulkDelete, handleCancelBulk, colors, isDark]);
 
   if (isLoading) {
     return (
@@ -923,7 +983,13 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
         topOffset={insets.top + 80}
       />
       
-      {displayItems.length > 0 || currentFolderId ? (
+      {currentFolderId && displayItems.length === 0 ? (
+        // Empty state for folder with no conversations
+        <View style={{ flex: 1 }}>
+          {ListHeaderComponent}
+          <FolderEmptyState colors={colors} isDark={isDark} />
+        </View>
+      ) : displayItems.length > 0 || currentFolderId ? (
         <FlatList
           style={{ flex: 1 }}
           data={displayItems}
@@ -1138,7 +1204,7 @@ const styles = StyleSheet.create({
   },
   // Back Button
   backButton: {
-    marginHorizontal: 16,
+    flex: 1,
     marginTop: 16,
     marginBottom: 8,
     borderRadius: 14,
@@ -1161,6 +1227,32 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
     letterSpacing: -0.3,
+  },
+  folderViewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+  createInFolderButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    shadowColor: "#00C6FF",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  createInFolderGradient: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 12,
   },
   createFirstFolder: {
     flexDirection: "row",

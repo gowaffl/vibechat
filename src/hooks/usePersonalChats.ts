@@ -131,7 +131,7 @@ export function useCreatePersonalConversation() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (data: { aiFriendId?: string | null; title?: string }) => {
+    mutationFn: async (data: { aiFriendId?: string | null; title?: string; folderId?: string | null }) => {
       if (!user?.id) throw new Error("User not authenticated");
       // POST to /api/personal-chats to create new conversation
       const response = await api.post<{ id: string; userId: string; aiFriendId: string | null; title: string; lastMessageAt: string | null; createdAt: string; updatedAt: string; aiFriend: any | null }>("/api/personal-chats", {
