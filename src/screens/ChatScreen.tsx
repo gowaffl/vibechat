@@ -1908,12 +1908,18 @@ const ChatScreen = () => {
       return prev; // Don't update, just read
     });
     
-    // Filter only text messages that haven't been translated yet (or force all if forceRetranslate)
+    // Filter only text messages that:
+    // 1. Have content
+    // 2. Haven't been translated yet (or force all if forceRetranslate)
+    // 3. Are NOT from the current user (never translate own messages)
     const textMessages = messagesToTranslate.filter(
-      (m) => m.content && m.content.trim() !== "" && (forceRetranslate || !currentTranslations[m.id])
+      (m) => m.content && 
+             m.content.trim() !== "" && 
+             m.userId !== user?.id && // Never translate own messages
+             (forceRetranslate || !currentTranslations[m.id])
     );
     
-    console.log("[Translation] Filtered text messages:", textMessages.length, "of", messagesToTranslate.length, "(forceRetranslate:", forceRetranslate, ")");
+    console.log("[Translation] Filtered text messages:", textMessages.length, "of", messagesToTranslate.length, "(forceRetranslate:", forceRetranslate, ", excluded own messages)");
     
     if (textMessages.length === 0) {
       console.log("[Translation] No new messages to translate (all already translated or empty)");
@@ -1949,7 +1955,7 @@ const ChatScreen = () => {
     try {
       console.log("[Translation] Calling batch translate API for", messagesToActuallyTranslate.length, "messages to language:", currentLanguage);
        // Call batch translation endpoint
-       const response = await api.post<{ translations: Record<string, string> }>(
+       const response = await api.post<{ translations: Record<string, string>; skipped?: string[] }>(
          "/api/ai-native/translate-batch",
          {
            userId: user?.id,
@@ -1969,10 +1975,23 @@ const ChatScreen = () => {
        // Check if response has 'data' wrapper just in case, safely accessing properties
        const responseData = (response as any).data;
        const translations = response.translations || (responseData && responseData.translations);
+       const skipped: string[] = (response as any).skipped || (responseData && responseData.skipped) || [];
        
-       console.log("[Translation] Received translations count:", Object.keys(translations || {}).length);
+       console.log("[Translation] Received translations count:", Object.keys(translations || {}).length, "skipped:", skipped.length);
        
-       if (translations) {
+       // Remove skipped messages from translating state immediately
+       // These are messages already in target language that don't need translation
+       if (skipped.length > 0) {
+         console.log("[Translation] Removing skipped messages from translating state:", skipped.length);
+         setTranslatingMessages(prev => {
+           const newSet = new Set(prev);
+           skipped.forEach(id => newSet.delete(id));
+           return newSet;
+         });
+       }
+       
+       // Only store actual translations (not skipped messages)
+       if (translations && Object.keys(translations).length > 0) {
          setTranslatedMessages(prev => {
            const newTranslations = { ...prev, ...translations };
            console.log("[Translation] Updated translatedMessages object, total:", Object.keys(newTranslations).length);
@@ -1983,8 +2002,8 @@ const ChatScreen = () => {
            console.log("[Translation] Incrementing version:", v, "→", newVersion);
            return newVersion;
          });
-       } else {
-         console.warn("[Translation] No translations found in response");
+       } else if (skipped.length === 0) {
+         console.warn("[Translation] No translations found in response and nothing was skipped");
        }
     } catch (error: any) {
       // Only log error if it's not a cancellation
@@ -2007,6 +2026,12 @@ const ChatScreen = () => {
   }, [user?.id]); // translationLanguage is accessed via ref to avoid stale closures
 
   const translateSingleMessage = async (messageToTranslate: Message) => {
+    // Never translate own messages
+    if (messageToTranslate.userId === user?.id) {
+      console.log("[Translation] Skipping single message translation (own message)");
+      return;
+    }
+    
     if (!messageToTranslate.content || translatedMessages[messageToTranslate.id]) {
       console.log("[Translation] Skipping single message translation (no content or already translated)");
       return;
@@ -2021,7 +2046,7 @@ const ChatScreen = () => {
       // Backend handles language detection internally and skips translation if already in target language
       // This optimization reduces API calls from 2 to 1 per message
       console.log("[Translation] Translating single message:", messageToTranslate.id, "to language:", currentLanguage);
-      const response = await api.post<{ translatedText: string; skipped?: boolean }>(
+      const response = await api.post<{ translatedText: string | null; skipped?: boolean }>(
         "/api/ai-native/translate",
         {
           userId: user?.id,
@@ -2035,15 +2060,18 @@ const ChatScreen = () => {
       const translatedText = response.translatedText || (responseData && responseData.translatedText);
       const wasSkipped = response.skipped || (responseData && responseData.skipped);
        
-      console.log("[Translation] Received single translation:", translatedText ? "success" : "empty", wasSkipped ? "(already in target language)" : "");
+      console.log("[Translation] Received single translation:", translatedText ? "success" : "empty", wasSkipped ? "(already in target language - skipped)" : "");
        
-      if (translatedText) {
+      // Only store translation if it was actually translated (not skipped)
+      if (translatedText && !wasSkipped) {
         setTranslatedMessages(prev => ({
           ...prev,
           [messageToTranslate.id]: translatedText
         }));
         setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
         console.log("[Translation] Updated single message translation");
+      } else if (wasSkipped) {
+        console.log("[Translation] Message already in target language, no translation stored");
       }
     } catch (error) {
       console.error("[Translation] Failed to translate message:", error);
@@ -2772,25 +2800,33 @@ const ChatScreen = () => {
             const newMessage = await api.get<Message>(`/api/messages/${newMessageId}`);
 
             if (newMessage) {
-              // Translate new message in real-time if translation is enabled AND a language is selected
+              // Translate new message in real-time if:
+              // 1. Translation is enabled
+              // 2. Language is selected
+              // 3. Message has content
+              // 4. Message is NOT from the current user (never translate own messages)
               const currentLanguage = translationLanguageRef.current;
+              const isOwnMessage = newMessage.userId === user?.id;
               console.log('[Translation] Real-time message conditions:', {
                 translationEnabled,
                 currentLanguage,
                 hasContent: !!newMessage.content,
                 contentLength: newMessage.content?.length || 0,
+                isOwnMessage,
                 globalAutoTranslateEnabled,
                 autoTranslateDisabledForChat,
                 userTranslationPref: user?.translationPreference,
                 userPreferredLanguage: user?.preferredLanguage
               });
-              if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "") {
+              
+              // Never translate own messages - only translate messages from other users
+              if (translationEnabled && currentLanguage && currentLanguage !== "" && newMessage.content && newMessage.content.trim() !== "" && !isOwnMessage) {
                 // Backend handles language detection internally - this optimization reduces API calls from 2 to 1
                 setTranslatingMessages(prev => new Set(prev).add(newMessage.id));
                 
                 try {
                   console.log('[Translation] Translating new real-time message:', newMessage.id, 'to language:', currentLanguage);
-                  const translateResponse = await api.post<{ translatedText: string; skipped?: boolean }>(
+                  const translateResponse = await api.post<{ translatedText: string | null; skipped?: boolean }>(
                     "/api/ai-native/translate",
                     {
                       userId: user?.id,
@@ -2804,15 +2840,18 @@ const ChatScreen = () => {
                   const translatedText = translateResponse.translatedText || (responseData && responseData.translatedText);
                   const wasSkipped = translateResponse.skipped || (responseData && responseData.skipped);
                   
-                  console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty', wasSkipped ? '(already in target language)' : '');
+                  console.log('[Translation] Received real-time translation:', translatedText ? 'success' : 'empty', wasSkipped ? '(already in target language - skipped)' : '');
                    
-                  if (translatedText) {
+                  // Only store translation if it was actually translated (not skipped)
+                  if (translatedText && !wasSkipped) {
                     setTranslatedMessages(prev => ({
                       ...prev,
                       [newMessage.id]: translatedText
                     }));
                     setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
                     console.log('[Translation] Updated real-time message translation');
+                  } else if (wasSkipped) {
+                    console.log('[Translation] Message already in target language, no translation stored');
                   }
                 } catch (translateError) {
                   console.error('[Translation] Failed to translate new message:', translateError);
@@ -2824,6 +2863,8 @@ const ChatScreen = () => {
                     return newSet;
                   });
                 }
+              } else if (isOwnMessage) {
+                console.log('[Translation] Skipping translation for own message');
               }
                
                setAllMessages(prev => {

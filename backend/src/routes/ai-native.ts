@@ -144,19 +144,12 @@ If unsure, output 'en'.`,
     const detectedLanguage = detectionResponse.content?.trim().toLowerCase() || "en";
     console.log(`[AI-Native] Detected language: ${detectedLanguage}, target: ${data.targetLanguage}`);
 
-    // If already in target language, return original text without translation
+    // If already in target language, return skipped - don't cache, don't translate
     if (detectedLanguage === data.targetLanguage) {
       console.log(`[AI-Native] Message already in target language, skipping translation`);
-      
-      // Cache the "translation" (which is just the original text)
-      await db.from("message_translation").insert({
-        messageId: data.messageId,
-        targetLanguage: data.targetLanguage,
-        translatedContent: sourceText,
-      });
-
+      // Don't cache skipped translations - frontend should handle this gracefully
       return c.json({
-        translatedText: sourceText,
+        translatedText: null,
         targetLanguage: data.targetLanguage,
         cached: false,
         skipped: true, // Indicate no translation was needed
@@ -178,9 +171,10 @@ If the text is already in ${targetLanguageName}, return it unchanged.`,
 
     const translatedText = response.content?.trim() || sourceText;
 
-    // Cache the translation
+    // Cache the translation with sourceLanguage
     await db.from("message_translation").insert({
       messageId: data.messageId,
+      sourceLanguage: detectedLanguage,
       targetLanguage: data.targetLanguage,
       translatedContent: translatedText,
     });
@@ -207,23 +201,30 @@ app.post("/translate-batch", async (c) => {
 
   try {
     const translations: Record<string, string> = {};
+    const skipped: string[] = []; // Track messages already in target language
 
-    // Check cache for all messages
+    // Check cache for all messages - also get sourceLanguage to know if it was a real translation
     const { data: cachedTranslations } = await db
       .from("message_translation")
-      .select("messageId, translatedContent")
+      .select("messageId, translatedContent, sourceLanguage")
       .in("messageId", messageIds)
       .eq("targetLanguage", targetLanguage);
 
-    const cachedMap = new Map(
-      (cachedTranslations || []).map((t: any) => [t.messageId, t.translatedContent])
+    const cachedMap = new Map<string, { content: string; sourceLanguage: string | null }>(
+      (cachedTranslations || []).map((t: any) => [t.messageId, { content: t.translatedContent, sourceLanguage: t.sourceLanguage }])
     );
 
     const uncachedIds = messageIds.filter((id: string) => !cachedMap.has(id));
 
-    // Add cached translations to result
-    cachedMap.forEach((text, id) => {
-      translations[id] = text;
+    // Add cached translations to result - only if they were actual translations
+    cachedMap.forEach((cached, id) => {
+      // If sourceLanguage equals targetLanguage, it was a "skipped" translation - don't include
+      if (cached.sourceLanguage && cached.sourceLanguage === targetLanguage) {
+        skipped.push(id);
+        console.log(`[AI-Native Batch] Cached message ${id.slice(0, 8)} was skipped (source === target)`);
+      } else {
+        translations[id] = cached.content;
+      }
     });
 
     // Fetch uncached messages
@@ -254,42 +255,45 @@ If unsure, output 'en'.`,
           const detectedLanguage = detectionResponse.content?.trim().toLowerCase() || "en";
           console.log(`[AI-Native Batch] Message ${message.id.slice(0, 8)} detected as: ${detectedLanguage}, target: ${targetLanguage}`);
 
-          let translatedText: string;
-          
-          // If already in target language, skip translation
+          // If already in target language, skip translation - don't cache, don't return in translations
           if (detectedLanguage === targetLanguage) {
-            console.log(`[AI-Native Batch] Message ${message.id.slice(0, 8)} already in target language, skipping translation`);
-            translatedText = message.content;
-          } else {
-            // Perform translation
-            console.log(`[AI-Native Batch] Translating message ${message.id.slice(0, 8)} from ${detectedLanguage} to ${targetLanguage}`);
-            console.log(`[AI-Native Batch] Original text: "${message.content.slice(0, 100)}${message.content.length > 100 ? '...' : ''}"`);
-            const response = await executeGPT51Response({
-              systemPrompt: `Translate to ${targetLanguageName}. Only output translated text.`,
-              userPrompt: message.content,
-              reasoningEffort: "low",
-              maxTokens: 500,
-            });
-            translatedText = response.content?.trim() || message.content;
-            console.log(`[AI-Native Batch] Translated text: "${translatedText.slice(0, 100)}${translatedText.length > 100 ? '...' : ''}"`);
+            console.log(`[AI-Native Batch] Message ${message.id.slice(0, 8)} already in target language, skipping`);
+            skipped.push(message.id);
+            // Don't cache skipped translations - we'll detect again if needed
+            continue;
           }
+          
+          // Perform translation
+          console.log(`[AI-Native Batch] Translating message ${message.id.slice(0, 8)} from ${detectedLanguage} to ${targetLanguage}`);
+          console.log(`[AI-Native Batch] Original text: "${message.content.slice(0, 100)}${message.content.length > 100 ? '...' : ''}"`);
+          const response = await executeGPT51Response({
+            systemPrompt: `Translate to ${targetLanguageName}. Only output translated text.`,
+            userPrompt: message.content,
+            reasoningEffort: "low",
+            maxTokens: 500,
+          });
+          const translatedText = response.content?.trim() || message.content;
+          console.log(`[AI-Native Batch] Translated text: "${translatedText.slice(0, 100)}${translatedText.length > 100 ? '...' : ''}"`);
 
           translations[message.id] = translatedText;
 
-          // Cache it
+          // Cache with sourceLanguage so we know it was a real translation
           await db.from("message_translation").upsert({
             messageId: message.id,
+            sourceLanguage: detectedLanguage,
             targetLanguage,
             translatedContent: translatedText,
           }, { onConflict: "messageId,targetLanguage" });
         } catch (err) {
           console.error(`[AI-Native Batch] Error processing message ${message.id}:`, err);
-          translations[message.id] = message.content; // Fallback to original
+          // On error, add to skipped so frontend doesn't show loading forever
+          skipped.push(message.id);
         }
       }
     }
 
-    return c.json({ translations });
+    console.log(`[AI-Native Batch] Returning ${Object.keys(translations).length} translations, ${skipped.length} skipped`);
+    return c.json({ translations, skipped });
   } catch (error) {
     console.error("[AI-Native] Batch translation error:", error);
     return c.json({ error: "Batch translation failed" }, 500);
