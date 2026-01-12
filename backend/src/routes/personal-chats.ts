@@ -116,6 +116,8 @@ personalChats.get("/", zValidator("query", getPersonalConversationsRequestSchema
 personalChats.post("/", zValidator("json", createPersonalConversationRequestSchema), async (c) => {
   const data = c.req.valid("json");
 
+  console.log("[PersonalChats] Creating conversation with data:", data);
+
   try {
     // If aiFriendId is provided, verify the user has access to this agent
     if (data.aiFriendId) {
@@ -169,10 +171,13 @@ personalChats.post("/", zValidator("json", createPersonalConversationRequestSche
       return c.json({ error: "Failed to create conversation" }, 500);
     }
 
+    console.log("[PersonalChats] Created conversation:", { id: conversation.id, folderId: conversation.folderId });
+
     return c.json({
       id: conversation.id,
       userId: conversation.userId,
       aiFriendId: conversation.aiFriendId,
+      folderId: conversation.folderId || null,
       title: conversation.title,
       lastMessageAt: conversation.lastMessageAt ? formatTimestamp(conversation.lastMessageAt) : null,
       createdAt: formatTimestamp(conversation.createdAt),
@@ -941,6 +946,8 @@ personalChats.delete("/:conversationId", zValidator("json", deletePersonalConver
 personalChats.delete("/bulk", zValidator("json", bulkDeletePersonalConversationsRequestSchema), async (c) => {
   const { userId, conversationIds } = c.req.valid("json");
 
+  console.log("[PersonalChats] Bulk delete request:", { userId, conversationIds, count: conversationIds.length });
+
   try {
     // Delete all specified conversations owned by user
     const { error, count } = await db
@@ -948,6 +955,8 @@ personalChats.delete("/bulk", zValidator("json", bulkDeletePersonalConversations
       .delete()
       .eq("userId", userId)
       .in("id", conversationIds);
+
+    console.log("[PersonalChats] Bulk delete result:", { error, count });
 
     if (error) {
       console.error("[PersonalChats] Error bulk deleting conversations:", error);

@@ -133,11 +133,13 @@ export function useCreatePersonalConversation() {
   return useMutation({
     mutationFn: async (data: { aiFriendId?: string | null; title?: string; folderId?: string | null }) => {
       if (!user?.id) throw new Error("User not authenticated");
+      console.log("[useCreatePersonalConversation] Creating conversation with data:", { userId: user.id, ...data });
       // POST to /api/personal-chats to create new conversation
-      const response = await api.post<{ id: string; userId: string; aiFriendId: string | null; title: string; lastMessageAt: string | null; createdAt: string; updatedAt: string; aiFriend: any | null }>("/api/personal-chats", {
+      const response = await api.post<{ id: string; userId: string; aiFriendId: string | null; title: string; lastMessageAt: string | null; createdAt: string; updatedAt: string; aiFriend: any | null; folderId: string | null }>("/api/personal-chats", {
         userId: user.id,
         ...data,
       });
+      console.log("[useCreatePersonalConversation] Created conversation:", response);
       return { conversation: response };
     },
     onSuccess: () => {
@@ -183,10 +185,13 @@ export function useBulkDeletePersonalConversations() {
   return useMutation({
     mutationFn: async (conversationIds: string[]) => {
       if (!user?.id) throw new Error("User not authenticated");
-      return api.delete<BulkDeletePersonalConversationsResponse>(
+      console.log("[useBulkDeletePersonalConversations] Deleting conversations:", { userId: user.id, conversationIds, count: conversationIds.length });
+      const result = await api.delete<BulkDeletePersonalConversationsResponse>(
         "/api/personal-chats/bulk",
         { userId: user.id, conversationIds }
       );
+      console.log("[useBulkDeletePersonalConversations] Delete result:", result);
+      return result;
     },
     onSuccess: () => {
       // Invalidate conversations list
