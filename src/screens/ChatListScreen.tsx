@@ -745,7 +745,7 @@ const ChatListScreen = () => {
       <CustomRefreshControl 
         refreshing={isRefreshing} 
         message="Refreshing chats" 
-        topOffset={insets.top + 80}
+        topOffset={insets.top + 145}
       />
       
       {/* Animated Gradient Background */}

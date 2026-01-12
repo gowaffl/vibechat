@@ -1944,13 +1944,10 @@ const ChatScreen = () => {
       return;
     }
     
-    // Mark messages that need translation as translating
     const messageIds = messagesToActuallyTranslate.map((m) => m.id);
-    setTranslatingMessages(prev => {
-      const newSet = new Set(prev);
-      messageIds.forEach(id => newSet.add(id));
-      return newSet;
-    });
+    
+    // DON'T add messages to translating set yet - wait for backend response
+    // This prevents showing "Translating..." on messages that are already in target language
     
     try {
       console.log("[Translation] Calling batch translate API for", messagesToActuallyTranslate.length, "messages to language:", currentLanguage);
@@ -1979,31 +1976,41 @@ const ChatScreen = () => {
        
        console.log("[Translation] Received translations count:", Object.keys(translations || {}).length, "skipped:", skipped.length);
        
-       // Remove skipped messages from translating state immediately
-       // These are messages already in target language that don't need translation
-       if (skipped.length > 0) {
-         console.log("[Translation] Removing skipped messages from translating state:", skipped.length);
+       // Only show "Translating..." for messages that actually need translation
+       // Add them to translating set, then immediately store translations and remove
+       const translatedIds = Object.keys(translations || {});
+       if (translatedIds.length > 0) {
+         // Briefly show translating state
          setTranslatingMessages(prev => {
            const newSet = new Set(prev);
-           skipped.forEach(id => newSet.delete(id));
+           translatedIds.forEach(id => newSet.add(id));
            return newSet;
          });
-       }
-       
-       // Only store actual translations (not skipped messages)
-       if (translations && Object.keys(translations).length > 0) {
+         
+         // Store actual translations
          setTranslatedMessages(prev => {
            const newTranslations = { ...prev, ...translations };
            console.log("[Translation] Updated translatedMessages object, total:", Object.keys(newTranslations).length);
            return newTranslations;
          });
+         
          setTranslationVersion(v => {
            const newVersion = v + 1;
            console.log("[Translation] Incrementing version:", v, "→", newVersion);
            return newVersion;
          });
-       } else if (skipped.length === 0) {
-         console.warn("[Translation] No translations found in response and nothing was skipped");
+         
+         // Remove from translating set
+         setTranslatingMessages(prev => {
+           const newSet = new Set(prev);
+           translatedIds.forEach(id => newSet.delete(id));
+           return newSet;
+         });
+       }
+       
+       // Skipped messages never get added to translating set - no loading indicator shown
+       if (skipped.length > 0) {
+         console.log("[Translation] Skipped messages (already in target language):", skipped.length);
        }
     } catch (error: any) {
       // Only log error if it's not a cancellation
@@ -2013,15 +2020,8 @@ const ChatScreen = () => {
         console.log("[Translation] Request was canceled (likely due to component unmount or navigation)");
       }
     } finally {
-      // Release lock and clear loading states
+      // Release lock
       translationInProgressRef.current = false;
-      
-      // Remove translated messages from translating set
-      setTranslatingMessages(prev => {
-        const newSet = new Set(prev);
-        messagesToActuallyTranslate.forEach(m => newSet.delete(m.id));
-        return newSet;
-      });
     }
   }, [user?.id]); // translationLanguage is accessed via ref to avoid stale closures
 
