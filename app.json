@@ -13,6 +13,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vibecodeapp.vibechat",
       "buildNumber": "6",
+      "associatedDomains": [
+        "applinks:vibechat-zdok.onrender.com"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": ["audio", "voip"],

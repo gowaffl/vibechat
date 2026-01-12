@@ -18,6 +18,7 @@ import { ToastProvider } from "@/components/Toast";
 const linking = {
   prefixes: [
     "vibechat://",
+    "https://vibechat-zdok.onrender.com",
   ],
   config: {
     screens: {

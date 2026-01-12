@@ -1836,9 +1836,10 @@ chats.post("/:id/invite-link", async (c) => {
       chat = updatedChat;
     }
 
-    // Use custom scheme for invite token
-    // Format: vibechat://invite?token=abc123
-    const inviteLink = `vibechat://invite?token=${chat.inviteToken}`;
+    // Use universal link (HTTPS) for better compatibility
+    // This will work on iOS, Android, and web browsers
+    // Format: https://vibechat-zdok.onrender.com/invite/abc123
+    const inviteLink = `https://vibechat-zdok.onrender.com/invite/${chat.inviteToken}`;
 
     return c.json({
       inviteToken: chat.inviteToken!,

@@ -8335,7 +8335,9 @@ const ChatScreen = () => {
     try {
       console.log("[Chat] handleShareInvite called, chat:", chat?.name, "inviteToken:", chat?.inviteToken);
       let inviteToken = chat?.inviteToken;
-      let inviteLink = `vibechat://invite?token=${inviteToken}`;
+      let inviteLink = chat?.inviteToken 
+        ? `https://vibechat-zdok.onrender.com/invite/${chat.inviteToken}`
+        : "";
 
       // If no invite token exists, generate one
       if (!inviteToken) {
@@ -8352,7 +8354,7 @@ const ChatScreen = () => {
         return;
       }
 
-      const shareMessage = `Join our chat "${chat?.name}" on VibeChat!\n\nInvite Code: ${inviteToken}\n\n${inviteLink}`;
+      const shareMessage = `Join our chat "${chat?.name}" on VibeChat!\n\n${inviteLink}`;
       console.log("[Chat] About to share:", shareMessage);
       
       // Try to use Share API, but fallback to clipboard if it fails

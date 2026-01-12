@@ -343,7 +343,7 @@ const GroupSettingsMembersScreen = () => {
                         <Pressable
                         onPress={async () => {
                             if (inviteToken && inviteLink && chat?.name) {
-                              const shareMessage = `Join our chat "${chat.name}" on VibeChat!\n\nInvite Code: ${inviteToken}\n\n${inviteLink}`;
+                              const shareMessage = `Join our chat "${chat.name}" on VibeChat!\n\n${inviteLink}`;
                               
                               try {
                                 // Try to use Share API with timeout
@@ -363,7 +363,7 @@ const GroupSettingsMembersScreen = () => {
                                 
                                 Alert.alert(
                                   "Invite Link Copied!",
-                                  `Invite Code: ${inviteToken}\n\nThe invite link and code have been copied to your clipboard. Share it with anyone you want to invite to "${chat.name}"!`,
+                                  `The invite link has been copied to your clipboard. Share it with anyone you want to invite to "${chat.name}"!`,
                                   [{ text: "OK" }]
                                 );
                               }

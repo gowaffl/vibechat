@@ -99,6 +99,47 @@ app.use("/api/*", rateLimiter());
 console.log("📁 Serving static files from uploads/ directory");
 app.use("/uploads/*", serveStatic({ root: "./" }));
 
+// Serve Apple App Site Association file for Universal Links
+console.log("🍎 Setting up Apple App Site Association for Universal Links");
+app.get("/.well-known/apple-app-site-association", async (c) => {
+  console.log("📱 Apple App Site Association requested");
+  c.header("Content-Type", "application/json");
+  return c.json({
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: "areyeswaffl.com.vibecodeapp.vibechat",
+          paths: ["/invite/*", "/chat/*", "/share"],
+        },
+      ],
+    },
+    webcredentials: {
+      apps: ["areyeswaffl.com.vibecodeapp.vibechat"],
+    },
+  });
+});
+
+// Also serve at root level (some iOS versions check here)
+app.get("/apple-app-site-association", async (c) => {
+  console.log("📱 Apple App Site Association requested (root)");
+  c.header("Content-Type", "application/json");
+  return c.json({
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: "areyeswaffl.com.vibecodeapp.vibechat",
+          paths: ["/invite/*", "/chat/*", "/share"],
+        },
+      ],
+    },
+    webcredentials: {
+      apps: ["areyeswaffl.com.vibecodeapp.vibechat"],
+    },
+  });
+});
+
 // Mount route modules
 console.log("🔐 Mounting phone auth routes at /api/auth");
 app.route("/api/auth", authRouter);
@@ -182,6 +223,271 @@ app.route("/api/ai-native", aiNativeRouter);
 // Personal Chats
 console.log("💭 Mounting personal chats routes at /api/personal-chats");
 app.route("/api/personal-chats", personalChatsRouter);
+
+// Universal Link redirect handlers
+// These routes handle web traffic and redirect to app store if app is not installed
+console.log("🔗 Setting up Universal Link redirect handlers");
+app.get("/invite/:token", async (c) => {
+  const token = c.req.param("token");
+  console.log(`📱 Universal link accessed: /invite/${token}`);
+  
+  // Return a simple HTML page that will redirect to the app
+  // If the app is installed, universal links will intercept before this loads
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Join Chat - VibeChat</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          margin: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          text-align: center;
+          padding: 20px;
+        }
+        .container {
+          max-width: 400px;
+        }
+        h1 {
+          font-size: 2em;
+          margin-bottom: 0.5em;
+        }
+        p {
+          font-size: 1.1em;
+          margin-bottom: 2em;
+          opacity: 0.9;
+        }
+        .button {
+          display: inline-block;
+          background: white;
+          color: #667eea;
+          padding: 15px 30px;
+          border-radius: 25px;
+          text-decoration: none;
+          font-weight: 600;
+          margin: 10px;
+          transition: transform 0.2s;
+        }
+        .button:hover {
+          transform: scale(1.05);
+        }
+        .loader {
+          margin: 20px auto;
+          border: 3px solid rgba(255,255,255,0.3);
+          border-radius: 50%;
+          border-top: 3px solid white;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>🎉 You've been invited!</h1>
+        <p>Opening VibeChat...</p>
+        <div class="loader"></div>
+        <p style="font-size: 0.9em; margin-top: 2em;">
+          Don't have the app?
+        </p>
+        <a href="https://apps.apple.com/app/vibechat/id6738968754" class="button">
+          Download on App Store
+        </a>
+      </div>
+      <script>
+        // Try to open the app with custom scheme as fallback
+        setTimeout(() => {
+          window.location.href = 'vibechat://invite?token=${token}';
+        }, 500);
+        
+        // If app doesn't open after 2 seconds, show the download button more prominently
+        setTimeout(() => {
+          document.querySelector('.loader').style.display = 'none';
+          document.querySelector('p').textContent = "App not installed? Download VibeChat to join the chat!";
+        }, 2000);
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+app.get("/chat/:chatId", async (c) => {
+  const chatId = c.req.param("chatId");
+  console.log(`📱 Universal link accessed: /chat/${chatId}`);
+  
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Open Chat - VibeChat</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          margin: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          text-align: center;
+          padding: 20px;
+        }
+        .container {
+          max-width: 400px;
+        }
+        h1 {
+          font-size: 2em;
+          margin-bottom: 0.5em;
+        }
+        p {
+          font-size: 1.1em;
+          margin-bottom: 2em;
+          opacity: 0.9;
+        }
+        .button {
+          display: inline-block;
+          background: white;
+          color: #667eea;
+          padding: 15px 30px;
+          border-radius: 25px;
+          text-decoration: none;
+          font-weight: 600;
+          margin: 10px;
+          transition: transform 0.2s;
+        }
+        .button:hover {
+          transform: scale(1.05);
+        }
+        .loader {
+          margin: 20px auto;
+          border: 3px solid rgba(255,255,255,0.3);
+          border-radius: 50%;
+          border-top: 3px solid white;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>💬 Opening Chat</h1>
+        <p>Launching VibeChat...</p>
+        <div class="loader"></div>
+        <p style="font-size: 0.9em; margin-top: 2em;">
+          Don't have the app?
+        </p>
+        <a href="https://apps.apple.com/app/vibechat/id6738968754" class="button">
+          Download on App Store
+        </a>
+      </div>
+      <script>
+        setTimeout(() => {
+          window.location.href = 'vibechat://chat/${chatId}';
+        }, 500);
+        
+        setTimeout(() => {
+          document.querySelector('.loader').style.display = 'none';
+          document.querySelector('p').textContent = "App not installed? Download VibeChat!";
+        }, 2000);
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+app.get("/share", async (c) => {
+  console.log("📱 Universal link accessed: /share");
+  
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>VibeChat - Group Chats with AI</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          margin: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          text-align: center;
+          padding: 20px;
+        }
+        .container {
+          max-width: 500px;
+        }
+        h1 {
+          font-size: 2.5em;
+          margin-bottom: 0.3em;
+        }
+        .tagline {
+          font-size: 1.3em;
+          margin-bottom: 1em;
+          opacity: 0.95;
+        }
+        p {
+          font-size: 1.1em;
+          margin-bottom: 2em;
+          opacity: 0.9;
+        }
+        .button {
+          display: inline-block;
+          background: white;
+          color: #667eea;
+          padding: 18px 40px;
+          border-radius: 30px;
+          text-decoration: none;
+          font-weight: 700;
+          font-size: 1.1em;
+          margin: 10px;
+          transition: transform 0.2s;
+        }
+        .button:hover {
+          transform: scale(1.05);
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>💬 VibeChat</h1>
+        <p class="tagline">Making group chats great again</p>
+        <p>Group chats powered by custom AI agents. Experience the future of communication!</p>
+        <a href="https://apps.apple.com/app/vibechat/id6738968754" class="button">
+          Download on App Store
+        </a>
+      </div>
+    </body>
+    </html>
+  `);
+});
 
 // console.log("🔔 Mounting notifications routes at /api");
 // app.route("/api", notificationsRouter); // Moved to chats router

@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "areyeswaffl.com.vibecodeapp.vibechat",
+        "paths": [
+          "/invite/*",
+          "/chat/*",
+          "/share"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "areyeswaffl.com.vibecodeapp.vibechat"
+    ]
+  }
+}
