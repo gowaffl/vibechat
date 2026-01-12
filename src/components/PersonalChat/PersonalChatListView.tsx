@@ -517,7 +517,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
   const moveConversationToFolder = useMoveConversationToFolder();
 
   // Build flat list: either folder view or conversation view
-  const displayItems = useMemo<Array<{ type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation }>>(() => {
+  const displayItems = useMemo<Array<{ type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state' | 'empty_conversations_state'; data?: PersonalChatFolder | PersonalConversation }>>(() => {
     if (!conversations) return [];
     
     // If viewing a specific folder, show only its conversations
@@ -527,7 +527,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     }
     
     // Otherwise, show folders + regular conversations
-    const result: Array<{ type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation }> = [];
+    const result: Array<{ type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state' | 'empty_conversations_state'; data?: PersonalChatFolder | PersonalConversation }> = [];
     
     // Always add folders header (unless viewing a specific folder)
     result.push({ type: 'folders_header' as const });
@@ -546,10 +546,15 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     const regularConversations = conversations.filter((c) => !c.folderId);
     result.push({ type: 'conversations_header' as const });
     
-    // Add regular conversations (no folder)
-    regularConversations.forEach((conv) => {
-      result.push({ type: 'conversation', data: conv });
-    });
+    // Add regular conversations (no folder) OR empty state
+    if (regularConversations.length > 0) {
+      regularConversations.forEach((conv) => {
+        result.push({ type: 'conversation', data: conv });
+      });
+    } else {
+      // Empty state for main conversations
+      result.push({ type: 'empty_conversations_state' as const });
+    }
     
     return result;
   }, [conversations, folders, currentFolderId]);
@@ -800,7 +805,7 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
     }
   }, [currentFolderId, createConversation, navigation]);
 
-  const renderItem = useCallback(({ item }: { item: { type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state'; data?: PersonalChatFolder | PersonalConversation } }) => {
+  const renderItem = useCallback(({ item }: { item: { type: 'folder' | 'conversation' | 'conversations_header' | 'folders_header' | 'empty_folders_state' | 'empty_conversations_state'; data?: PersonalChatFolder | PersonalConversation } }) => {
     if (item.type === 'folders_header') {
       return (
         <View style={styles.foldersHeaderRow}>
@@ -873,6 +878,18 @@ const PersonalChatListView: React.FC<PersonalChatListViewProps> = ({
               CONVERSATIONS
             </Text>
           </View>
+        </View>
+      );
+    } else if (item.type === 'empty_conversations_state') {
+      return (
+        <View style={styles.emptyConversationsState}>
+          <MessageSquare size={48} color="rgba(0, 198, 255, 0.3)" strokeWidth={1.5} />
+          <Text style={[styles.emptyConversationsTitle, { color: isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.6)" }]}>
+            No Conversations Yet
+          </Text>
+          <Text style={[styles.emptyConversationsSubtitle, { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" }]}>
+            Tap the + button below to start a new conversation with an AI agent
+          </Text>
         </View>
       );
     } else {
@@ -1201,6 +1218,28 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     letterSpacing: -0.2,
+  },
+  emptyConversationsState: {
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  emptyConversationsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+    letterSpacing: -0.3,
+    marginTop: 8,
+  },
+  emptyConversationsSubtitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 20,
+    textAlign: "center",
+    letterSpacing: -0.2,
+    maxWidth: 280,
   },
   // Back Button
   backButton: {

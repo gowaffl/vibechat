@@ -88,7 +88,7 @@ import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MIN_INPUT_HEIGHT = 40;
-const MAX_INPUT_HEIGHT = 120;
+const MAX_INPUT_HEIGHT = 110;
 
 type NavigationProp = RootStackScreenProps<"PersonalChat">["navigation"];
 type RouteProp = RootStackScreenProps<"PersonalChat">["route"];
@@ -1573,6 +1573,18 @@ export default function PersonalChatScreen() {
     textInputRef.current?.focus();
   }, []);
 
+  // Handle copying message content
+  const handleCopyMessage = useCallback(async (content: string) => {
+    try {
+      await Clipboard.setStringAsync(content);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Copied", "Message copied to clipboard");
+    } catch (error) {
+      console.error("Failed to copy message:", error);
+      Alert.alert("Error", "Failed to copy message");
+    }
+  }, []);
+
   // Render message item
   const renderMessage = useCallback(
     ({ item, index }: { item: MessageListItem; index: number }) => {
@@ -1613,23 +1625,31 @@ export default function PersonalChatScreen() {
                 ))}
               </View>
             )}
-            <View
-              style={[
-                styles.userBubble,
-                { 
-                  backgroundColor: isDark ? "#2D2D2D" : "#3A3A3A",
-                  borderWidth: 1,
-                  borderColor: "rgba(0, 198, 255, 0.3)",
-                  shadowColor: "#00C6FF",
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.4,
-                  shadowRadius: 8,
-                  elevation: 8,
-                },
-              ]}
+            <Pressable
+              onLongPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleCopyMessage(message.content);
+              }}
+              delayLongPress={500}
             >
-              <Text style={styles.userMessageText}>{message.content}</Text>
-            </View>
+              <View
+                style={[
+                  styles.userBubble,
+                  { 
+                    backgroundColor: isDark ? "#2D2D2D" : "#3A3A3A",
+                    borderWidth: 1,
+                    borderColor: "rgba(0, 198, 255, 0.3)",
+                    shadowColor: "#00C6FF",
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 8,
+                    elevation: 8,
+                  },
+                ]}
+              >
+                <Text style={styles.userMessageText}>{message.content}</Text>
+              </View>
+            </Pressable>
             <Text style={[styles.messageTime, { color: colors.textTertiary, textAlign: "right" }]}>
               {formatLocalTime(message.createdAt)}
             </Text>
@@ -1669,76 +1689,84 @@ export default function PersonalChatScreen() {
             </View>
           )}
 
-          {/* AI Response with Markdown */}
-          <Markdown
-            style={{
-              body: { color: colors.text, fontSize: 16, lineHeight: 24 },
-              heading1: {
-                color: colors.text,
-                fontSize: 24,
-                fontWeight: "bold",
-                marginTop: 16,
-                marginBottom: 8,
-              },
-              heading2: {
-                color: colors.text,
-                fontSize: 20,
-                fontWeight: "bold",
-                marginTop: 14,
-                marginBottom: 6,
-              },
-              heading3: {
-                color: colors.text,
-                fontSize: 18,
-                fontWeight: "bold",
-                marginTop: 12,
-                marginBottom: 4,
-              },
-              strong: { fontWeight: "bold", color: colors.text },
-              em: { fontStyle: "italic", color: colors.text },
-              link: { color: "#6366f1", textDecorationLine: "underline" },
-              blockquote: {
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                borderLeftWidth: 3,
-                borderLeftColor: "#6366f1",
-                paddingLeft: 12,
-                paddingVertical: 8,
-                marginVertical: 8,
-              },
-              code_inline: {
-                backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
-                color: "#6366f1",
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 4,
-                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-              },
-              code_block: {
-                backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)",
-                color: colors.text,
-                padding: 12,
-                borderRadius: 8,
-                marginVertical: 8,
-                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-              },
-              fence: {
-                backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)",
-                color: colors.text,
-                padding: 12,
-                borderRadius: 8,
-                marginVertical: 8,
-                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-              },
-              bullet_list: { marginVertical: 8 },
-              ordered_list: { marginVertical: 8 },
-              list_item: { marginVertical: 4 },
-              paragraph: { color: colors.text, fontSize: 16, lineHeight: 24, marginVertical: 4 },
-              text: { color: colors.text, fontSize: 16 },
-              hr: { backgroundColor: colors.border, height: 1, marginVertical: 12 },
+          {/* AI Response with Markdown - Wrapped in Pressable for long-press copy */}
+          <Pressable
+            onLongPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleCopyMessage(message.content);
             }}
+            delayLongPress={500}
           >
-            {message.content}
-          </Markdown>
+            <Markdown
+              style={{
+                body: { color: colors.text, fontSize: 16, lineHeight: 24 },
+                heading1: {
+                  color: colors.text,
+                  fontSize: 24,
+                  fontWeight: "bold",
+                  marginTop: 16,
+                  marginBottom: 8,
+                },
+                heading2: {
+                  color: colors.text,
+                  fontSize: 20,
+                  fontWeight: "bold",
+                  marginTop: 14,
+                  marginBottom: 6,
+                },
+                heading3: {
+                  color: colors.text,
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  marginTop: 12,
+                  marginBottom: 4,
+                },
+                strong: { fontWeight: "bold", color: colors.text },
+                em: { fontStyle: "italic", color: colors.text },
+                link: { color: "#6366f1", textDecorationLine: "underline" },
+                blockquote: {
+                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                  borderLeftWidth: 3,
+                  borderLeftColor: "#6366f1",
+                  paddingLeft: 12,
+                  paddingVertical: 8,
+                  marginVertical: 8,
+                },
+                code_inline: {
+                  backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                  color: "#6366f1",
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 4,
+                  fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                },
+                code_block: {
+                  backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)",
+                  color: colors.text,
+                  padding: 12,
+                  borderRadius: 8,
+                  marginVertical: 8,
+                  fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                },
+                fence: {
+                  backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)",
+                  color: colors.text,
+                  padding: 12,
+                  borderRadius: 8,
+                  marginVertical: 8,
+                  fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                },
+                bullet_list: { marginVertical: 8 },
+                ordered_list: { marginVertical: 8 },
+                list_item: { marginVertical: 4 },
+                paragraph: { color: colors.text, fontSize: 16, lineHeight: 24, marginVertical: 4 },
+                text: { color: colors.text, fontSize: 16 },
+                hr: { backgroundColor: colors.border, height: 1, marginVertical: 12 },
+              }}
+            >
+              {message.content}
+            </Markdown>
+          </Pressable>
 
           {/* Generated image preview */}
           {message.generatedImageUrl && (
@@ -2255,7 +2283,7 @@ export default function PersonalChatScreen() {
                                 maxHeight: MAX_INPUT_HEIGHT,
                             }}
                             multiline={true}
-                            scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
+                            scrollEnabled={true}
                             maxLength={4000}
                             onSubmitEditing={() => handleSend()}
                             blurOnSubmit={false}
@@ -2584,8 +2612,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   aiMessageContainer: {
-    marginVertical: 8,
+    marginVertical: 6,
     paddingRight: 40,
+    marginBottom: 8,
   },
   citationsContainer: {
     marginBottom: 12,
