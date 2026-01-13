@@ -36,6 +36,9 @@ app.post("/livekit", async (c) => {
           case "room_finished":
             await handleRoomFinished(event);
             break;
+          case "participant_disconnected":
+            await handleParticipantDisconnected(event);
+            break;
           default:
             console.log(`[Webhook] Unhandled event type: ${event.event}`);
         }
@@ -57,6 +60,9 @@ app.post("/livekit", async (c) => {
           break;
         case "room_finished":
           await handleRoomFinished(event);
+          break;
+        case "participant_disconnected":
+          await handleParticipantDisconnected(event);
           break;
         default:
           console.log(`[Webhook] Unhandled event type: ${event.event}`);
@@ -129,6 +135,65 @@ async function handleEgressEnded(event: any) {
     
   } catch (error) {
     console.error("[Webhook] Error handling egress_ended:", error);
+  }
+}
+
+/**
+ * Handle participant_disconnected event - triggered when a participant leaves/disconnects
+ * This catches disconnections that happen without calling the leave API (app crash, network issues, etc.)
+ */
+async function handleParticipantDisconnected(event: any) {
+  try {
+    const participant = event.participant;
+    const room = event.room;
+    
+    if (!participant || !room) {
+      console.log("[Webhook] Missing participant or room in participant_disconnected event");
+      return;
+    }
+    
+    const roomName = room.name; // This is the voice_room.id
+    const participantIdentity = participant.identity; // This is the user.id
+    
+    console.log(`[Webhook] Participant ${participantIdentity} disconnected from room ${roomName}`);
+    
+    // Mark the participant as left in the database
+    const { data: updatedParticipant, error } = await db
+      .from("voice_participant")
+      .update({ leftAt: new Date().toISOString() })
+      .eq("voiceRoomId", roomName)
+      .eq("userId", participantIdentity)
+      .is("leftAt", null)
+      .select();
+    
+    if (error) {
+      console.error("[Webhook] Error marking participant as left:", error);
+    } else if (updatedParticipant && updatedParticipant.length > 0) {
+      console.log(`[Webhook] Marked participant ${participantIdentity} as left in room ${roomName}`);
+    } else {
+      console.log(`[Webhook] Participant ${participantIdentity} was already marked as left`);
+    }
+    
+    // Check if room is now empty and should be closed
+    const { count } = await db
+      .from("voice_participant")
+      .select("*", { count: "exact", head: true })
+      .eq("voiceRoomId", roomName)
+      .is("leftAt", null);
+    
+    if (count === 0) {
+      console.log(`[Webhook] Room ${roomName} is now empty, marking as inactive`);
+      await db
+        .from("voice_room")
+        .update({ 
+          isActive: false,
+          endedAt: new Date().toISOString()
+        })
+        .eq("id", roomName);
+    }
+    
+  } catch (error) {
+    console.error("[Webhook] Error handling participant_disconnected:", error);
   }
 }
 

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db";
 import { env } from "../env";
-import { AccessToken, EgressClient, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
+import { AccessToken, EgressClient, EncodedFileOutput, EncodedFileType, S3Upload, RoomServiceClient } from "livekit-server-sdk";
 import {
   joinVoiceRoomRequestSchema,
   leaveVoiceRoomRequestSchema,
@@ -16,6 +16,44 @@ const app = new Hono<AppType>();
 
 // Initialize Egress client for recording control
 let egressClient: EgressClient | null = null;
+
+// Initialize RoomService client for participant management
+let roomServiceClient: RoomServiceClient | null = null;
+
+function getRoomServiceClient(): RoomServiceClient | null {
+  if (!roomServiceClient && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET && env.LIVEKIT_URL) {
+    // Convert ws:// to https:// for API calls
+    const httpUrl = env.LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://");
+    roomServiceClient = new RoomServiceClient(httpUrl, env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+  }
+  return roomServiceClient;
+}
+
+/**
+ * Force remove a participant from a LiveKit room
+ * This ensures they're disconnected even if the client doesn't disconnect properly
+ */
+async function forceRemoveParticipant(roomName: string, participantIdentity: string): Promise<void> {
+  const client = getRoomServiceClient();
+  
+  if (!client) {
+    console.log("[VoiceRooms] RoomService client not available - skipping force removal");
+    return;
+  }
+  
+  try {
+    console.log(`[VoiceRooms] Force removing participant ${participantIdentity} from room ${roomName}`);
+    await client.removeParticipant(roomName, participantIdentity);
+    console.log(`[VoiceRooms] Successfully removed participant ${participantIdentity}`);
+  } catch (error: any) {
+    // Ignore "participant not found" errors - they may have already left
+    if (error?.message?.includes('not found') || error?.code === 'NOT_FOUND') {
+      console.log(`[VoiceRooms] Participant ${participantIdentity} already left room`);
+    } else {
+      console.error("[VoiceRooms] Failed to remove participant:", error);
+    }
+  }
+}
 
 function getEgressClient(): EgressClient | null {
   if (!egressClient && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET && env.LIVEKIT_URL) {
@@ -311,7 +349,13 @@ app.post("/leave", async (c) => {
     const validatedData = leaveVoiceRoomRequestSchema.parse(body);
     const { voiceRoomId, userId } = validatedData;
 
-    // Update participant record
+    console.log(`[VoiceRooms] User ${userId} leaving room ${voiceRoomId}`);
+
+    // Force remove the participant from LiveKit server first
+    // This ensures they're disconnected even if client didn't disconnect properly
+    await forceRemoveParticipant(voiceRoomId, userId);
+
+    // Update participant record in database
     const { error: leaveError } = await db
       .from("voice_participant")
       .update({ leftAt: new Date().toISOString() })
@@ -331,8 +375,12 @@ app.post("/leave", async (c) => {
       .eq("voiceRoomId", voiceRoomId)
       .is("leftAt", null);
 
+    console.log(`[VoiceRooms] Remaining participants in room ${voiceRoomId}: ${count}`);
+
     // If empty, close the room and stop recording
     if (count === 0) {
+      console.log(`[VoiceRooms] Room ${voiceRoomId} is empty, ending call`);
+      
       // Get the room to check for egress ID
       const { data: room } = await db
         .from("voice_room")
@@ -354,6 +402,8 @@ app.post("/leave", async (c) => {
           endedAt: new Date().toISOString()
         })
         .eq("id", voiceRoomId);
+        
+      console.log(`[VoiceRooms] Room ${voiceRoomId} marked as ended`);
     }
 
     const response: LeaveVoiceRoomResponse = { success: true };

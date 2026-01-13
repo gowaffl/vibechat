@@ -335,12 +335,17 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                         video: false,
                     },
                     adaptiveStream: true,
+                    disconnectOnPageLeave: true,
+                    stopLocalTrackOnUnpublish: true,
                 }}
+                audio={true}
+                video={false}
                 onConnected={() => {
                   console.log('[VoiceRoomModal] ✅ Connected to LiveKit room');
                 }}
                 onDisconnected={(reason) => {
                   console.log('[VoiceRoomModal] ❌ Disconnected from LiveKit:', reason);
+                  // Always call onLeave to ensure backend is notified
                   onLeave();
                 }}
                 onError={(error) => {

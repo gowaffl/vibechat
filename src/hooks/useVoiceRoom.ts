@@ -221,19 +221,33 @@ export const useVoiceRoom = (chatId: string) => {
   };
 
   const leaveRoom = async () => {
-    if (!user || !activeRoom) return;
+    if (!user) return;
+    
+    const roomId = activeRoom?.id;
+    
+    // Immediately clear local state so UI updates right away
+    setRoomState(prev => ({ ...prev, token: null, serverUrl: null }));
+    
+    if (!roomId) {
+      console.log('[useVoiceRoom] No active room to leave');
+      return;
+    }
+    
     try {
+      console.log('[useVoiceRoom] Calling leave API for room:', roomId);
       // Use the correct API endpoint path: /api/voice-rooms/leave
       await api.post(`/api/voice-rooms/leave`, {
         userId: user.id,
-        voiceRoomId: activeRoom.id,
+        voiceRoomId: roomId,
       });
-      setRoomState(prev => ({ ...prev, token: null, serverUrl: null }));
-      // We don't necessarily clear activeRoom here as it might still be active for others,
-      // but we should probably refresh status.
+      console.log('[useVoiceRoom] Successfully left room:', roomId);
+      
+      // Refresh room status after leaving
       fetchActiveRoom();
     } catch (err) {
       console.error("[useVoiceRoom] Failed to leave room:", err);
+      // Still refresh to get current state even if leave failed
+      fetchActiveRoom();
     }
   };
 
