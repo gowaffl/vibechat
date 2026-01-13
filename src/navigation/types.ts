@@ -17,7 +17,7 @@ export type RootStackParamList = {
   OnboardingPhoto: { name: string; bio?: string };
   MainTabs: NavigatorScreenParams<TabParamList>;
   ChatList: undefined; // Kept for backward compatibility references if any
-  Chat: { chatId: string; chatName: string; messageId?: string; forceRefresh?: boolean };
+  Chat: { chatId: string; chatName?: string; messageId?: string; forceRefresh?: boolean };
   PersonalChat: { conversationId?: string; agentId?: string };
   Profile: undefined; // Kept for backward compatibility references if any
   GroupSettings: { chatId: string };

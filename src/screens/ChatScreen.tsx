@@ -2087,7 +2087,9 @@ const ChatScreen = () => {
 
   // Get chatId from navigation params, fallback to default-chat for backward compatibility
   const chatId = route.params?.chatId || "default-chat";
-  const chatName = route.params?.chatName || "VibeChat";
+  // chatName is optional - when navigating from a deep link we may not have it
+  // The actual name will be fetched from the API and used via the 'chat' query below
+  const chatNameFromParams = route.params?.chatName;
   const messageId = route.params?.messageId;
   const forceRefresh = route.params?.forceRefresh;
   
@@ -8505,7 +8507,7 @@ const ChatScreen = () => {
         />
       ) : (
         <ChatHeader
-          chatName={chat?.name || chatName}
+          chatName={chat?.name || chatNameFromParams || "Chat"}
           chatImage={chat?.image || null}
           onAvatarPress={() => setShowAvatarViewer(true)}
           onSettingsPress={() => navigation.navigate("GroupSettings", { chatId })}

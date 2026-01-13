@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vibecodeapp.vibechat",
-      "buildNumber": "6",
+      "buildNumber": "7",
       "associatedDomains": [
         "applinks:vibechat-zdok.onrender.com"
       ],
@@ -38,7 +38,7 @@
     "android": {
       "edgeToEdgeEnabled": true,
       "package": "com.vibecodeapp.vibechat",
-      "versionCode": 5,
+      "versionCode": 7,
       "permissions": [
         "RECORD_AUDIO",
         "FOREGROUND_SERVICE",

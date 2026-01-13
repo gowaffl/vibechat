@@ -9,12 +9,12 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
-import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
-import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 import { ToastProvider } from "@/components/Toast";
 
+// React Navigation linking configuration for universal links and deep links
+// This declaratively maps URL paths to screens - React Navigation handles parsing automatically
 const linking = {
   prefixes: [
     "vibechat://",
@@ -22,9 +22,16 @@ const linking = {
   ],
   config: {
     screens: {
+      // Invite screen (root level - critical for invite deep links)
+      // URL: https://vibechat-zdok.onrender.com/invite/abc123 -> Invite screen with token="abc123"
       Invite: "invite/:token",
-      ChatList: "chats",
+      
+      // Chat screen (root level for direct deep link access)
+      // URL: https://vibechat-zdok.onrender.com/chat/uuid -> Chat screen with chatId="uuid"
       Chat: "chat/:chatId",
+      
+      // Other deep link screens
+      JoinChat: "join",
     },
   },
 };
@@ -33,76 +40,12 @@ const linking = {
 const AppContent = () => {
   const { navTheme, isDark } = useTheme();
   const navigationRef = useRef<any>(null);
-  const pendingInviteToken = useRef<string | null>(null);
-  const pendingNotification = useRef<{ chatId: string; chatName: string; forceRefresh: boolean } | null>(null);
+  const pendingNotification = useRef<{ chatId: string; chatName?: string; forceRefresh: boolean } | null>(null);
 
   useEffect(() => {
-    // Handle initial URL when app is opened from a link
-    const handleInitialURL = async () => {
-      try {
-        // Try multiple methods to get the initial URL
-        const url = await Linking.getInitialURL();
-
-        console.log("[DeepLink] Checking for initial URL...");
-        console.log("[DeepLink] getInitialURL result:", url);
-
-        // Also try parsing the URL using Expo's parseInitialURLAsync
-        const parsedUrl = await Linking.parseInitialURLAsync();
-        console.log("[DeepLink] parseInitialURLAsync result:", JSON.stringify(parsedUrl));
-
-        let inviteToken = null;
-
-        // Try to extract invite token from either method
-        if (url) {
-          try {
-            const urlObj = new URL(url);
-            inviteToken = urlObj.searchParams.get('invite');
-            console.log("[DeepLink] Token from URL object:", inviteToken);
-          } catch (e) {
-            console.log("[DeepLink] Error parsing URL:", e);
-          }
-        }
-
-        // Also check if the parsed URL has query params
-        if (parsedUrl?.queryParams?.invite) {
-          inviteToken = parsedUrl.queryParams.invite as string;
-          console.log("[DeepLink] Token from parsed URL:", inviteToken);
-        }
-
-        // Also check path for invite token (in case it's passed differently)
-        if (parsedUrl?.path && parsedUrl.path.includes('invite')) {
-          console.log("[DeepLink] Found 'invite' in path:", parsedUrl.path);
-          // Try to extract token from path like /invite/abc123
-          const match = parsedUrl.path.match(/invite[\/=]([a-z0-9]+)/i);
-          if (match && match[1]) {
-            inviteToken = match[1];
-            console.log("[DeepLink] Token extracted from path:", inviteToken);
-          }
-        }
-
-        if (inviteToken) {
-          console.log("[DeepLink] ✅ Found invite token:", inviteToken);
-          pendingInviteToken.current = inviteToken;
-
-          // Wait for navigation to be ready
-          setTimeout(() => {
-            if (navigationRef.current && pendingInviteToken.current) {
-              console.log("[DeepLink] 🚀 Navigating to Invite screen with token:", pendingInviteToken.current);
-              navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
-              pendingInviteToken.current = null;
-            } else {
-              console.log("[DeepLink] ⚠️ Navigation not ready, will retry on onReady");
-            }
-          }, 1500);
-        } else {
-          console.log("[DeepLink] ❌ No invite token found in URL");
-        }
-      } catch (error) {
-        console.error("[DeepLink] Error handling initial URL:", error);
-      }
-    };
-
-    handleInitialURL();
+    // Note: Deep link / universal link handling is now done declaratively via the `linking` config above.
+    // React Navigation automatically parses URLs and navigates to the correct screen.
+    // We only need to handle push notifications manually.
 
     // Handle push notifications
     const handleNotification = (response: Notifications.NotificationResponse) => {
@@ -113,7 +56,7 @@ const AppContent = () => {
         const chatName = response.notification.request.content.title || "Chat";
         
         if (chatIdFromData && typeof chatIdFromData === 'string') {
-          const chatId = chatIdFromData; // TypeScript now knows this is string
+          const chatId = chatIdFromData;
           if (navigationRef.current) {
             console.log("[Notifications] 🚀 Navigating to chat:", chatId, "with forceRefresh: true");
             navigationRef.current.navigate("Chat", { 
@@ -146,25 +89,7 @@ const AppContent = () => {
     // Listen for notification responses (background/foreground)
     const notificationSubscription = Notifications.addNotificationResponseReceivedListener(handleNotification);
 
-    // Handle URLs when app is already open
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      try {
-        console.log("[DeepLink] 📩 Received URL event:", url);
-
-        const urlObj = new URL(url);
-        const inviteToken = urlObj.searchParams.get('invite');
-
-        if (inviteToken && navigationRef.current) {
-          console.log("[DeepLink] 🚀 Navigating to Invite (from event):", inviteToken);
-          navigationRef.current.navigate('Invite', { token: inviteToken });
-        }
-      } catch (error) {
-        console.error("[DeepLink] Error handling URL event:", error);
-      }
-    });
-
     return () => {
-      subscription.remove();
       notificationSubscription.remove();
     };
   }, []);
@@ -179,16 +104,6 @@ const AppContent = () => {
             ref={navigationRef}
             onReady={() => {
               console.log("[Navigation] ✅ Navigation container ready");
-              // If there's a pending invite token, navigate to it now
-              if (pendingInviteToken.current && navigationRef.current) {
-                console.log("[DeepLink] 🚀 Late navigation to Invite with token:", pendingInviteToken.current);
-                setTimeout(() => {
-                  if (navigationRef.current && pendingInviteToken.current) {
-                    navigationRef.current.navigate('Invite', { token: pendingInviteToken.current });
-                    pendingInviteToken.current = null;
-                  }
-                }, 100);
-              }
               // If there's a pending notification, navigate to it now
               if (pendingNotification.current && navigationRef.current) {
                 console.log("[Notifications] 🚀 Late navigation to Chat:", pendingNotification.current.chatId);

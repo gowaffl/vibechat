@@ -34,18 +34,26 @@ const InviteScreen = () => {
   // Join chat mutation
   const joinChatMutation = useMutation({
     mutationFn: () => api.post<JoinChatViaInviteResponse>(`/api/invite/${token}/join`, { userId: user?.id }),
-    onSuccess: (response: JoinChatViaInviteResponse) => {
-      queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+    onSuccess: async (response: JoinChatViaInviteResponse) => {
+      // Invalidate queries to refresh chat list - await to ensure data is fresh
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["user-chats"] }),
+        queryClient.invalidateQueries({ queryKey: ["chat", response.chatId] }),
+      ]);
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Ensure background tab is Chats
+      // Navigate to MainTabs first to ensure the chat list is loaded in the background
       (navigation as any).navigate("MainTabs", { screen: "Chats" });
 
-      // Replace invite screen with chat to avoid going back to invite
-      navigation.replace("Chat", {
-        chatId: response.chatId,
-        chatName: inviteInfo?.chatName || "Chat",
-      });
+      // Small delay to let the chat list render, then navigate to the chat
+      // This ensures the chat appears in the list before we navigate to it
+      setTimeout(() => {
+        navigation.navigate("Chat", {
+          chatId: response.chatId,
+          chatName: inviteInfo?.chatName || "Chat",
+        });
+      }, 300);
     },
     onError: (error: any) => {
       console.error("Error joining chat:", error);
