@@ -2335,6 +2335,8 @@ export default function PersonalChatScreen() {
                         justifyContent: "center",
                         borderWidth: 1.5,
                         borderColor: isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
+                        borderRadius: 19,
+                        overflow: "hidden",
                         backgroundColor: streaming.isStreaming 
                             ? "#ef4444" 
                             : isAIMessage

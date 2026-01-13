@@ -697,6 +697,51 @@ chats.post("/:id/image", async (c) => {
   }
 });
 
+// POST /api/chats/:id/generate-avatar - Generate AI avatar for chat
+chats.post("/:id/generate-avatar", async (c) => {
+  const chatId = c.req.param("id");
+  
+  try {
+    const body = await c.req.json();
+    const { userId } = body;
+
+    console.log(`[Chats] Generate avatar request for chat ${chatId} by user ${userId}`);
+
+    // Verify user is a member of the chat
+    const { data: membership } = await db
+      .from("chat_member")
+      .select("id")
+      .eq("chatId", chatId)
+      .eq("userId", userId)
+      .single();
+
+    if (!membership) {
+      return c.json({ error: "You must be a member to generate chat avatar" }, 403);
+    }
+
+    // Forward to the AI avatar generation endpoint
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const response = await fetch(`${backendUrl}/api/ai/generate-group-avatar`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ chatId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return c.json(errorData, response.status as 400 | 401 | 403 | 404 | 429 | 500);
+    }
+
+    const result = await response.json();
+    return c.json(result);
+  } catch (error) {
+    console.error("[Chats] Error generating avatar:", error);
+    return c.json({ error: "Failed to generate avatar" }, 500);
+  }
+});
+
 // DELETE /api/chats/:id - Delete chat (creator only)
 chats.delete("/:id", async (c) => {
   const chatId = c.req.param("id");
