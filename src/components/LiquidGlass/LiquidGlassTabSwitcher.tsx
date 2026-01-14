@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   },
   indicator: {
     position: "absolute",
-    top: 4,
+    top: 3,
     left: 4,
     height: 36,
     zIndex: 0,
@@ -243,6 +243,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 15,
+    lineHeight: 18,
     letterSpacing: 0.2,
   },
 });
