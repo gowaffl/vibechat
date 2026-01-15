@@ -9,39 +9,139 @@ import { usePostHog } from 'posthog-react-native';
 import { useCallback, useEffect } from 'react';
 
 export interface AnalyticsEvent {
-  // User events
-  user_signed_up?: { method: 'email' | 'phone' | 'google' | 'apple' };
+  // User Lifecycle Events
+  user_signed_up?: { method: 'email' | 'phone' | 'google' | 'apple'; referrer?: string };
   user_signed_in?: { method: 'email' | 'phone' | 'google' | 'apple' };
   user_signed_out?: Record<string, never>;
+  onboarding_step_completed?: { step_name: string; step_number: number; [key: string]: any };
+  onboarding_completed?: { time_taken_seconds?: number };
+  profile_updated?: { fields_updated: string[] };
   
-  // Chat events
-  chat_created?: { type: 'group' | 'personal'; member_count?: number };
-  message_sent?: { type: 'text' | 'image' | 'video' | 'audio'; has_ai: boolean };
-  message_reacted?: { emoji: string };
+  // Messaging Events - Core
+  message_sent?: { 
+    type: 'text' | 'image' | 'video' | 'audio'; 
+    chat_type: 'group' | 'personal';
+    has_media?: boolean;
+    has_mention?: boolean;
+    has_vibe?: boolean;
+    char_length?: number;
+    is_first_message?: boolean;
+  };
+  first_message_sent?: { time_since_signup_minutes: number };
+  message_received?: { sender_type: 'user' | 'ai' };
+  message_replied?: { message_type: string };
+  message_deleted?: { own_message: boolean };
+  message_copied?: { message_type: string };
+  message_shared?: { share_type: string };
   
-  // AI events
-  ai_message_sent?: { command?: string; persona_type?: string };
+  // Reactions & Engagement
+  reaction_added?: { emoji: string; message_type?: string; is_own_message?: boolean };
+  reaction_removed?: { emoji: string };
+  message_reply_started?: { message_type: string; is_own_message: boolean };
+  
+  // AI Feature Events
+  catch_up_viewed?: { unread_count: number; time_away_hours?: number };
+  catch_up_generated?: { message_count: number; time_taken_ms: number; summary_type?: string };
+  ai_message_sent?: { command?: string; has_tools?: boolean; persona_name?: string; prompt_length?: number; has_ai_friend?: boolean };
   ai_friend_created?: { persona_type: string };
-  image_generated?: { success: boolean };
+  tldr_generated?: { message_count: number; time_taken_ms?: number };
+  translation_used?: { from_lang: string; to_lang: string; auto_detected?: boolean; char_length?: number };
+  image_generated?: { prompt_length: number; success: boolean; time_taken_ms?: number; error_type?: string };
+  smart_reply_used?: { reply_text_length: number };
   
-  // Voice events
-  voice_call_started?: { participant_count: number };
-  voice_call_ended?: { duration_seconds: number };
+  // LLM Analytics Events (PostHog Best Practices)
+  llm_generation_started?: { 
+    feature: 'catch_up' | 'tldr' | 'translation' | 'image_gen' | 'ai_chat' | 'personal_chat';
+    model?: string;
+    chat_type?: 'group' | 'personal';
+    input_length?: number;
+    context_length?: number;
+  };
+  llm_generation_completed?: {
+    feature: 'catch_up' | 'tldr' | 'translation' | 'image_gen' | 'ai_chat' | 'personal_chat';
+    model?: string;
+    duration_ms: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    success: boolean;
+    error_type?: string;
+    cost_usd?: number;
+  };
+  llm_generation_failed?: {
+    feature: 'catch_up' | 'tldr' | 'translation' | 'image_gen' | 'ai_chat' | 'personal_chat';
+    model?: string;
+    error_type: string;
+    error_message?: string;
+    duration_ms?: number;
+  };
+  llm_response_rated?: {
+    feature: string;
+    rating: 'positive' | 'negative';
+    feedback?: string;
+  };
   
-  // Feature usage
+  // Voice & Audio Events
+  voice_call_started?: { participant_count: number; call_type?: 'group' | 'personal' };
+  voice_call_joined?: { room_id?: string; was_invited?: boolean };
+  voice_call_left?: { duration_seconds: number };
+  voice_call_ended?: { duration_seconds: number; participant_count: number };
+  voice_message_sent?: { duration_seconds: number };
+  voice_message_played?: Record<string, never>;
+  
+  // Social & Discovery Events
+  chat_created?: { type: 'group' | 'personal'; initial_member_count: number };
+  chat_joined?: { join_method: string; member_count: number };
+  chat_left?: { member_count: number };
+  chat_viewed?: { chat_id: string };
+  invite_sent?: { method: string; chat_type?: string };
+  invite_accepted?: { chat_id: string };
+  friend_added?: Record<string, never>;
+  
+  // Thread & Organization Events
+  thread_created?: { rule_count: number; is_shared: boolean };
+  thread_viewed?: { thread_name: string; message_count?: number };
+  
+  // Content Events
+  event_created?: { has_date: boolean; has_location?: boolean; has_reminder?: boolean };
+  event_rsvp?: { response_type: 'yes' | 'no' | 'maybe' };
+  poll_created?: { option_count: number; allow_multiple: boolean };
+  poll_voted?: { option_index: number };
+  media_uploaded?: { media_type: 'image' | 'video' | 'audio'; file_size_mb?: number; media_source?: string };
+  media_viewed?: { media_type: string };
+  link_preview_viewed?: { domain?: string };
+  bookmark_added?: { content_type?: string };
+  bookmark_removed?: Record<string, never>;
+  
+  // Feature Discovery Events
+  feature_discovered?: { feature_name: string; discovery_method: string };
   feature_used?: { feature_name: string; context?: string };
-  screen_viewed?: { screen_name: string };
+  menu_opened?: { menu_type: string; screen?: string };
+  settings_viewed?: { section?: string };
+  help_viewed?: { help_topic?: string };
+  screen_viewed?: { screen_name: string; [key: string]: any };
   
-  // Premium events
-  premium_viewed?: Record<string, never>;
-  premium_subscribed?: { plan: string };
+  // Monetization Events
+  premium_viewed?: { source?: string };
+  paywall_viewed?: { trigger_feature: string; user_message_count?: number; days_since_signup?: number };
+  premium_cta_clicked?: { plan_type?: string; source?: string };
+  premium_subscribed?: { plan: string; price?: number; had_trial?: boolean };
+  premium_cancelled?: { reason?: string; days_subscribed?: number };
+  premium_feature_used?: { feature_name: string };
+  premium_feature_attempted?: { feature_name: string; is_locked: boolean };
   
-  // Translation events
-  message_translated?: { from_language: string; to_language: string };
+  // Error & Performance Events
+  error_occurred?: { error_type: string; error_message?: string; screen?: string; component_stack?: string; status_code?: number; endpoint?: string };
+  slow_performance?: { operation: string; duration_ms: number };
+  network_error?: { endpoint: string; status_code?: number; error_type?: string };
+  crash_prevented?: { error_boundary: string; component?: string };
   
-  // Community events
+  // Community & Workflows
   workflow_cloned?: { workflow_id: string };
   community_visited?: Record<string, never>;
+  
+  // Test Events
+  test_event?: { timestamp?: string; test?: boolean; [key: string]: any };
 }
 
 type EventName = keyof AnalyticsEvent;

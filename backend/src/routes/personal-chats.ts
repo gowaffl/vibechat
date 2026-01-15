@@ -33,6 +33,7 @@ import {
   getSafetySystemPrompt,
   logSafetyEvent 
 } from "../services/content-safety";
+import { trackLLMStart, trackLLMSuccess, trackLLMFailure } from "../services/llm-analytics";
 import {
   extractURLsFromText,
   extractMultipleURLs,
@@ -1120,9 +1121,29 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
     const isImageRequest = /\b(generate|create|make|draw|design|paint|illustrate|sketch)\b.{0,30}\b(image|picture|photo|illustration|artwork|drawing|painting)\b/i.test(content);
 
     try {
+      let startTime = Date.now();
+      let estimatedPromptTokens = 0;
+      
       if (isImageRequest) {
         // Use gemini-3-pro-image-preview for image generation
         console.log("[PersonalChats] Detected image generation request");
+        
+        // Track LLM start for image generation
+        estimatedPromptTokens = Math.ceil(content.length / 4);
+        trackLLMStart({
+          feature: "image_generation",
+          model: "gemini-3-pro-image-preview",
+          provider: "google",
+          userId: userId,
+          chatId: conversationId,
+          aiFriendId: aiFriend.id,
+          promptLength: content.length,
+          promptTokens: estimatedPromptTokens,
+          metadata: {
+            aspect_ratio: "1:1",
+          },
+        });
+        
         const imageResult = await generateGeminiImage({
           prompt: content,
           numberOfImages: 1,
@@ -1143,6 +1164,26 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
             generatedImageUrl = savedImages[0];
             metadata.generatedImagePrompt = content;
             metadata.toolsUsed = ["image_generation"];
+            
+            // Track LLM success for image generation
+            const latencyMs = Date.now() - startTime;
+            trackLLMSuccess({
+              feature: "image_generation",
+              model: "gemini-3-pro-image-preview",
+              provider: "google",
+              userId: userId,
+              chatId: conversationId,
+              aiFriendId: aiFriend.id,
+              promptTokens: estimatedPromptTokens,
+              completionTokens: 0, // Image generation doesn't return text tokens
+              totalTokens: estimatedPromptTokens,
+              latencyMs,
+              finishReason: "completed",
+              metadata: {
+                aspect_ratio: "1:1",
+                image_generated: true,
+              },
+            });
           }
         }
         
@@ -1156,6 +1197,27 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
         const needsWebSearch = /\b(current|latest|recent|today|news|weather|stock|price|score|update|2024|2025|2026)\b/i.test(content) ||
           /\bwhat is happening\b/i.test(content) ||
           /\bsearch\b/i.test(content);
+
+        // Track LLM start
+        const startTime = Date.now();
+        const estimatedPromptTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
+        trackLLMStart({
+          feature: "ai_message",
+          model: "gemini-3-flash-preview",
+          provider: "google",
+          userId: userId,
+          chatId: conversationId,
+          aiFriendId: aiFriend.id,
+          promptLength: systemPrompt.length + userPrompt.length,
+          promptTokens: estimatedPromptTokens,
+          maxTokens: 8192,
+          stream: false,
+          metadata: {
+            thinking_level: thinkingLevel,
+            web_search_enabled: needsWebSearch,
+            chat_history_length: chatHistory.length,
+          },
+        });
 
         const result = await executeGeminiResponse({
           systemPrompt,
@@ -1182,6 +1244,29 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
         if (result.thoughtSignature) {
           metadata.thoughtSignature = result.thoughtSignature;
         }
+
+        // Track LLM success
+        const latencyMs = Date.now() - startTime;
+        const completionTokens = Math.ceil(aiResponseContent.length / 4);
+        trackLLMSuccess({
+          feature: "ai_message",
+          model: "gemini-3-flash-preview",
+          provider: "google",
+          userId: userId,
+          chatId: conversationId,
+          aiFriendId: aiFriend.id,
+          promptTokens: estimatedPromptTokens,
+          completionTokens,
+          totalTokens: estimatedPromptTokens + completionTokens,
+          latencyMs,
+          finishReason: "completed",
+          metadata: {
+            thinking_level: thinkingLevel,
+            web_search_enabled: needsWebSearch,
+            web_search_used: metadata.toolsUsed.includes("web_search"),
+            chat_history_length: chatHistory.length,
+          },
+        });
       }
 
       // ============================================================================
@@ -1201,6 +1286,23 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
       }
     } catch (aiError: any) {
       console.error("[PersonalChats] Error generating AI response:", aiError);
+      
+      // Track LLM failure
+      if (typeof startTime !== 'undefined') {
+        const latencyMs = Date.now() - startTime;
+        trackLLMFailure({
+          feature: "ai_message",
+          model: isImageRequest ? "gemini-3-pro-image-preview" : "gemini-3-flash-preview",
+          provider: "google",
+          userId: userId,
+          chatId: conversationId,
+          aiFriendId: aiFriend?.id,
+          promptTokens: Math.ceil((systemPrompt.length + userPrompt.length) / 4),
+          latencyMs,
+          errorType: aiError instanceof Error ? aiError.constructor.name : "UnknownError",
+          errorMessage: aiError instanceof Error ? aiError.message : String(aiError),
+        });
+      }
       
       // Provide more specific error messages based on the error type
       const errorMessage = aiError?.message?.toLowerCase() || "";
@@ -1743,6 +1845,25 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         }, 2000); // Ping every 2 seconds during image generation
 
         try {
+          // Track LLM start for image generation
+          const imageGenStartTime = Date.now();
+          const imagePromptTokens = Math.ceil(content.length / 4);
+          trackLLMStart({
+            feature: "image_generation",
+            model: "gemini-3-pro-image-preview",
+            provider: "google",
+            userId: userId,
+            chatId: conversationId,
+            aiFriendId: aiFriend.id,
+            promptLength: content.length,
+            promptTokens: imagePromptTokens,
+            metadata: {
+              aspect_ratio: "1:1",
+              reference_images_count: referenceImages.length,
+              streaming: true,
+            },
+          });
+          
           const imageResult = await generateGeminiImage({
             prompt: content,
             numberOfImages: 1,
@@ -1768,6 +1889,29 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             if (savedImages.length > 0) {
               metadata.generatedImageUrl = savedImages[0];
               console.log("[PersonalChats] [Image] Sending image_generated event with URL:", savedImages[0]);
+              
+              // Track LLM success for image generation
+              const imageGenLatency = Date.now() - imageGenStartTime;
+              trackLLMSuccess({
+                feature: "image_generation",
+                model: "gemini-3-pro-image-preview",
+                provider: "google",
+                userId: userId,
+                chatId: conversationId,
+                aiFriendId: aiFriend.id,
+                promptTokens: imagePromptTokens,
+                completionTokens: 0, // Image generation doesn't return text tokens
+                totalTokens: imagePromptTokens,
+                latencyMs: imageGenLatency,
+                finishReason: "completed",
+                metadata: {
+                  aspect_ratio: "1:1",
+                  reference_images_count: referenceImages.length,
+                  streaming: true,
+                  image_generated: true,
+                },
+              });
+              
               await stream.writeSSE({
                 event: "image_generated",
                 data: JSON.stringify({ imageId, imageUrl: savedImages[0] }),
@@ -1805,6 +1949,24 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           // Clear the frequent ping interval on error
           clearInterval(imageGenPingInterval);
           console.error("[PersonalChats] Image generation error:", imgError);
+          
+          // Track LLM failure for image generation
+          if (typeof imageGenStartTime !== 'undefined' && typeof imagePromptTokens !== 'undefined') {
+            const imageGenLatency = Date.now() - imageGenStartTime;
+            trackLLMFailure({
+              feature: "image_generation",
+              model: "gemini-3-pro-image-preview",
+              provider: "google",
+              userId: userId,
+              chatId: conversationId,
+              aiFriendId: aiFriend.id,
+              promptTokens: imagePromptTokens,
+              latencyMs: imageGenLatency,
+              errorType: imgError instanceof Error ? imgError.constructor.name : "UnknownError",
+              errorMessage: imgError instanceof Error ? imgError.message : String(imgError),
+            });
+          }
+          
           fullContent = "I apologize, but I encountered an error generating the image. Please try again.";
           await stream.writeSSE({
             event: "content_delta",
@@ -1933,6 +2095,30 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
       }
 
       // Stream Gemini response using gemini-3-flash-preview for text/web search
+      // Track LLM start
+      const streamStartTime = Date.now();
+      const estimatedPromptTokens = Math.ceil((systemPrompt.length + finalUserPrompt.length) / 4);
+      trackLLMStart({
+        feature: "ai_message",
+        model: "gemini-3-flash-preview",
+        provider: "google",
+        userId: userId,
+        chatId: conversationId,
+        aiFriendId: aiFriend.id,
+        promptLength: systemPrompt.length + finalUserPrompt.length,
+        promptTokens: estimatedPromptTokens,
+        maxTokens: 8192,
+        stream: true,
+        metadata: {
+          thinking_level: thinkingLevel,
+          web_search_enabled: needsWebSearch,
+          chat_history_length: chatHistory.length,
+          has_url_content: !!urlContentContext,
+          has_document_content: !!documentContentContext,
+          files_count: files?.length || 0,
+        },
+      });
+      
       const responseStream = streamGeminiResponse({
         systemPrompt,
         userPrompt: finalUserPrompt,
@@ -2154,6 +2340,34 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
               .update(updateData)
               .eq("id", conversationId);
 
+            // Track LLM success
+            const streamLatencyMs = Date.now() - streamStartTime;
+            const completionTokens = Math.ceil(fullContent.length / 4);
+            trackLLMSuccess({
+              feature: "ai_message",
+              model: "gemini-3-flash-preview",
+              provider: "google",
+              userId: userId,
+              chatId: conversationId,
+              aiFriendId: aiFriend.id,
+              promptTokens: estimatedPromptTokens,
+              completionTokens,
+              totalTokens: estimatedPromptTokens + completionTokens,
+              latencyMs: streamLatencyMs,
+              finishReason: "completed",
+              metadata: {
+                thinking_level: thinkingLevel,
+                web_search_enabled: needsWebSearch,
+                web_search_used: metadata.toolsUsed?.includes("web_search") || false,
+                chat_history_length: chatHistory.length,
+                has_url_content: !!urlContentContext,
+                has_document_content: !!documentContentContext,
+                files_count: files?.length || 0,
+                streaming: true,
+                image_generated: !!generatedImageUrl,
+              },
+            });
+            
             // Send final message with assistant response
             await stream.writeSSE({
               event: "assistant_message",
@@ -2186,6 +2400,23 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
       // Clear the keep-alive interval on error
       clearInterval(keepAliveInterval);
       console.error("[PersonalChats] Streaming error:", error);
+      
+      // Track LLM failure
+      if (typeof streamStartTime !== 'undefined' && typeof estimatedPromptTokens !== 'undefined') {
+        const streamLatencyMs = Date.now() - streamStartTime;
+        trackLLMFailure({
+          feature: "ai_message",
+          model: "gemini-3-flash-preview",
+          provider: "google",
+          userId: userId,
+          chatId: conversationId,
+          aiFriendId: aiFriend?.id,
+          promptTokens: estimatedPromptTokens,
+          latencyMs: streamLatencyMs,
+          errorType: error instanceof Error ? error.constructor.name : "UnknownError",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
       
       // Categorize the error and provide a user-friendly message
       let userFriendlyError = "An unexpected error occurred. Please try again.";

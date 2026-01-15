@@ -10,6 +10,7 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAnalytics, useScreenTracking } from "@/hooks/useAnalytics";
 import { Users, UserPlus, X, Copy, Check, Share2 } from "lucide-react-native";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
@@ -24,6 +25,7 @@ const GroupSettingsMembersScreen = () => {
   const navigation = useNavigation<RootStackScreenProps<"GroupSettingsMembers">["navigation"]>();
   const { user } = useUser();
   const { colors, isDark } = useTheme();
+  const analytics = useAnalytics();
 
   const { chatId } = route.params;
 
@@ -31,6 +33,11 @@ const GroupSettingsMembersScreen = () => {
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // Track screen view
+  useScreenTracking("GroupSettingsMembers", {
+    chat_id: chatId,
+  });
 
   // Fetch chat details including members
   const { data: chat } = useQuery<any>({
@@ -353,12 +360,28 @@ const GroupSettingsMembersScreen = () => {
                                 );
                                 
                                 await Promise.race([sharePromise, timeoutPromise]);
+                                
+                                // Track invite sent
+                                analytics.capture('invite_sent', {
+                                  chat_id: chatId,
+                                  chat_type: 'group',
+                                  method: 'share_sheet',
+                                });
+                                
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                               } catch (error: any) {
                                 console.log("[Members] Share failed, using clipboard fallback:", error?.message);
                                 
                                 // Fallback: Copy to clipboard and show alert
                                 await Clipboard.setStringAsync(shareMessage);
+                                
+                                // Track invite sent via clipboard
+                                analytics.capture('invite_sent', {
+                                  chat_id: chatId,
+                                  chat_type: 'group',
+                                  method: 'clipboard',
+                                });
+                                
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                 
                                 Alert.alert(

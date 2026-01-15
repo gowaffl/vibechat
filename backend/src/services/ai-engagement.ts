@@ -25,6 +25,7 @@ import {
 } from "./content-safety";
 import { setAITypingStatus } from "../routes/chats";
 import { decryptMessages, decryptMessageContent } from "./message-encryption";
+import { trackLLMStart, trackLLMSuccess, trackLLMFailure } from "./llm-analytics";
 
 // Subscription reference to keep connection alive
 let engagementSubscription: RealtimeChannel | null = null;
@@ -285,14 +286,76 @@ Respond naturally to what's happening in the conversation. Keep it brief and rea
     console.log(`[AI Engagement] [${requestId}] 💬 AI typing indicator set for ${aiName}`);
 
     console.log("[AI Engagement] Calling GPT-5.1 Responses API with hosted tools...");
-    const response = await executeGPT51Response({
-      systemPrompt,
-      userPrompt: userInput,
-      tools,
-      reasoningEffort: "none",
-      // Note: gpt-5.1 does not support temperature parameter
+    
+    // Track LLM start
+    const startTime = Date.now();
+    const estimatedPromptTokens = Math.ceil((systemPrompt.length + userInput.length) / 4);
+    trackLLMStart({
+      feature: "ai_auto_response",
+      model: "gpt-5.1",
+      provider: "openai",
+      chatId: chatId,
+      promptLength: systemPrompt.length + userInput.length,
+      promptTokens: estimatedPromptTokens,
       maxTokens: 2048,
+      stream: false,
+      metadata: {
+        ai_friend_id: aiFriendId,
+        ai_friend_name: aiName,
+        engagement_mode: "auto",
+      },
     });
+
+    let response;
+    try {
+      response = await executeGPT51Response({
+        systemPrompt,
+        userPrompt: userInput,
+        tools,
+        reasoningEffort: "none",
+        // Note: gpt-5.1 does not support temperature parameter
+        maxTokens: 2048,
+      });
+      
+      // Track LLM success
+      const latencyMs = Date.now() - startTime;
+      trackLLMSuccess({
+        feature: "ai_auto_response",
+        model: "gpt-5.1",
+        provider: "openai",
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        completionTokens: Math.ceil((response.content?.length || 0) / 4),
+        totalTokens: estimatedPromptTokens + Math.ceil((response.content?.length || 0) / 4),
+        latencyMs,
+        finishReason: response.status || "completed",
+        metadata: {
+          ai_friend_id: aiFriendId,
+          ai_friend_name: aiName,
+          engagement_mode: "auto",
+          has_images: response.images.length > 0,
+        },
+      });
+    } catch (gptError: any) {
+      // Track LLM failure
+      const latencyMs = Date.now() - startTime;
+      trackLLMFailure({
+        feature: "ai_auto_response",
+        model: "gpt-5.1",
+        provider: "openai",
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        latencyMs,
+        errorType: gptError.name || "UnknownError",
+        errorMessage: gptError.message || "GPT-5.1 execution failed",
+        metadata: {
+          ai_friend_id: aiFriendId,
+          ai_friend_name: aiName,
+          engagement_mode: "auto",
+        },
+      });
+      throw gptError;
+    }
 
     const savedImageUrls = await saveResponseImages(response.images, "ai-auto");
     const primaryImageUrl = savedImageUrls[0] ?? null;

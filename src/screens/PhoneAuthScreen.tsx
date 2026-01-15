@@ -24,6 +24,7 @@ import { OnboardingProgress } from "@/components/OnboardingProgress";
 import { authClient, supabaseClient } from "@/lib/authClient";
 import type { User } from "@/shared/contracts";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useScreenTracking } from "@/hooks/useAnalytics";
 
 const { width, height } = Dimensions.get("window");
 
@@ -35,6 +36,11 @@ export default function PhoneAuthScreen() {
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [loading, setLoading] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Track screen view with auth step context
+  useScreenTracking("PhoneAuth", {
+    auth_step: step,
+  });
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;

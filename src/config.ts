@@ -17,3 +17,17 @@ if (!process.env.EXPO_PUBLIC_API_URL && !process.env.EXPO_PUBLIC_VIBECODE_BACKEN
   }
 }
 
+/**
+ * PostHog Configuration
+ * 
+ * PostHog is used for product analytics and feature tracking.
+ * Set EXPO_PUBLIC_POSTHOG_API_KEY and optionally EXPO_PUBLIC_POSTHOG_HOST in your environment.
+ */
+export const POSTHOG_API_KEY = process.env.EXPO_PUBLIC_POSTHOG_API_KEY || "";
+export const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+
+if (!process.env.EXPO_PUBLIC_POSTHOG_API_KEY) {
+  if (__DEV__) {
+    console.warn("⚠️ PostHog API key not set. Analytics will be disabled.");
+  }
+}

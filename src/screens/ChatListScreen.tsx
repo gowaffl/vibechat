@@ -31,6 +31,7 @@ import { getFullImageUrl } from "@/utils/imageHelpers";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { ChatWithMetadata, GetUserChatsResponse, UnreadCount } from "@/shared/contracts";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
+import { useScreenTracking } from "@/hooks/useAnalytics";
 import { GradientIcon, BRAND_GRADIENT_COLORS } from "@/components/GradientIcon";
 import { GradientText } from "@/components/GradientText";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
@@ -365,6 +366,11 @@ const ChatListScreen = () => {
     { key: "group", label: "Group" },
     { key: "personal", label: "Personal" },
   ];
+
+  // Track screen view with active tab context
+  useScreenTracking("ChatList", {
+    active_tab: activeTab,
+  });
 
   // Check if any filters are active
   const hasActiveFilters = React.useMemo(() => {

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import { supabaseClient } from "@/lib/authClient";
 import type {
   GetActiveVoiceRoomResponse,
@@ -12,6 +13,7 @@ import { useFocusEffect } from "@react-navigation/native";
 
 export const useVoiceRoom = (chatId: string) => {
   const { user } = useUser();
+  const analytics = useAnalytics();
   const channelRef = useRef<RealtimeChannel | null>(null);
   
   const [roomState, setRoomState] = useState<{
@@ -182,6 +184,7 @@ export const useVoiceRoom = (chatId: string) => {
     console.log('[useVoiceRoom] Starting joinRoom...');
     setIsJoining(true);
     setError(null);
+    const startTime = Date.now();
     try {
       // Use the correct API endpoint path with 10 second timeout for faster feedback
       const response = await api.post<JoinVoiceRoomResponse>(
@@ -202,20 +205,34 @@ export const useVoiceRoom = (chatId: string) => {
         activeRoom: response.room
       });
       
+      // Track voice call started
+      analytics.capture('voice_call_started', {
+        chat_id: chatId,
+        room_id: response.room.id,
+        participant_count: response.room.participants?.length || 1,
+        time_to_join_ms: Date.now() - startTime,
+      });
+      
       console.log('[useVoiceRoom] State updated - Token:', !!response.token, 'ServerUrl:', !!response.serverUrl);
       return response;
     } catch (err: any) {
       console.error("[useVoiceRoom] Failed to join room:", err);
       
+      // Track voice call error
+      analytics.capture('voice_call_error', {
+        chat_id: chatId,
+        error_type: err.message?.includes('timeout') ? 'timeout' : 'join_failed',
+      });
+      
       // Provide user-friendly error messages
-              if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
-                setError('Connection timeout - please try again');
-              } else {
-                setError(err.message || "Failed to join Vibe Call");
-              }
-              throw err;
-            } finally {
-              setIsJoining(false);
+      if (err.message?.includes('timeout') || err.message?.includes('AbortError')) {
+        setError('Connection timeout - please try again');
+      } else {
+        setError(err.message || "Failed to join Vibe Call");
+      }
+      throw err;
+    } finally {
+      setIsJoining(false);
       console.log('[useVoiceRoom] joinRoom completed, isJoining set to false');
     }
   };
@@ -224,6 +241,7 @@ export const useVoiceRoom = (chatId: string) => {
     if (!user) return;
     
     const roomId = activeRoom?.id;
+    const participantCount = participants;
     
     // Immediately clear local state so UI updates right away
     setRoomState(prev => ({ ...prev, token: null, serverUrl: null }));
@@ -241,6 +259,13 @@ export const useVoiceRoom = (chatId: string) => {
         voiceRoomId: roomId,
       });
       console.log('[useVoiceRoom] Successfully left room:', roomId);
+      
+      // Track voice call ended
+      analytics.capture('voice_call_ended', {
+        chat_id: chatId,
+        room_id: roomId,
+        participant_count: participantCount,
+      });
       
       // Refresh room status after leaving
       fetchActiveRoom();

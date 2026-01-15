@@ -30,6 +30,7 @@ import { useUser } from "@/contexts/UserContext";
 import { api } from "@/lib/api";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import type { CreateChatResponse } from "@/shared/contracts";
 
 const { width, height } = Dimensions.get("window");
@@ -49,6 +50,7 @@ export const CreateChatFAB = () => {
   const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
   const navigation = useNavigation<any>();
+  const analytics = useAnalytics();
 
   // Animation Values
   const expansion = useSharedValue(0); // 0 -> 1
@@ -96,6 +98,13 @@ export const CreateChatFAB = () => {
     mutationFn: (data: { name: string; bio: string | null; creatorId: string }) => 
       api.post<CreateChatResponse>("/api/chats", data),
     onSuccess: (newChat) => {
+      // Track chat creation
+      analytics.capture('chat_created', {
+        chat_type: 'group',
+        has_bio: !!newChat.bio,
+        chat_id: newChat.id,
+      });
+      
       queryClient.invalidateQueries({ queryKey: ["user-chats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       closeFAB();

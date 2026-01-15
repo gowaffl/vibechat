@@ -24,6 +24,7 @@ import { useNavigation } from "@react-navigation/native";
 import { api } from "@/lib/api";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useUser } from "@/contexts/UserContext";
+import { useAnalytics, useScreenTracking } from "@/hooks/useAnalytics";
 import type { CreateChatRequest, CreateChatResponse } from "@/shared/contracts";
 
 const { width, height } = Dimensions.get("window");
@@ -33,11 +34,15 @@ const CreateChatScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const analytics = useAnalytics();
 
   const [newChatName, setNewChatName] = useState("");
   const [newChatBio, setNewChatBio] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Track screen view
+  useScreenTracking("CreateChat");
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -85,6 +90,13 @@ const CreateChatScreen = () => {
   const createChatMutation = useMutation({
     mutationFn: (data: CreateChatRequest) => api.post<CreateChatResponse>("/api/chats", data),
     onSuccess: (newChat: CreateChatResponse) => {
+      // Track chat creation
+      analytics.capture('chat_created', {
+        chat_type: 'group',
+        has_bio: !!newChat.bio,
+        chat_id: newChat.id,
+      });
+      
       queryClient.invalidateQueries({ queryKey: ["user-chats"] });
       setNewChatName("");
       setNewChatBio("");

@@ -1,3 +1,12 @@
+/**
+ * Enhanced UserContext with PostHog Analytics Integration
+ * 
+ * This is an enhanced version of UserContext that includes automatic
+ * user identification and property tracking for PostHog analytics.
+ * 
+ * TO IMPLEMENT: Replace your existing UserContext.tsx with this file
+ */
+
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { User } from "@/shared/contracts";
 import { api } from "@/lib/api";

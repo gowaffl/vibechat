@@ -25,6 +25,7 @@ import {
 } from "../services/content-safety";
 import { setAITypingStatus } from "./chats";
 import { decryptMessages } from "../services/message-encryption";
+import { trackLLMStart, trackLLMSuccess, trackLLMFailure } from "../services/llm-analytics";
 
 const ai = new Hono<AppType>();
 
@@ -367,6 +368,25 @@ Respond naturally and concisely based on the conversation.`;
     const startTime = Date.now();
     console.log(`[AI] Calling GPT-5.1 Responses API for chat ${chatId}, user ${userId}`);
     
+    // Track LLM start
+    const estimatedPromptTokens = Math.ceil((systemPrompt.length + userInput.length) / 4);
+    trackLLMStart({
+      feature: "ai_mention_response",
+      model: "gpt-5.1",
+      provider: "openai",
+      userId: userId,
+      chatId: chatId,
+      promptLength: systemPrompt.length + userInput.length,
+      promptTokens: estimatedPromptTokens,
+      maxTokens: 2048,
+      stream: false,
+      metadata: {
+        ai_friend_id: aiFriend.id,
+        ai_friend_name: aiName,
+        engagement_mode: "mention",
+      },
+    });
+    
     let response;
     try {
       // Note: gpt-5.1 does not support temperature parameter
@@ -377,8 +397,48 @@ Respond naturally and concisely based on the conversation.`;
         reasoningEffort: "none",
         maxTokens: 2048,
       });
+      
+      // Track LLM success
+      const duration = Date.now() - startTime;
+      trackLLMSuccess({
+        feature: "ai_mention_response",
+        model: "gpt-5.1",
+        provider: "openai",
+        userId: userId,
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        completionTokens: Math.ceil((response.content?.length || 0) / 4),
+        totalTokens: estimatedPromptTokens + Math.ceil((response.content?.length || 0) / 4),
+        latencyMs: duration,
+        finishReason: response.status || "completed",
+        metadata: {
+          ai_friend_id: aiFriend.id,
+          ai_friend_name: aiName,
+          engagement_mode: "mention",
+          has_images: response.images.length > 0,
+        },
+      });
     } catch (gptError: any) {
       const duration = Date.now() - startTime;
+      
+      // Track LLM failure
+      trackLLMFailure({
+        feature: "ai_mention_response",
+        model: "gpt-5.1",
+        provider: "openai",
+        userId: userId,
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        latencyMs: duration,
+        errorType: gptError.name || "UnknownError",
+        errorMessage: gptError.message || "GPT-5.1 execution failed",
+        metadata: {
+          ai_friend_id: aiFriend.id,
+          ai_friend_name: aiName,
+          engagement_mode: "mention",
+        },
+      });
+      
       console.error(`[AI] GPT-5.1 execution FAILED after ${duration}ms:`, {
         error: gptError.message || gptError,
         chatId,
@@ -648,26 +708,66 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     console.log(`[AI Image] Final prompt:`, finalPrompt);
     console.log(`[AI Image] Final parts array has ${parts.length} parts (${referenceImages.length} images + 1 text prompt)`);
 
+    // Track LLM start
+    const startTime = Date.now();
+    const estimatedPromptTokens = Math.ceil(finalPrompt.length / 4);
+    trackLLMStart({
+      feature: "image_generation",
+      model: "gemini-3-pro-image-preview",
+      provider: "google",
+      userId: userId,
+      chatId: chatId,
+      promptLength: finalPrompt.length,
+      promptTokens: estimatedPromptTokens,
+      stream: false,
+      metadata: {
+        aspect_ratio: aspectRatio || "1:1",
+        has_reference_images: referenceImages.length > 0,
+        reference_image_count: referenceImages.length,
+      },
+    });
+
     // Call Gemini 3 Pro Image Preview API
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': process.env.GOOGLE_API_KEY!,
-          'Content-Type': 'application/json'
+    let response;
+    try {
+      response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+        {
+          method: 'POST',
+          headers: {
+            'x-goog-api-key': process.env.GOOGLE_API_KEY!,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: parts
+            }],
+            generationConfig: {
+              responseModalities: ["Image"],
+              imageConfig: { aspectRatio: aspectRatio || "1:1" }
+            }
+          })
+        }
+      );
+    } catch (fetchError: any) {
+      const latencyMs = Date.now() - startTime;
+      trackLLMFailure({
+        feature: "image_generation",
+        model: "gemini-3-pro-image-preview",
+        provider: "google",
+        userId: userId,
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        latencyMs,
+        errorType: fetchError.name || "NetworkError",
+        errorMessage: fetchError.message || "Failed to call Gemini API",
+        metadata: {
+          aspect_ratio: aspectRatio || "1:1",
+          has_reference_images: referenceImages.length > 0,
         },
-        body: JSON.stringify({
-          contents: [{
-            parts: parts
-          }],
-          generationConfig: {
-            responseModalities: ["Image"],
-            imageConfig: { aspectRatio: aspectRatio || "1:1" }
-          }
-        })
-      }
-    );
+      });
+      throw fetchError;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -722,9 +822,23 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       const finishReason = data.candidates?.[0]?.finishReason;
       console.error("[AI Image] Finish reason:", finishReason);
 
+      const latencyMs = Date.now() - startTime;
+
       // Check if content was blocked
       if (data.promptFeedback?.blockReason) {
         console.error("[AI Image] Content blocked:", data.promptFeedback.blockReason);
+        trackLLMFailure({
+          feature: "image_generation",
+          model: "gemini-3-pro-image-preview",
+          provider: "google",
+          userId: userId,
+          chatId: chatId,
+          promptTokens: estimatedPromptTokens,
+          latencyMs,
+          errorType: "ContentBlocked",
+          errorMessage: data.promptFeedback.blockReason,
+          metadata: { aspect_ratio: aspectRatio || "1:1" },
+        });
         return c.json({
           error: "Image generation blocked by safety filters. Try a different prompt.",
           details: data.promptFeedback.blockReason
@@ -734,11 +848,36 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       // Check if NO_IMAGE finish reason
       if (finishReason === "NO_IMAGE") {
         console.error("[AI Image] Model refused to generate image");
+        trackLLMFailure({
+          feature: "image_generation",
+          model: "gemini-3-pro-image-preview",
+          provider: "google",
+          userId: userId,
+          chatId: chatId,
+          promptTokens: estimatedPromptTokens,
+          latencyMs,
+          errorType: "NoImageGenerated",
+          errorMessage: "Model declined to generate image",
+          metadata: { aspect_ratio: aspectRatio || "1:1", finish_reason: finishReason },
+        });
         return c.json({
           error: "Unable to generate image for this prompt. Try simplifying or changing your request.",
           details: "Model declined to generate image"
         }, 400);
       }
+
+      trackLLMFailure({
+        feature: "image_generation",
+        model: "gemini-3-pro-image-preview",
+        provider: "google",
+        userId: userId,
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        latencyMs,
+        errorType: "GenerationFailed",
+        errorMessage: finishReason || "Unknown error",
+        metadata: { aspect_ratio: aspectRatio || "1:1", finish_reason: finishReason },
+      });
 
       return c.json({
         error: "Failed to generate image. Please try a different prompt.",
@@ -747,6 +886,28 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     }
 
     const base64Image = imagePart.inlineData.data;
+
+    // Track LLM success
+    const latencyMs = Date.now() - startTime;
+    const finishReason = data.candidates?.[0]?.finishReason || "completed";
+    trackLLMSuccess({
+      feature: "image_generation",
+      model: "gemini-3-pro-image-preview",
+      provider: "google",
+      userId: userId,
+      chatId: chatId,
+      promptTokens: estimatedPromptTokens,
+      completionTokens: 0, // Image generation doesn't return text tokens
+      totalTokens: estimatedPromptTokens,
+      latencyMs,
+      finishReason,
+      metadata: {
+        aspect_ratio: aspectRatio || "1:1",
+        has_reference_images: referenceImages.length > 0,
+        reference_image_count: referenceImages.length,
+        image_generated: true,
+      },
+    });
 
     // Save the image to Supabase Storage
     const filename = `nano-banana-${Date.now()}.png`;
@@ -946,26 +1107,61 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     console.log(`[AI Meme] Final parts array has ${parts.length} parts`);
     console.log(`[AI Meme] Meme prompt: ${memePrompt}`);
 
+    // Track LLM start
+    const startTime = Date.now();
+    const estimatedPromptTokens = Math.ceil(memePrompt.length / 4);
+    trackLLMStart({
+      feature: "meme_generation",
+      model: "gemini-3-pro-image-preview",
+      provider: "google",
+      userId: userId,
+      chatId: chatId,
+      promptLength: memePrompt.length,
+      promptTokens: estimatedPromptTokens,
+      stream: false,
+      metadata: {
+        has_reference_image: !!referenceImageBase64,
+      },
+    });
+
     // Call Gemini 3 Pro Image Preview API with meme-specific prompt
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': process.env.GOOGLE_API_KEY!,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts
-          }],
-          generationConfig: {
-            responseModalities: ["Image"],
-            imageConfig: { aspectRatio: "1:1" }
-          }
-        })
-      }
-    );
+    let response;
+    try {
+      response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+        {
+          method: 'POST',
+          headers: {
+            'x-goog-api-key': process.env.GOOGLE_API_KEY!,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts
+            }],
+            generationConfig: {
+              responseModalities: ["Image"],
+              imageConfig: { aspectRatio: "1:1" }
+            }
+          })
+        }
+      );
+    } catch (fetchError: any) {
+      const latencyMs = Date.now() - startTime;
+      trackLLMFailure({
+        feature: "meme_generation",
+        model: "gemini-3-pro-image-preview",
+        provider: "google",
+        userId: userId,
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        latencyMs,
+        errorType: fetchError.name || "NetworkError",
+        errorMessage: fetchError.message || "Failed to call Gemini API",
+        metadata: { has_reference_image: !!referenceImageBase64 },
+      });
+      throw fetchError;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -1020,9 +1216,23 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       const finishReason = data.candidates?.[0]?.finishReason;
       console.error("[AI Meme] Finish reason:", finishReason);
 
+      const latencyMs = Date.now() - startTime;
+
       // Check if content was blocked
       if (data.promptFeedback?.blockReason) {
         console.error("[AI Meme] Content blocked:", data.promptFeedback.blockReason);
+        trackLLMFailure({
+          feature: "meme_generation",
+          model: "gemini-3-pro-image-preview",
+          provider: "google",
+          userId: userId,
+          chatId: chatId,
+          promptTokens: estimatedPromptTokens,
+          latencyMs,
+          errorType: "ContentBlocked",
+          errorMessage: data.promptFeedback.blockReason,
+          metadata: { has_reference_image: !!referenceImageBase64 },
+        });
         return c.json({
           error: "Image generation blocked by safety filters. Try a different prompt.",
           details: data.promptFeedback.blockReason
@@ -1032,11 +1242,36 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       // Check if NO_IMAGE finish reason
       if (finishReason === "NO_IMAGE") {
         console.error("[AI Meme] Model refused to generate image");
+        trackLLMFailure({
+          feature: "meme_generation",
+          model: "gemini-3-pro-image-preview",
+          provider: "google",
+          userId: userId,
+          chatId: chatId,
+          promptTokens: estimatedPromptTokens,
+          latencyMs,
+          errorType: "NoImageGenerated",
+          errorMessage: "Model declined to generate image",
+          metadata: { has_reference_image: !!referenceImageBase64, finish_reason: finishReason },
+        });
         return c.json({
           error: "Unable to generate meme for this prompt. Try simplifying or changing your request.",
           details: "Model declined to generate image"
         }, 400);
       }
+
+      trackLLMFailure({
+        feature: "meme_generation",
+        model: "gemini-3-pro-image-preview",
+        provider: "google",
+        userId: userId,
+        chatId: chatId,
+        promptTokens: estimatedPromptTokens,
+        latencyMs,
+        errorType: "GenerationFailed",
+        errorMessage: finishReason || "Unknown error",
+        metadata: { has_reference_image: !!referenceImageBase64, finish_reason: finishReason },
+      });
 
       return c.json({
         error: "Failed to generate meme. Please try a different prompt.",
@@ -1045,6 +1280,26 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     }
 
     const base64Image = imagePart.inlineData.data;
+
+    // Track LLM success
+    const latencyMs = Date.now() - startTime;
+    const finishReason = data.candidates?.[0]?.finishReason || "completed";
+    trackLLMSuccess({
+      feature: "meme_generation",
+      model: "gemini-3-pro-image-preview",
+      provider: "google",
+      userId: userId,
+      chatId: chatId,
+      promptTokens: estimatedPromptTokens,
+      completionTokens: 0, // Image generation doesn't return text tokens
+      totalTokens: estimatedPromptTokens,
+      latencyMs,
+      finishReason,
+      metadata: {
+        has_reference_image: !!referenceImageBase64,
+        meme_generated: true,
+      },
+    });
 
     // Save the meme to Supabase Storage
     const filename = `meme-${Date.now()}.png`;
@@ -1553,6 +1808,24 @@ ai.post("/smart-replies", zValidator("json", smartRepliesRequestSchema), async (
     console.log("[Smart Replies] Conversation context:", conversationContext);
     console.log("[Smart Replies] Calling OpenAI with model: gpt-5-mini");
 
+    // Track LLM start
+    const startTime = Date.now();
+    const estimatedPromptTokens = Math.ceil(conversationContext.length / 4);
+    trackLLMStart({
+      feature: "smart_reply",
+      model: "gpt-5-mini",
+      provider: "openai",
+      userId: userId,
+      chatId: chatId,
+      promptLength: conversationContext.length,
+      promptTokens: estimatedPromptTokens,
+      maxTokens: 2048,
+      stream: false,
+      metadata: {
+        message_count: lastMessages.length,
+      },
+    });
+
     // Create a timeout promise that rejects after 25 seconds
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error("OpenAI API call timeout after 25 seconds")), 25000);
@@ -1608,10 +1881,28 @@ Coffee time? ☕`,
     // Race between the OpenAI call and the timeout
     const completion = await Promise.race([completionPromise, timeoutPromise]) as any;
 
+    // Track LLM success
+    const latencyMs = Date.now() - startTime;
+    const responseText = completion.choices[0]?.message?.content?.trim() || "";
+    trackLLMSuccess({
+      feature: "smart_reply",
+      model: "gpt-5-mini",
+      provider: "openai",
+      userId: userId,
+      chatId: chatId,
+      promptTokens: completion.usage?.prompt_tokens || estimatedPromptTokens,
+      completionTokens: completion.usage?.completion_tokens || Math.ceil(responseText.length / 4),
+      totalTokens: completion.usage?.total_tokens || (estimatedPromptTokens + Math.ceil(responseText.length / 4)),
+      latencyMs,
+      finishReason: completion.choices[0]?.finish_reason || "completed",
+      metadata: {
+        message_count: lastMessages.length,
+      },
+    });
+
     console.log("[Smart Replies] OpenAI response received");
     console.log("[Smart Replies] Full completion object:", JSON.stringify(completion, null, 2));
     
-    const responseText = completion.choices[0]?.message?.content?.trim() || "";
     console.log("[Smart Replies] Raw response text:", JSON.stringify(responseText));
     console.log("[Smart Replies] Response length:", responseText.length);
     
@@ -1688,8 +1979,25 @@ Coffee time? ☕`,
     }
     console.error("=== [Smart Replies] ERROR END ===");
 
-    // For timeout errors, gracefully return empty replies
+    // Track LLM failure
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const latencyMs = Date.now() - startTime;
+    trackLLMFailure({
+      feature: "smart_reply",
+      model: "gpt-5-mini",
+      provider: "openai",
+      userId: userId,
+      chatId: chatId,
+      promptTokens: estimatedPromptTokens,
+      latencyMs,
+      errorType: error instanceof Error ? error.constructor.name : "UnknownError",
+      errorMessage,
+      metadata: {
+        message_count: lastMessages.length,
+      },
+    });
+
+    // For timeout errors, gracefully return empty replies
     if (errorMessage.includes("timeout")) {
       console.log("[Smart Replies] ⏱️ Request timed out - returning empty replies gracefully");
       return c.json({ replies: [] }); // Graceful degradation for timeouts

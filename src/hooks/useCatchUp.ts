@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import type {
   ConversationSummary,
   GenerateCatchUpRequest,
@@ -9,6 +10,7 @@ import type {
 
 export function useCatchUp(chatId: string, userId: string) {
   const queryClient = useQueryClient();
+  const analytics = useAnalytics();
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Get cached catch-up summary
@@ -41,8 +43,17 @@ export function useCatchUp(chatId: string, userId: string) {
       request: Omit<GenerateCatchUpRequest, "chatId" | "userId">
     ) => {
       setIsGenerating(true);
+      const startTime = Date.now();
+      
       console.log("[useCatchUp] Starting catch-up generation...");
       console.log("[useCatchUp] Request:", { chatId, userId, ...request });
+
+      // Track LLM generation start
+      analytics.capture('llm_generation_started', {
+        feature: 'catch_up',
+        model: 'gpt-5.1',
+        chat_type: 'group',
+      });
 
       try {
         const data = await api.post<ConversationSummary>("/api/catchup/generate", {
@@ -50,10 +61,32 @@ export function useCatchUp(chatId: string, userId: string) {
           userId,
           ...request,
         });
+        
+        const duration = Date.now() - startTime;
         console.log("[useCatchUp] ✅ Summary generated successfully");
+        
+        // Track LLM generation success
+        analytics.capture('llm_generation_completed', {
+          feature: 'catch_up',
+          model: 'gpt-5.1',
+          duration_ms: duration,
+          success: true,
+        });
+        
         return data;
-      } catch (error) {
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
         console.error("[useCatchUp] ❌ Error generating summary:", error);
+        
+        // Track LLM generation failure
+        analytics.capture('llm_generation_failed', {
+          feature: 'catch_up',
+          model: 'gpt-5.1',
+          error_type: error.message || 'unknown_error',
+          error_message: error.message,
+          duration_ms: duration,
+        });
+        
         throw error;
       }
     },

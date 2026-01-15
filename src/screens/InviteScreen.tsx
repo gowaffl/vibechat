@@ -10,6 +10,7 @@ import { api, BACKEND_URL } from "@/lib/api";
 import { LuxeLogoLoader } from "@/components/LuxeLogoLoader";
 import { useUser } from "@/contexts/UserContext";
 import { getFullImageUrl } from "@/utils/imageHelpers";
+import { useAnalytics, useScreenTracking } from "@/hooks/useAnalytics";
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { GetInviteInfoResponse, JoinChatViaInviteResponse } from "@/shared/contracts";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -22,8 +23,12 @@ const InviteScreen = () => {
   const queryClient = useQueryClient();
   const { token } = route.params;
   const { colors, isDark } = useTheme();
+  const analytics = useAnalytics();
 
   const [isJoining, setIsJoining] = useState(false);
+
+  // Track invite screen view
+  useScreenTracking("Invite");
 
   // Fetch invite info
   const { data: inviteInfo, isLoading, error } = useQuery<GetInviteInfoResponse>({
@@ -35,6 +40,13 @@ const InviteScreen = () => {
   const joinChatMutation = useMutation({
     mutationFn: () => api.post<JoinChatViaInviteResponse>(`/api/invite/${token}/join`, { userId: user?.id }),
     onSuccess: async (response: JoinChatViaInviteResponse) => {
+      // Track chat joined via invite
+      analytics.capture('chat_joined', {
+        chat_id: response.chatId,
+        via_invite: true,
+        member_count: inviteInfo?.memberCount,
+      });
+      
       // Invalidate queries to refresh chat list - await to ensure data is fresh
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["user-chats"] }),

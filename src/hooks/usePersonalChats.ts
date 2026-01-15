@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/UserContext";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import type {
   PersonalConversation,
   GetPersonalConversationsResponse,
@@ -129,6 +130,7 @@ export function useAllUserAgents() {
 export function useCreatePersonalConversation() {
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const analytics = useAnalytics();
   
   return useMutation({
     mutationFn: async (data: { aiFriendId?: string | null; title?: string; folderId?: string | null }) => {
@@ -140,9 +142,16 @@ export function useCreatePersonalConversation() {
         ...data,
       });
       console.log("[useCreatePersonalConversation] Created conversation:", response);
-      return { conversation: response };
+      return { conversation: response, inputData: data };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Track personal chat creation
+      analytics.capture('chat_created', {
+        chat_type: 'personal',
+        has_ai_friend: !!result.inputData.aiFriendId,
+        conversation_id: result.conversation.id,
+      });
+      
       // Invalidate conversations list
       queryClient.invalidateQueries({ 
         queryKey: personalChatsKeys.conversations(user?.id || "")

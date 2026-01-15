@@ -96,6 +96,7 @@ import { usePolls } from "@/hooks/usePolls";
 import { useReactor } from "@/hooks/useReactor";
 import { useThreads, useThreadMessages } from "@/hooks/useThreads";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
+import { useAnalytics, useScreenTracking } from "@/hooks/useAnalytics";
 import { getInitials, getColorFromName } from "@/utils/avatarHelpers";
 import { getFullImageUrl } from "@/utils/imageHelpers";
 import { ShimmeringText } from "@/components/ShimmeringText";
@@ -1778,6 +1779,7 @@ const ChatScreen = () => {
   const { user, updateUser } = useUser();
   const queryClient = useQueryClient();
   const colorScheme = useColorScheme();
+  const analytics = useAnalytics();
 
   const { 
     activeRoom, 
@@ -1945,6 +1947,15 @@ const ChatScreen = () => {
     }
     
     const messageIds = messagesToActuallyTranslate.map((m) => m.id);
+    const startTime = Date.now();
+    
+    // Track LLM generation start
+    analytics.capture('llm_generation_started', {
+      feature: 'translation',
+      model: 'gpt-5.1',
+      input_length: messagesToActuallyTranslate.length,
+      chat_type: 'group',
+    });
     
     // DON'T add messages to translating set yet - wait for backend response
     // This prevents showing "Translating..." on messages that are already in target language
@@ -1960,6 +1971,16 @@ const ChatScreen = () => {
            targetLanguage: currentLanguage,
          }
        );
+       
+       const duration = Date.now() - startTime;
+       
+       // Track LLM generation success
+       analytics.capture('llm_generation_completed', {
+         feature: 'translation',
+         model: 'gpt-5.1',
+         duration_ms: duration,
+         success: true,
+       });
        
        // Log keys for debugging
        if (response) {
@@ -2013,9 +2034,20 @@ const ChatScreen = () => {
          console.log("[Translation] Skipped messages (already in target language):", skipped.length);
        }
     } catch (error: any) {
+      const duration = Date.now() - startTime;
+      
       // Only log error if it's not a cancellation
       if (!error?.message?.includes("canceled") && !error?.message?.includes("cancelled")) {
         console.error("[Translation] Failed to translate messages:", error);
+        
+        // Track LLM generation failure
+        analytics.capture('llm_generation_failed', {
+          feature: 'translation',
+          model: 'gpt-5.1',
+          error_type: error.message || 'unknown_error',
+          error_message: error.message,
+          duration_ms: duration,
+        });
       } else {
         console.log("[Translation] Request was canceled (likely due to component unmount or navigation)");
       }
@@ -2023,7 +2055,7 @@ const ChatScreen = () => {
       // Release lock
       translationInProgressRef.current = false;
     }
-  }, [user?.id]); // translationLanguage is accessed via ref to avoid stale closures
+  }, [user?.id, analytics]); // translationLanguage is accessed via ref to avoid stale closures
 
   const translateSingleMessage = async (messageToTranslate: Message) => {
     // Never translate own messages
@@ -2038,6 +2070,7 @@ const ChatScreen = () => {
     }
     
     const currentLanguage = translationLanguageRef.current;
+    const startTime = Date.now();
     
     // Mark message as translating
     setTranslatingMessages(prev => new Set(prev).add(messageToTranslate.id));
@@ -2062,6 +2095,8 @@ const ChatScreen = () => {
        
       console.log("[Translation] Received single translation:", translatedText ? "success" : "empty", wasSkipped ? "(already in target language - skipped)" : "");
        
+      const duration = Date.now() - startTime;
+      
       // Only store translation if it was actually translated (not skipped)
       if (translatedText && !wasSkipped) {
         setTranslatedMessages(prev => ({
@@ -2070,11 +2105,35 @@ const ChatScreen = () => {
         }));
         setTranslationVersion(v => v + 1); // Increment version to force FlashList re-render
         console.log("[Translation] Updated single message translation");
+        
+        // Track successful translation
+        analytics.capture('translation_used', {
+          from_lang: 'auto',
+          to_lang: currentLanguage,
+          char_length: messageToTranslate.content?.length || 0,
+        });
+        
+        analytics.capture('llm_generation_completed', {
+          feature: 'translation',
+          model: 'gpt-5.1',
+          duration_ms: duration,
+          success: true,
+        });
       } else if (wasSkipped) {
         console.log("[Translation] Message already in target language, no translation stored");
       }
-    } catch (error) {
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
       console.error("[Translation] Failed to translate message:", error);
+      
+      // Track LLM generation failure
+      analytics.capture('llm_generation_failed', {
+        feature: 'translation',
+        model: 'gpt-5.1',
+        error_type: error.message || 'unknown_error',
+        error_message: error.message,
+        duration_ms: duration,
+      });
     } finally {
       // Remove message from translating set
       setTranslatingMessages(prev => {
@@ -2491,6 +2550,12 @@ const ChatScreen = () => {
     queryKey: ["chat", chatId],
     queryFn: () => api.get<GetChatResponse>(`/api/chats/${chatId}?userId=${user?.id}`),
     enabled: !!user?.id && !!chatId,
+  });
+
+  // Track screen view with chat context
+  useScreenTracking("Chat", {
+    chat_id: chatId,
+    chat_type: chat?.isPersonal ? "personal" : "group",
   });
 
   // Fetch AI friends for this chat
@@ -4044,6 +4109,16 @@ const ChatScreen = () => {
         );
       }
       
+      // Track message sent event
+      analytics.capture("message_sent", {
+        type: newMessage.messageType,
+        chat_type: chat?.isPersonal ? "personal" : "group",
+        has_media: !!(newMessage.imageUrl || newMessage.voiceUrl),
+        has_mention: (newMessage.mentions && newMessage.mentions.length > 0) || false,
+        has_vibe: !!newMessage.vibeType,
+        char_length: newMessage.content?.length || 0,
+      });
+      
       // Clear state (these may have already been cleared for text messages, but need to be cleared for image/voice)
       setMessageText("");
       clearDraftMessage(); // Clear draft immediately
@@ -4086,8 +4161,17 @@ const ChatScreen = () => {
       console.log("[ChatScreen] Adding reaction:", data);
       return api.post("/api/reactions", data);
     },
-    onSuccess: (response) => {
+    onSuccess: (response, variables) => {
       console.log("[ChatScreen] Reaction added successfully:", response);
+      
+      // Track reaction added
+      analytics.capture('reaction_added', {
+        emoji: variables.emoji,
+        message_id: variables.messageId,
+        chat_id: chatId,
+        chat_type: chat?.isPersonal ? 'personal' : 'group',
+      });
+      
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -4266,22 +4350,71 @@ const ChatScreen = () => {
   // Image generation mutation
   const generateImageMutation = useMutation({
     mutationFn: async (data: { prompt: string; userId: string; aspectRatio?: string; referenceImageUrls?: string[] }) => {
+      const startTime = Date.now();
+      
       // Call backend to generate image
       console.log("[ChatScreen] Generating image via backend with prompt:", data.prompt);
       if (data.referenceImageUrls && data.referenceImageUrls.length > 0) {
         console.log("[ChatScreen] Using reference images:", data.referenceImageUrls);
       }
 
-      const result = await api.post<GenerateImageResponse>("/api/ai/generate-image", {
-        prompt: data.prompt,
-        userId: data.userId,
-        chatId: chatId,
-        aspectRatio: data.aspectRatio || "1:1",
-        referenceImageUrls: data.referenceImageUrls,
-        preview: true, // Enable preview mode
-      }, 300000); // 5 minute timeout
+      // Track LLM generation start
+      analytics.capture('llm_generation_started', {
+        feature: 'image_gen',
+        model: 'gemini-3-pro-image',
+        chat_type: 'group',
+        input_length: data.prompt.length,
+      });
 
-      return result;
+      try {
+        const result = await api.post<GenerateImageResponse>("/api/ai/generate-image", {
+          prompt: data.prompt,
+          userId: data.userId,
+          chatId: chatId,
+          aspectRatio: data.aspectRatio || "1:1",
+          referenceImageUrls: data.referenceImageUrls,
+          preview: true, // Enable preview mode
+        }, 300000); // 5 minute timeout
+
+        const duration = Date.now() - startTime;
+        
+        // Track LLM generation success
+        analytics.capture('llm_generation_completed', {
+          feature: 'image_gen',
+          model: 'gemini-3-pro-image',
+          duration_ms: duration,
+          success: true,
+        });
+        
+        // Track legacy image_generated event
+        analytics.capture('image_generated', {
+          prompt_length: data.prompt.length,
+          success: true,
+          time_taken_ms: duration,
+        });
+
+        return result;
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+        
+        // Track LLM generation failure
+        analytics.capture('llm_generation_failed', {
+          feature: 'image_gen',
+          model: 'gemini-3-pro-image',
+          error_type: error.message || 'unknown_error',
+          error_message: error.message,
+          duration_ms: duration,
+        });
+        
+        // Track legacy image_generated event (failure)
+        analytics.capture('image_generated', {
+          prompt_length: data.prompt.length,
+          success: false,
+          error_type: error.message || 'unknown_error',
+        });
+        
+        throw error;
+      }
     },
     onMutate: (data) => {
       // Immediately open preview modal with loading state
@@ -4753,6 +4886,15 @@ const ChatScreen = () => {
     console.log("[ChatScreen] TLDR submit with count:", messageCount);
     
     const limit = messageCount === "all" ? 999 : messageCount;
+    const startTime = Date.now();
+    
+    // Track LLM generation start
+    analytics.capture('llm_generation_started', {
+      feature: 'tldr',
+      model: 'gpt-5.1',
+      chat_type: 'group',
+      input_length: limit,
+    });
     
     // Clear any typing indicators
     setIsAITyping(false);
@@ -4798,6 +4940,22 @@ const ChatScreen = () => {
         limit,
       });
       
+      const duration = Date.now() - startTime;
+      
+      // Track LLM generation success
+      analytics.capture('llm_generation_completed', {
+        feature: 'tldr',
+        model: 'gpt-5.1',
+        duration_ms: duration,
+        success: true,
+      });
+      
+      // Track legacy tldr_generated event
+      analytics.capture('tldr_generated', {
+        message_count: limit,
+        time_taken_ms: duration,
+      });
+      
       // Create final TLDR message (matches original /tldr implementation)
       const tldrMessage: Message = {
         id: `tldr-${Date.now()}`,
@@ -4830,8 +4988,18 @@ const ChatScreen = () => {
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
       console.error("[ChatScreen] TLDR error:", error);
+      
+      // Track LLM generation failure
+      analytics.capture('llm_generation_failed', {
+        feature: 'tldr',
+        model: 'gpt-5.1',
+        error_type: error.message || 'unknown_error',
+        error_message: error.message,
+        duration_ms: duration,
+      });
       
       // Remove loading message on error
       if (currentThreadId) {
@@ -8415,6 +8583,12 @@ const ChatScreen = () => {
         console.log("[Chat] Share result:", result);
         
         if (result?.action === Share.sharedAction) {
+          // Track invite sent
+          analytics.capture('invite_sent', {
+            chat_id: chatId,
+            chat_type: chat?.isPersonal ? 'personal' : 'group',
+            method: 'share_sheet',
+          });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
       } catch (shareError: any) {
@@ -8422,6 +8596,14 @@ const ChatScreen = () => {
         
         // Fallback: Copy to clipboard and show alert
         await Clipboard.setStringAsync(shareMessage);
+        
+        // Track invite sent via clipboard
+        analytics.capture('invite_sent', {
+          chat_id: chatId,
+          chat_type: chat?.isPersonal ? 'personal' : 'group',
+          method: 'clipboard',
+        });
+        
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         
         Alert.alert(

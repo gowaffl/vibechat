@@ -20,15 +20,22 @@ import { useNavigation } from "@react-navigation/native";
 import type { RootStackScreenProps } from "@/navigation/types";
 import { OnboardingProgress } from "@/components/OnboardingProgress";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAnalytics, useScreenTracking } from "@/hooks/useAnalytics";
 
 const { width, height } = Dimensions.get("window");
 
 const OnboardingNameScreen = () => {
   const navigation = useNavigation<RootStackScreenProps<"OnboardingName">["navigation"]>();
   const { colors, isDark } = useTheme();
+  const analytics = useAnalytics();
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Track onboarding screen view
+  useScreenTracking("OnboardingName", {
+    onboarding_step: "name",
+  });
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -98,6 +105,12 @@ const OnboardingNameScreen = () => {
       alert("Please enter your name");
       return;
     }
+
+    // Track onboarding step completion
+    analytics.capture("onboarding_step_completed", {
+      step: "name",
+      has_bio: !!bio.trim(),
+    });
 
     Haptics.selectionAsync();
     navigation.navigate("OnboardingPhoto", {

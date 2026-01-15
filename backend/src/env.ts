@@ -1,5 +1,6 @@
 import { z } from "zod";
 import OpenAI from "openai";
+import { PostHog } from "posthog-node";
 
 /**
  * Environment variable schema using Zod
@@ -49,6 +50,10 @@ const envSchema = z.object({
   SUPABASE_S3_ACCESS_KEY: z.string().optional(),
   SUPABASE_S3_SECRET_KEY: z.string().optional(),
   SUPABASE_S3_BUCKET: z.string().optional().default("vibe-call-recordings"),
+
+  // PostHog Configuration (for analytics and LLM observability)
+  POSTHOG_API_KEY: z.string().optional(),
+  POSTHOG_HOST: z.string().optional().default("https://us.i.posthog.com"),
 });
 
 /**
@@ -90,3 +95,24 @@ export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
   baseURL: process.env.OPENAI_BASE_URL,
 });
+
+/**
+ * Initialize PostHog client for backend analytics and LLM observability
+ * Disabled if POSTHOG_API_KEY is not set
+ */
+export const posthog = env.POSTHOG_API_KEY
+  ? new PostHog(env.POSTHOG_API_KEY, {
+      host: env.POSTHOG_HOST,
+      flushAt: 20, // Batch size before flushing
+      flushInterval: 10000, // Flush every 10 seconds
+    })
+  : null;
+
+// Log PostHog status
+if (posthog) {
+  console.log("✅ PostHog analytics enabled for backend");
+} else {
+  if (process.env.NODE_ENV === "development") {
+    console.warn("⚠️ PostHog API key not set. Backend analytics will be disabled.");
+  }
+}

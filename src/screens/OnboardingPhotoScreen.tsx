@@ -27,6 +27,7 @@ import { useUser } from "@/contexts/UserContext";
 import { api, BACKEND_URL } from "@/lib/api";
 import type { UploadImageResponse, JoinChatViaInviteResponse, GetInviteInfoResponse } from "@/shared/contracts";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAnalytics, useScreenTracking } from "@/hooks/useAnalytics";
 
 const { width, height } = Dimensions.get("window");
 
@@ -36,10 +37,16 @@ const OnboardingPhotoScreen = () => {
   const { user, updateUser } = useUser();
   const { name, bio } = route.params;
   const { colors, isDark } = useTheme();
+  const analytics = useAnalytics();
 
   const [image, setImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Track onboarding screen view
+  useScreenTracking("OnboardingPhoto", {
+    onboarding_step: "photo",
+  });
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -203,6 +210,12 @@ const OnboardingPhotoScreen = () => {
 
       const imageUrl = await uploadImage(image);
 
+      // Track onboarding step completion
+      analytics.capture("onboarding_step_completed", {
+        step: "photo",
+        has_photo: true,
+      });
+
       await updateUser({
         name,
         bio,
@@ -231,6 +244,12 @@ const OnboardingPhotoScreen = () => {
     try {
       setIsSubmitting(true);
       Haptics.selectionAsync();
+
+      // Track onboarding step completion (skipped photo)
+      analytics.capture("onboarding_step_completed", {
+        step: "photo",
+        has_photo: false,
+      });
 
       await updateUser({
         name,
