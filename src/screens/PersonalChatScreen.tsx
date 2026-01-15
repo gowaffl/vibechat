@@ -458,7 +458,7 @@ function StreamingContentPreview({ content, isDark, colors }: { content: string;
       layout={Layout.springify()}
       style={styles.streamingContentContainer}
     >
-      {/* Render streaming content with Markdown */}
+      {/* Render streaming content with Markdown - Selectable text enabled */}
       <Markdown
         style={{
           body: { color: colors.text, fontSize: 16, lineHeight: 24 },
@@ -506,6 +506,50 @@ function StreamingContentPreview({ content, isDark, colors }: { content: string;
           paragraph: { color: colors.text, fontSize: 16, lineHeight: 24, marginVertical: 4 },
           text: { color: colors.text, fontSize: 16 },
         }}
+        rules={{
+          // Enable text selection for all text elements
+          text: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.text} selectable={true}>
+              {children}
+            </Text>
+          ),
+          paragraph: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.paragraph} selectable={true}>
+              {children}
+            </Text>
+          ),
+          strong: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.strong} selectable={true}>
+              {children}
+            </Text>
+          ),
+          em: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.em} selectable={true}>
+              {children}
+            </Text>
+          ),
+          code_inline: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.code_inline} selectable={true}>
+              {children}
+            </Text>
+          ),
+          heading1: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.heading1} selectable={true}>
+              {children}
+            </Text>
+          ),
+          heading2: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.heading2} selectable={true}>
+              {children}
+            </Text>
+          ),
+          heading3: (node, children, parent, styles) => (
+            <Text key={node.key} style={styles.heading3} selectable={true}>
+              {children}
+            </Text>
+          ),
+        }}
+        mergeStyle={true}
       >
         {content}
       </Markdown>
@@ -1689,14 +1733,8 @@ export default function PersonalChatScreen() {
             </View>
           )}
 
-          {/* AI Response with Markdown - Wrapped in Pressable for long-press copy */}
-          <Pressable
-            onLongPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              handleCopyMessage(message.content);
-            }}
-            delayLongPress={500}
-          >
+          {/* AI Response with Markdown - Selectable text enabled */}
+          <View>
             <Markdown
               style={{
                 body: { color: colors.text, fontSize: 16, lineHeight: 24 },
@@ -1763,10 +1801,54 @@ export default function PersonalChatScreen() {
                 text: { color: colors.text, fontSize: 16 },
                 hr: { backgroundColor: colors.border, height: 1, marginVertical: 12 },
               }}
+              rules={{
+                // Enable text selection for all text elements
+                text: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.text} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                paragraph: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.paragraph} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                strong: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.strong} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                em: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.em} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                code_inline: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.code_inline} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                heading1: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.heading1} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                heading2: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.heading2} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+                heading3: (node, children, parent, styles) => (
+                  <Text key={node.key} style={styles.heading3} selectable={true}>
+                    {children}
+                  </Text>
+                ),
+              }}
+              mergeStyle={true}
             >
               {message.content}
             </Markdown>
-          </Pressable>
+          </View>
 
           {/* Generated image preview */}
           {message.generatedImageUrl && (

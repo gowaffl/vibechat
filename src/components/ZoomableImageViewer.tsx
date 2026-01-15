@@ -273,21 +273,64 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
         return;
       }
 
-      // Get file extension from URL or default to jpg
-      const extension = currentImageUrl.split(".").pop()?.split("?")[0] || "jpg";
-      const fileName = `vibechat_${Date.now()}.${extension}`;
+      // Download the image first
+      const fileName = `vibechat_${Date.now()}.jpg`;
       const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
       
       console.log("Downloading to:", fileUri);
       const downloadResult = await FileSystem.downloadAsync(currentImageUrl, fileUri);
       
-      console.log("Saving to library...");
-      await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
+      // Get the actual content type from the download response
+      const headers = downloadResult.headers;
+      const contentType = headers["content-type"] || headers["Content-Type"] || "image/jpeg";
+      console.log("Downloaded content type:", contentType);
+      
+      // Map content type to a proper file extension that MediaLibrary supports
+      let finalExtension = "jpg";
+      if (contentType.includes("png")) {
+        finalExtension = "png";
+      } else if (contentType.includes("gif")) {
+        finalExtension = "gif";
+      } else if (contentType.includes("webp")) {
+        finalExtension = "webp";
+      } else if (contentType.includes("heic") || contentType.includes("heif")) {
+        finalExtension = "heic";
+      }
+      
+      // If the extension doesn't match, rename the file
+      const finalFileName = `vibechat_${Date.now()}.${finalExtension}`;
+      const finalFileUri = `${FileSystem.cacheDirectory}${finalFileName}`;
+      
+      if (finalExtension !== "jpg") {
+        console.log("Renaming file to match content type:", finalFileUri);
+        await FileSystem.moveAsync({
+          from: fileUri,
+          to: finalFileUri,
+        });
+      }
+      
+      const uriToSave = finalExtension !== "jpg" ? finalFileUri : downloadResult.uri;
+      console.log("Saving to library:", uriToSave);
+      
+      await MediaLibrary.saveToLibraryAsync(uriToSave);
 
       Alert.alert("Success", "Image saved to your library!");
     } catch (error) {
       console.error("Error saving image:", error);
-      Alert.alert("Error", "Failed to save image");
+      
+      // Provide more specific error messages
+      let errorMessage = "Failed to save image";
+      if (error instanceof Error) {
+        if (error.message.includes("not supported")) {
+          errorMessage = "This image format is not supported for saving";
+        } else if (error.message.includes("permission")) {
+          errorMessage = "Permission denied to save image";
+        } else {
+          errorMessage = `Failed to save image: ${error.message}`;
+        }
+      }
+      
+      Alert.alert("Error", errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -303,9 +346,36 @@ export const ZoomableImageViewer: React.FC<ZoomableImageViewerProps> = ({
         return;
       }
 
-      const fileUri = `${FileSystem.cacheDirectory}share-image.jpg`;
+      // Download the image
+      const fileName = `vibechat_share_${Date.now()}.jpg`;
+      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
       const downloadResult = await FileSystem.downloadAsync(currentImageUrl, fileUri);
-      await Sharing.shareAsync(downloadResult.uri);
+      
+      // Get content type and use appropriate extension
+      const headers = downloadResult.headers;
+      const contentType = headers["content-type"] || headers["Content-Type"] || "image/jpeg";
+      
+      let finalExtension = "jpg";
+      if (contentType.includes("png")) {
+        finalExtension = "png";
+      } else if (contentType.includes("gif")) {
+        finalExtension = "gif";
+      } else if (contentType.includes("webp")) {
+        finalExtension = "webp";
+      }
+      
+      // Rename if needed
+      if (finalExtension !== "jpg") {
+        const finalFileName = `vibechat_share_${Date.now()}.${finalExtension}`;
+        const finalFileUri = `${FileSystem.cacheDirectory}${finalFileName}`;
+        await FileSystem.moveAsync({
+          from: fileUri,
+          to: finalFileUri,
+        });
+        await Sharing.shareAsync(finalFileUri);
+      } else {
+        await Sharing.shareAsync(downloadResult.uri);
+      }
     } catch (error) {
       console.error("Error sharing image:", error);
       Alert.alert("Error", "Failed to share image");

@@ -12,13 +12,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vibecodeapp.vibechat",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "associatedDomains": [
         "applinks:vibechat-zdok.onrender.com"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["audio", "voip"],
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ],
         "NSCalendarsUsageDescription": "VibeChat needs access to your calendar to create and manage event reminders for your group chats.",
         "NSCalendarsWriteOnlyAccessUsageDescription": "VibeChat needs to add events to your calendar for group chat scheduling.",
         "NSCalendarsFullAccessUsageDescription": "VibeChat needs full calendar access to create and manage event reminders for your group chats.",
@@ -38,7 +41,7 @@
     "android": {
       "edgeToEdgeEnabled": true,
       "package": "com.vibecodeapp.vibechat",
-      "versionCode": 7,
+      "versionCode": 8,
       "permissions": [
         "RECORD_AUDIO",
         "FOREGROUND_SERVICE",
@@ -59,7 +62,8 @@
           "microphonePermission": "Allow VibeChat to access your microphone",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "extra": {
       "eas": {

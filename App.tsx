@@ -12,6 +12,8 @@ import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import * as Notifications from "expo-notifications";
 import { useEffect, useRef } from "react";
 import { ToastProvider } from "@/components/Toast";
+import { PostHogProvider } from "posthog-react-native";
+import { POSTHOG_API_KEY, POSTHOG_HOST } from "@/config";
 
 // React Navigation linking configuration for universal links and deep links
 // This declaratively maps URL paths to screens - React Navigation handles parsing automatically
@@ -129,17 +131,36 @@ const AppContent = () => {
 };
 
 export default function App() {
+  // Only enable PostHog if API key is provided
+  const isPostHogEnabled = POSTHOG_API_KEY && POSTHOG_API_KEY.length > 0;
+
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-      <ToastProvider>
-        <UserProvider>
-          <ThemeProvider>
-            <KeyboardProvider>
-              <AppContent />
-            </KeyboardProvider>
-          </ThemeProvider>
-        </UserProvider>
-      </ToastProvider>
-    </PersistQueryClientProvider>
+    <PostHogProvider
+      apiKey={POSTHOG_API_KEY || "placeholder"}
+      options={{
+        host: POSTHOG_HOST,
+        disabled: !isPostHogEnabled,
+        // Disable autocapture to prevent navigation errors
+        captureNativeAppLifecycleEvents: false,
+      }}
+      autocapture={{
+        // Disable automatic screen tracking - we'll do it manually via useScreenTracking
+        captureScreens: false,
+        captureTouches: false,
+        captureLifecycleEvents: false,
+      }}
+    >
+      <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+        <ToastProvider>
+          <UserProvider>
+            <ThemeProvider>
+              <KeyboardProvider>
+                <AppContent />
+              </KeyboardProvider>
+            </ThemeProvider>
+          </UserProvider>
+        </ToastProvider>
+      </PersistQueryClientProvider>
+    </PostHogProvider>
   );
 }
