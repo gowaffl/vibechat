@@ -1848,10 +1848,19 @@ const ChatScreen = () => {
     try {
       // Mark that user intentionally closed before doing anything else
       hasUserClosedVoiceModalRef.current = true;
-      setVoiceModalVisible(false);
+      
+      // CRITICAL: Call backend to leave room FIRST before closing modal
+      // This ensures the participant is properly removed from the database
+      console.log('[ChatScreen] handleLeaveRoom - calling leaveRoom() first');
       await leaveRoom();
+      console.log('[ChatScreen] handleLeaveRoom - leaveRoom completed, closing modal');
+      
+      // Now close the modal after backend has been notified
+      setVoiceModalVisible(false);
     } catch (error) {
       console.error("Failed to leave Vibe Call", error);
+      // Still close modal on error to not leave user stuck
+      setVoiceModalVisible(false);
       Alert.alert("Error", "Failed to leave Vibe Call");
     }
   };
@@ -11096,9 +11105,8 @@ const ChatScreen = () => {
           serverUrl={voiceServerUrl || ""}
           roomName={activeRoom?.name || "Vibe Call"}
           onLeave={() => {
-              // If user manually closes/leaves
+              // If user manually closes/leaves - handleLeaveRoom handles everything
               handleLeaveRoom();
-              setVoiceModalVisible(false);
           }}
           isConnecting={isJoiningVoice}
           chatInputHeight={chatInputHeight}

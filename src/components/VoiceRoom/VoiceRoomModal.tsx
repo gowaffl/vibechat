@@ -22,8 +22,9 @@ import {
   useRemoteParticipants,
   useTracks,
   useRoomContext,
+  AudioTrack,
 } from "@livekit/react-native";
-import { Track, ParticipantEvent } from "livekit-client";
+import { Track, ParticipantEvent, RemoteTrackPublication } from "livekit-client";
 import { Mic, MicOff, PhoneOff, Volume2, VolumeX, Maximize2, Minimize2, X, ChevronDown, Phone } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
@@ -331,10 +332,12 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 connect={!!(token && serverUrl)}
                 options={{
                     publishDefaults: {
-                        audio: true,
-                        video: false,
+                        audioPreset: {
+                          maxBitrate: 48000, // Voice-optimized bitrate
+                        },
                     },
                     adaptiveStream: true,
+                    dynacast: true, // Only send media to subscribers who want it
                     disconnectOnPageLeave: true,
                     stopLocalTrackOnUnpublish: true,
                 }}
@@ -405,11 +408,19 @@ const RoomContent = ({
   }, [user, localParticipant]);
 
   const tracks = useTracks([Track.Source.Microphone]);
+  
+  // Get all remote audio tracks to render them (CRITICAL for hearing other participants)
+  const remoteAudioTracks = tracks.filter(
+    (track) => track.participant.identity !== localParticipant.identity && 
+               track.source === Track.Source.Microphone &&
+               track.publication?.track
+  );
 
   // Debug room connection state
   useEffect(() => {
     console.log('[RoomContent] isConnecting:', isConnecting, 'Room state:', room.state);
-  }, [isConnecting, room.state]);
+    console.log('[RoomContent] Remote audio tracks:', remoteAudioTracks.length);
+  }, [isConnecting, room.state, remoteAudioTracks.length]);
 
   // Check if room is actually connected
   const isRoomConnected = room.state === 'connected';
@@ -456,6 +467,14 @@ const RoomContent = ({
 
   return (
     <View style={{ flex: 1 }}>
+        {/* CRITICAL: Render AudioTrack for each remote participant to hear them */}
+        {remoteAudioTracks.map((track) => (
+          <AudioTrack
+            key={`${track.participant.identity}-${track.source}`}
+            track={track.publication?.track as any}
+          />
+        ))}
+        
         <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
         <LinearGradient
             colors={['rgba(17, 24, 39, 0.7)', 'rgba(17, 24, 39, 0.95)']}

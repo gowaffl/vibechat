@@ -324,7 +324,13 @@ app.post("/join", async (c) => {
       })
     });
 
-    at.addGrant({ roomJoin: true, room: roomName });
+    at.addGrant({ 
+      roomJoin: true, 
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
 
     const token = await at.toJwt();
 
