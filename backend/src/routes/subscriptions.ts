@@ -26,6 +26,7 @@ import {
   getUserUsage,
   getAllRemainingUsage,
 } from "../services/usage-tracking-service";
+import { env } from "../env";
 
 const subscriptions = new Hono<AppType>();
 
@@ -181,6 +182,19 @@ subscriptions.post(
  */
 subscriptions.post("/webhook", async (c) => {
   try {
+    // Verify webhook authorization if token is configured
+    if (env.REVENUECAT_WEBHOOK_TOKEN) {
+      const authHeader = c.req.header("Authorization");
+      const expectedAuth = `Bearer ${env.REVENUECAT_WEBHOOK_TOKEN}`;
+      
+      if (!authHeader || authHeader !== expectedAuth) {
+        console.warn("[Subscriptions] Unauthorized webhook request rejected");
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+    } else {
+      console.warn("[Subscriptions] ⚠️ REVENUECAT_WEBHOOK_TOKEN not set - webhooks are not secured!");
+    }
+
     const body = await c.req.json();
     
     // Validate webhook payload

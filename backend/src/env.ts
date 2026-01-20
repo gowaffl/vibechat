@@ -54,6 +54,10 @@ const envSchema = z.object({
   // PostHog Configuration (for analytics and LLM observability)
   POSTHOG_API_KEY: z.string().optional(),
   POSTHOG_HOST: z.string().optional().default("https://us.i.posthog.com"),
+
+  // RevenueCat Configuration (for backend subscription management)
+  REVENUECAT_SECRET_KEY: z.string().optional(), // V2 Secret API Key (starts with sk_)
+  REVENUECAT_WEBHOOK_TOKEN: z.string().optional(), // For webhook verification
 });
 
 /**
