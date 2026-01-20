@@ -85,6 +85,8 @@ import { usePersonalChatStreaming, type StreamingState as StreamingHookState } f
 import type { RootStackScreenProps } from "@/navigation/types";
 import type { AIFriend, PersonalConversation, PersonalMessage, PersonalMessageMetadata } from "@/shared/contracts";
 import { ZoomableImageViewer } from "@/components/ZoomableImageViewer";
+import { UpgradePrompt, type UpgradeFeature } from "@/components/UpgradePrompt";
+import type { RateLimitError } from "@/hooks/usePersonalChatStreaming";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MIN_INPUT_HEIGHT = 40;
@@ -608,6 +610,11 @@ export default function PersonalChatScreen() {
   const [optimisticUserMessage, setOptimisticUserMessage] = useState<OptimisticUserMessage | null>(null);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  
+  // Upgrade prompt state for rate limit handling
+  const [upgradePromptVisible, setUpgradePromptVisible] = useState(false);
+  const [upgradePromptFeature, setUpgradePromptFeature] = useState<UpgradeFeature>("personal_message");
+  const [upgradePromptDescription, setUpgradePromptDescription] = useState<string | undefined>();
 
   // Refs
   const isInputFocused = useRef(false);
@@ -1059,6 +1066,35 @@ export default function PersonalChatScreen() {
       if (!error.includes("HTTP")) {
         Alert.alert("Error", error || "Failed to get AI response. Please try again.");
       }
+    },
+    onRateLimitExceeded: (error: RateLimitError) => {
+      console.log("[PersonalChat] Rate limit exceeded:", error.code, error.message);
+      
+      // Clear streaming state
+      setStreaming((prev) => ({ 
+        ...prev, 
+        isStreaming: false, 
+        isThinking: false, 
+        currentToolCall: null,
+        error: error.message 
+      }));
+      setOptimisticUserMessage(null);
+      
+      // Show upgrade prompt based on the error code
+      let feature: UpgradeFeature = "personal_message";
+      if (error.code === "DAILY_MESSAGE_LIMIT_EXCEEDED") {
+        feature = "personal_message";
+      } else if (error.code === "MONTHLY_IMAGE_LIMIT_EXCEEDED") {
+        feature = "image_generation";
+      } else if (error.code === "MONTHLY_AI_CALL_LIMIT_EXCEEDED") {
+        feature = "ai_call";
+      } else if (error.code === "PRO_PLAN_REQUIRED") {
+        feature = "vibe_call";
+      }
+      
+      setUpgradePromptFeature(feature);
+      setUpgradePromptDescription(error.details);
+      setUpgradePromptVisible(true);
     },
     // Always called when streaming finishes (success or error)
     // This ensures we have the latest data without causing a flash
@@ -2506,6 +2542,14 @@ export default function PersonalChatScreen() {
           setImageViewerVisible(false);
           setSelectedImageUrl(null);
         }}
+      />
+      
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        visible={upgradePromptVisible}
+        onClose={() => setUpgradePromptVisible(false)}
+        feature={upgradePromptFeature}
+        customDescription={upgradePromptDescription}
       />
     </View>
   );

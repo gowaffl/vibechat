@@ -27,6 +27,10 @@ import {
 } from "../services/content-safety";
 import { setAITypingStatus } from "./chats";
 import { decryptMessages } from "../services/message-encryption";
+import {
+  checkUsageLimit,
+  incrementUsage,
+} from "../services/usage-tracking-service";
 
 const app = new Hono<AppType>();
 
@@ -335,6 +339,22 @@ app.post("/execute", async (c) => {
   const chatId = validatedData.chatId;
 
   try {
+    // ============================================================================
+    // RATE LIMIT CHECK - AI calls monthly limit (custom commands count as AI calls)
+    // ============================================================================
+    const usageCheck = await checkUsageLimit(validatedData.userId, "ai_call");
+    if (!usageCheck.allowed) {
+      console.log(`[CustomCommands] Rate limit exceeded for user ${validatedData.userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      return c.json({
+        error: "Monthly AI call limit reached",
+        code: "RATE_LIMIT_EXCEEDED",
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+        resetsAt: usageCheck.resetsAt,
+        upgradeUrl: "/subscription",
+      }, 429);
+    }
+
     // RACE CONDITION PREVENTION: Acquire lock using shared lock module
     const { acquireAIResponseLock, releaseAIResponseLock } = await import("../services/ai-locks");
     
@@ -687,6 +707,9 @@ Please respond according to the command instructions above.`;
       setAITypingStatus(chatId, aiFriendForCommand.id, false);
       console.log(`[CustomCommands] 💬 AI typing indicator cleared for ${aiFriendForCommand.name}`);
     }
+
+    // Increment usage count after successful command execution
+    await incrementUsage(validatedData.userId, "ai_call");
 
     return c.json(messageResponse);
   } catch (error) {

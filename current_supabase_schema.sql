@@ -502,3 +502,89 @@ CREATE POLICY "Users can update their own folders" ON personal_chat_folder
 
 CREATE POLICY "Users can delete their own folders" ON personal_chat_folder
   FOR DELETE USING (auth.uid()::text = "userId");
+
+-- ============================================================================
+-- SUBSCRIPTION & MONETIZATION TABLES (2026-01-20)
+-- ============================================================================
+-- RevenueCat-powered subscription system with usage tracking
+-- Tiers: Free, Plus ($5/mo), Pro ($20/mo)
+-- 7-day Pro trial for all new users
+
+-- User Subscription Table
+-- Stores RevenueCat subscription state and entitlements
+CREATE TABLE IF NOT EXISTS public.user_subscription (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "userId" text NOT NULL UNIQUE REFERENCES public."user"(id) ON DELETE CASCADE,
+  "subscriptionTier" text NOT NULL DEFAULT 'free' CHECK ("subscriptionTier" IN ('free', 'plus', 'pro')),
+  "revenueCatCustomerId" text,
+  "revenueCatEntitlementId" text,
+  "isTrialActive" boolean NOT NULL DEFAULT false,
+  "trialStartedAt" timestamp without time zone,
+  "trialEndsAt" timestamp without time zone,
+  "subscriptionStartedAt" timestamp without time zone,
+  "subscriptionExpiresAt" timestamp without time zone,
+  "lastVerifiedAt" timestamp without time zone,
+  "createdAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User Usage Table
+-- Tracks daily/monthly usage for rate-limited features
+CREATE TABLE IF NOT EXISTS public.user_usage (
+  id text PRIMARY KEY DEFAULT (extensions.uuid_generate_v4())::text,
+  "userId" text NOT NULL UNIQUE REFERENCES public."user"(id) ON DELETE CASCADE,
+  -- Personal chat messages (daily limit)
+  "personalMessagesCount" integer NOT NULL DEFAULT 0,
+  "personalMessagesResetAt" timestamp without time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '1 day'),
+  -- Image generations (monthly limit)
+  "imageGenerationsCount" integer NOT NULL DEFAULT 0,
+  "imageGenerationsResetAt" timestamp without time zone NOT NULL DEFAULT (date_trunc('month', CURRENT_TIMESTAMP) + INTERVAL '1 month'),
+  -- AI calls: @ai mentions, slash commands, workflow runs (monthly limit)
+  "aiCallsCount" integer NOT NULL DEFAULT 0,
+  "aiCallsResetAt" timestamp without time zone NOT NULL DEFAULT (date_trunc('month', CURRENT_TIMESTAMP) + INTERVAL '1 month'),
+  "createdAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for user_subscription
+CREATE INDEX IF NOT EXISTS user_subscription_user_idx ON public.user_subscription("userId");
+CREATE INDEX IF NOT EXISTS user_subscription_tier_idx ON public.user_subscription("subscriptionTier");
+CREATE INDEX IF NOT EXISTS user_subscription_trial_idx ON public.user_subscription("isTrialActive") WHERE "isTrialActive" = true;
+CREATE INDEX IF NOT EXISTS user_subscription_revenuecat_idx ON public.user_subscription("revenueCatCustomerId");
+
+-- Indexes for user_usage
+CREATE INDEX IF NOT EXISTS user_usage_user_idx ON public.user_usage("userId");
+
+-- Enable RLS for subscription tables
+ALTER TABLE public.user_subscription ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_usage ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for user_subscription
+CREATE POLICY "Users can view their own subscription" ON public.user_subscription
+  FOR SELECT USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can update their own subscription" ON public.user_subscription
+  FOR UPDATE USING (auth.uid()::text = "userId");
+
+-- RLS Policies for user_usage
+CREATE POLICY "Users can view their own usage" ON public.user_usage
+  FOR SELECT USING (auth.uid()::text = "userId");
+
+CREATE POLICY "Users can update their own usage" ON public.user_usage
+  FOR UPDATE USING (auth.uid()::text = "userId");
+
+-- Trigger to auto-create subscription and usage records for new users
+DROP TRIGGER IF EXISTS on_user_created_init_subscription ON public."user";
+CREATE TRIGGER on_user_created_init_subscription
+  AFTER INSERT ON public."user"
+  FOR EACH ROW
+  EXECUTE FUNCTION initialize_user_subscription();
+
+-- Comments for documentation
+COMMENT ON TABLE public.user_subscription IS 'Stores RevenueCat subscription state, entitlements, and trial info for monetization';
+COMMENT ON TABLE public.user_usage IS 'Tracks daily/monthly usage for rate-limited features (personal messages, image generations, AI calls)';
+COMMENT ON COLUMN public.user_subscription."subscriptionTier" IS 'Current subscription tier: free, plus ($5/mo), or pro ($20/mo)';
+COMMENT ON COLUMN public.user_subscription."isTrialActive" IS 'True if user is in their 7-day Pro trial period';
+COMMENT ON COLUMN public.user_usage."personalMessagesCount" IS 'Daily count of personal chat messages sent';
+COMMENT ON COLUMN public.user_usage."imageGenerationsCount" IS 'Monthly count of image generations across group and personal chats';
+COMMENT ON COLUMN public.user_usage."aiCallsCount" IS 'Monthly count of AI calls (@ai mentions, slash commands, workflow runs)';

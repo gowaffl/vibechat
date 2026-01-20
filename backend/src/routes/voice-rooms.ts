@@ -11,6 +11,7 @@ import {
   type GetActiveVoiceRoomResponse,
 } from "@shared/contracts";
 import type { AppType } from "../index";
+import { getUserSubscription } from "../services/subscription-service";
 
 const app = new Hono<AppType>();
 
@@ -210,6 +211,22 @@ app.post("/join", async (c) => {
     const body = await c.req.json();
     const validatedData = joinVoiceRoomRequestSchema.parse(body);
     const { chatId, userId } = validatedData;
+
+    // ============================================================================
+    // PRO-ONLY CHECK - Vibe Calls are only available for Pro subscribers
+    // ============================================================================
+    const subscription = await getUserSubscription(userId);
+    const isPro = subscription?.currentPlan === "pro";
+    const isInTrial = subscription?.isTrial && subscription?.trialEndsAt && new Date(subscription.trialEndsAt) > new Date();
+    
+    if (!isPro && !isInTrial) {
+      console.log(`[VoiceRooms] User ${userId} attempted to join voice room without Pro subscription`);
+      return c.json({
+        error: "Vibe Calls are only available for Pro subscribers",
+        code: "PRO_REQUIRED",
+        upgradeUrl: "/subscription",
+      }, 403);
+    }
 
     // Check membership
     const { data: member, error: memberError } = await db

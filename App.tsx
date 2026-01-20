@@ -9,6 +9,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
+import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import * as Notifications from "expo-notifications";
 import { useEffect, useRef } from "react";
 import { ToastProvider } from "@/components/Toast";
@@ -151,15 +152,17 @@ export default function App() {
       }}
     >
       <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-        <ToastProvider>
-          <UserProvider>
-            <ThemeProvider>
-              <KeyboardProvider>
-                <AppContent />
-              </KeyboardProvider>
-            </ThemeProvider>
-          </UserProvider>
-        </ToastProvider>
+        <UserProvider>
+          <ThemeProvider>
+            <SubscriptionProvider>
+              <ToastProvider>
+                <KeyboardProvider>
+                  <AppContent />
+                </KeyboardProvider>
+              </ToastProvider>
+            </SubscriptionProvider>
+          </ThemeProvider>
+        </UserProvider>
       </PersistQueryClientProvider>
     </PostHogProvider>
   );

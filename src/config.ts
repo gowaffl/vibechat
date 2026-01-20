@@ -31,3 +31,18 @@ if (!process.env.EXPO_PUBLIC_POSTHOG_API_KEY) {
     console.warn("⚠️ PostHog API key not set. Analytics will be disabled.");
   }
 }
+
+/**
+ * RevenueCat Configuration
+ * 
+ * RevenueCat is used for subscription management and in-app purchases.
+ * Set EXPO_PUBLIC_REVENUECAT_API_KEY in your environment.
+ * The API key provided is the test key - replace with production key for release builds.
+ */
+export const REVENUECAT_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY || "test_yRYvtLzmxZeukKZSqwKPYpSXpTE";
+
+if (!process.env.EXPO_PUBLIC_REVENUECAT_API_KEY) {
+  if (__DEV__) {
+    console.warn("⚠️ RevenueCat API key not set in env. Using test key.");
+  }
+}

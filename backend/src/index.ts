@@ -84,6 +84,8 @@ import communityRouter from "./routes/community";
 import aiNativeRouter from "./routes/ai-native";
 // Personal Chats
 import personalChatsRouter from "./routes/personal-chats";
+// Subscriptions & Monetization
+import subscriptionsRouter from "./routes/subscriptions";
 
 const app = new Hono();
 
@@ -223,6 +225,10 @@ app.route("/api/ai-native", aiNativeRouter);
 // Personal Chats
 console.log("💭 Mounting personal chats routes at /api/personal-chats");
 app.route("/api/personal-chats", personalChatsRouter);
+
+// Subscriptions & Monetization
+console.log("💰 Mounting subscription routes at /api/subscription");
+app.route("/api/subscription", subscriptionsRouter);
 
 // Universal Link redirect handlers
 // These routes handle web traffic and redirect to app store if app is not installed

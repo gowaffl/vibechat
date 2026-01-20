@@ -57,6 +57,19 @@ export interface AssistantMessage {
   createdAt: string;
 }
 
+export type RateLimitErrorCode = 
+  | "DAILY_MESSAGE_LIMIT_EXCEEDED"
+  | "MONTHLY_IMAGE_LIMIT_EXCEEDED"
+  | "MONTHLY_AI_CALL_LIMIT_EXCEEDED"
+  | "PRO_PLAN_REQUIRED";
+
+export interface RateLimitError {
+  code: RateLimitErrorCode;
+  message: string;
+  details?: string;
+  currentPlan?: string;
+}
+
 export interface StreamingCallbacks {
   onUserMessage?: (message: UserMessage) => void;
   onThinkingStart?: () => void;
@@ -71,6 +84,8 @@ export interface StreamingCallbacks {
   onAssistantMessage?: (message: AssistantMessage) => void;
   onDone?: (updatedTitle?: string) => void;
   onError?: (error: string) => void;
+  // Called when a rate limit is exceeded - show upgrade prompt
+  onRateLimitExceeded?: (error: RateLimitError) => void;
   // Called when streaming finishes (success or error) - use to refetch conversation data
   onStreamingComplete?: () => void;
 }
@@ -476,7 +491,34 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
           // Check for HTTP errors
           if (xhr.status !== 200) {
             console.error("[Streaming] HTTP error:", xhr.status, xhr.statusText);
-            const errorMessage = `HTTP ${xhr.status}: ${xhr.statusText}`;
+            
+            // Try to parse error response for rate limit errors
+            let errorMessage = `HTTP ${xhr.status}: ${xhr.statusText}`;
+            let isRateLimitError = false;
+            
+            if (xhr.status === 403) {
+              try {
+                const errorBody = JSON.parse(xhr.responseText);
+                if (errorBody.code && (
+                  errorBody.code === "DAILY_MESSAGE_LIMIT_EXCEEDED" ||
+                  errorBody.code === "MONTHLY_IMAGE_LIMIT_EXCEEDED" ||
+                  errorBody.code === "MONTHLY_AI_CALL_LIMIT_EXCEEDED" ||
+                  errorBody.code === "PRO_PLAN_REQUIRED"
+                )) {
+                  isRateLimitError = true;
+                  callbacksRef.current?.onRateLimitExceeded?.({
+                    code: errorBody.code,
+                    message: errorBody.error || errorMessage,
+                    details: errorBody.details,
+                    currentPlan: errorBody.currentPlan,
+                  });
+                  errorMessage = errorBody.error || errorBody.details || errorMessage;
+                }
+              } catch (e) {
+                // Not JSON or missing expected fields, use default error
+              }
+            }
+            
             setStreamingState((prev) => ({
               ...prev,
               isStreaming: false,
@@ -484,7 +526,10 @@ export function usePersonalChatStreaming(callbacks?: StreamingCallbacks) {
               currentToolCall: null,
               error: errorMessage,
             }));
-            callbacksRef.current?.onError?.(errorMessage);
+            
+            if (!isRateLimitError) {
+              callbacksRef.current?.onError?.(errorMessage);
+            }
           } else {
             // Mark streaming as complete if not already done by a "done" event
             setStreamingState((prev) => {

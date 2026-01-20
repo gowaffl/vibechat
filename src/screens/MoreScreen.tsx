@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Info, CircleHelp, MessageSquarePlus, Share2, UserPlus, ChevronRight } from "lucide-react-native";
+import { Info, CircleHelp, MessageSquarePlus, Share2, UserPlus, ChevronRight, Crown } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "@/contexts/ThemeContext";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
@@ -123,6 +123,7 @@ const MoreScreen = () => {
 
   // Accent colors for each menu item
   const accentColors = {
+    subscription: "#F59E0B", // Amber/Gold for premium
     feedback: "#4FC3F7",    // Cyan
     help: "#A78BFA",        // Purple
     about: "#34D399",       // Emerald
@@ -178,9 +179,15 @@ const MoreScreen = () => {
           </Text>
           
           <MenuItem 
+            icon={<Crown size={22} color={accentColors.subscription} />} 
+            label="Subscription & Plans"
+            onPress={() => navigation.getParent()?.navigate("Subscription")}
+            accentColor={accentColors.subscription}
+          />
+          <MenuItem 
             icon={<MessageSquarePlus size={22} color={accentColors.feedback} />} 
             label="Feedback & Requests"
-            onPress={() => navigation.navigate("Feedback")}
+            onPress={() => navigation.getParent()?.navigate("Feedback")}
             accentColor={accentColors.feedback}
           />
           <MenuItem 

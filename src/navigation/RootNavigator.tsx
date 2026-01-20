@@ -28,6 +28,7 @@ import BirthdateScreen from "@/screens/BirthdateScreen";
 import JoinChatScreen from "@/screens/JoinChatScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import PersonalChatScreen from "@/screens/PersonalChatScreen";
+import SubscriptionScreen from "@/screens/SubscriptionScreen";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTimezoneSync } from "@/hooks/useTimezoneSync";
@@ -196,6 +197,10 @@ const RootNavigator = () => {
       <RootStack.Screen
         name="Feedback"
         component={FeedbackScreen}
+      />
+      <RootStack.Screen
+        name="Subscription"
+        component={SubscriptionScreen}
       />
       <RootStack.Screen
         name="GroupSettings"

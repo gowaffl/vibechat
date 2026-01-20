@@ -1835,3 +1835,114 @@ export const moveConversationToFolderResponseSchema = z.object({
   folderId: z.string().nullable(),
 });
 export type MoveConversationToFolderResponse = z.infer<typeof moveConversationToFolderResponseSchema>;
+
+// ============================================================================
+// SUBSCRIPTION & MONETIZATION SCHEMAS
+// ============================================================================
+
+// Subscription tier enum
+export const subscriptionTierSchema = z.enum(["free", "plus", "pro"]);
+export type SubscriptionTier = z.infer<typeof subscriptionTierSchema>;
+
+// Plan limits configuration
+export const planLimitsSchema = z.object({
+  personalMessagesPerDay: z.number(), // -1 for unlimited
+  imageGenerationsPerMonth: z.number(),
+  aiCallsPerMonth: z.number(), // -1 for unlimited
+  vibeCallsEnabled: z.boolean(),
+});
+export type PlanLimits = z.infer<typeof planLimitsSchema>;
+
+// Usage tracking
+export const userUsageSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  personalMessagesCount: z.number(),
+  personalMessagesResetAt: z.string(),
+  imageGenerationsCount: z.number(),
+  imageGenerationsResetAt: z.string(),
+  aiCallsCount: z.number(),
+  aiCallsResetAt: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type UserUsage = z.infer<typeof userUsageSchema>;
+
+// User subscription
+export const userSubscriptionSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  subscriptionTier: subscriptionTierSchema,
+  revenueCatCustomerId: z.string().nullable(),
+  revenueCatEntitlementId: z.string().nullable(),
+  isTrialActive: z.boolean(),
+  trialStartedAt: z.string().nullable(),
+  trialEndsAt: z.string().nullable(),
+  subscriptionStartedAt: z.string().nullable(),
+  subscriptionExpiresAt: z.string().nullable(),
+  lastVerifiedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type UserSubscription = z.infer<typeof userSubscriptionSchema>;
+
+// GET /api/subscription - Get user's subscription status and usage
+export const getSubscriptionStatusResponseSchema = z.object({
+  subscription: userSubscriptionSchema,
+  usage: userUsageSchema,
+  effectiveTier: subscriptionTierSchema, // Actual tier after considering trial
+  limits: planLimitsSchema, // Current plan's limits
+  remaining: z.object({
+    personalMessages: z.number(), // -1 for unlimited
+    imageGenerations: z.number(),
+    aiCalls: z.number(), // -1 for unlimited
+  }),
+});
+export type GetSubscriptionStatusResponse = z.infer<typeof getSubscriptionStatusResponseSchema>;
+
+// POST /api/subscription/sync - Sync subscription with RevenueCat
+export const syncSubscriptionRequestSchema = z.object({
+  userId: z.string(),
+  revenueCatCustomerId: z.string(),
+});
+export type SyncSubscriptionRequest = z.infer<typeof syncSubscriptionRequestSchema>;
+export const syncSubscriptionResponseSchema = z.object({
+  success: z.boolean(),
+  subscription: userSubscriptionSchema,
+  effectiveTier: subscriptionTierSchema,
+});
+export type SyncSubscriptionResponse = z.infer<typeof syncSubscriptionResponseSchema>;
+
+// POST /api/subscription/webhook - RevenueCat webhook handler
+// (Note: This is called by RevenueCat, not the client)
+export const revenueCatWebhookEventSchema = z.object({
+  event: z.object({
+    type: z.string(),
+    app_user_id: z.string(),
+    product_id: z.string().optional(),
+    entitlement_ids: z.array(z.string()).optional(),
+    expiration_at_ms: z.number().optional(),
+  }),
+  api_version: z.string(),
+});
+export type RevenueCatWebhookEvent = z.infer<typeof revenueCatWebhookEventSchema>;
+
+// Usage check response (returned when checking if action is allowed)
+export const usageCheckResponseSchema = z.object({
+  allowed: z.boolean(),
+  reason: z.string().optional(), // Reason if not allowed
+  remaining: z.number(), // -1 for unlimited
+  limit: z.number(), // -1 for unlimited
+  resetAt: z.string().optional(), // When the limit resets
+  upgradeRequired: z.boolean(), // If user should upgrade to perform action
+});
+export type UsageCheckResponse = z.infer<typeof usageCheckResponseSchema>;
+
+// Feature gate response (for Pro-only features like Vibe Calls)
+export const featureGateResponseSchema = z.object({
+  allowed: z.boolean(),
+  requiredTier: subscriptionTierSchema,
+  currentTier: subscriptionTierSchema,
+  message: z.string().optional(),
+});
+export type FeatureGateResponse = z.infer<typeof featureGateResponseSchema>;

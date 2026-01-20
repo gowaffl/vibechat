@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { db } from "../db";
+import { getUserSubscription } from "../services/subscription-service";
 
 // ============================================
 // Phone Authentication Routes
@@ -118,6 +119,13 @@ auth.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
       }
 
       user = newUser;
+
+      // Automatically start 7-day Pro trial for new users
+      // getUserSubscription creates a subscription with trial if none exists
+      const subscription = await getUserSubscription(supabaseUserId);
+      if (subscription?.isTrialActive) {
+        console.log(`[Auth] Started 7-day Pro trial for new user: ${supabaseUserId}`);
+      }
     }
 
     // Format response

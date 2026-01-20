@@ -130,6 +130,15 @@ export interface AnalyticsEvent {
   premium_feature_used?: { feature_name: string };
   premium_feature_attempted?: { feature_name: string; is_locked: boolean };
   
+  // Subscription Events (RevenueCat)
+  subscription_plan_changed?: { new_plan: string; previous_plan: string; is_trial?: boolean };
+  subscription_purchased?: { package_id: string; product_id: string; price?: number; currency?: string };
+  subscription_purchase_failed?: { package_id: string; error_code?: string; error_message?: string };
+  free_trial_started?: { trial_days: number };
+  subscription_restored?: { plan: string };
+  subscription_upgraded?: { from_plan: string; to_plan: string };
+  rate_limit_hit?: { feature: string; limit: number; current_usage: number; plan: string };
+  
   // Error & Performance Events
   error_occurred?: { error_type: string; error_message?: string; screen?: string; component_stack?: string; status_code?: number; endpoint?: string };
   slow_performance?: { operation: string; duration_ms: number };

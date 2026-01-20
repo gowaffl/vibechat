@@ -47,6 +47,10 @@ import {
   isImageFile,
 } from "../services/document-extractor";
 import {
+  checkUsageLimit,
+  incrementUsage,
+} from "../services/usage-tracking-service";
+import {
   getPersonalConversationsRequestSchema,
   createPersonalConversationRequestSchema,
   getPersonalConversationRequestSchema,
@@ -998,6 +1002,22 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
   const { userId, content, imageUrl } = c.req.valid("json");
 
   try {
+    // ============================================================================
+    // RATE LIMIT CHECK - Personal message daily limit
+    // ============================================================================
+    const usageCheck = await checkUsageLimit(userId, "personal_message");
+    if (!usageCheck.allowed) {
+      console.log(`[PersonalChats] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      return c.json({
+        error: "Daily personal message limit reached",
+        code: "RATE_LIMIT_EXCEEDED",
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+        resetsAt: usageCheck.resetsAt,
+        upgradeUrl: "/subscription",
+      }, 429);
+    }
+
     // Get conversation with AI friend details
     const { data: conversation, error: convError } = await db
       .from("personal_conversation")
@@ -1079,6 +1099,9 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
       console.error("[PersonalChats] Error saving user message:", userMsgError);
       return c.json({ error: "Failed to save message" }, 500);
     }
+
+    // Increment usage count after successful message save
+    await incrementUsage(userId, "personal_message");
 
     // Track agent usage if an AI friend is selected
     if (conversation.aiFriendId) {
@@ -1416,6 +1439,22 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     filesCount: files?.length || 0,
   });
 
+  // ============================================================================
+  // RATE LIMIT CHECK - Personal message daily limit
+  // ============================================================================
+  const usageCheck = await checkUsageLimit(userId, "personal_message");
+  if (!usageCheck.allowed) {
+    console.log(`[PersonalChats] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+    return c.json({
+      error: "Daily personal message limit reached",
+      code: "RATE_LIMIT_EXCEEDED",
+      limit: usageCheck.limit,
+      used: usageCheck.used,
+      resetsAt: usageCheck.resetsAt,
+      upgradeUrl: "/subscription",
+    }, 429);
+  }
+
   // Verify conversation exists and belongs to user
   const { data: conversation, error: convError } = await db
     .from("personal_conversation")
@@ -1552,6 +1591,9 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     console.error("[PersonalChats] Error saving user message:", userMsgError);
     return c.json({ error: "Failed to save message" }, 500);
   }
+
+  // Increment usage count after successful message save
+  await incrementUsage(userId, "personal_message");
 
   // Track agent usage if AI friend is associated
   if (aiFriend?.id) {

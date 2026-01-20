@@ -26,6 +26,10 @@ import {
 import { setAITypingStatus } from "./chats";
 import { decryptMessages } from "../services/message-encryption";
 import { trackLLMStart, trackLLMSuccess, trackLLMFailure } from "../services/llm-analytics";
+import {
+  checkUsageLimit,
+  incrementUsage,
+} from "../services/usage-tracking-service";
 
 const ai = new Hono<AppType>();
 
@@ -565,6 +569,22 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
   const { prompt, userId, chatId, aspectRatio, referenceImageUrls, preview } = c.req.valid("json");
 
   try {
+    // ============================================================================
+    // RATE LIMIT CHECK - Image generation monthly limit
+    // ============================================================================
+    const usageCheck = await checkUsageLimit(userId, "image_generation");
+    if (!usageCheck.allowed) {
+      console.log(`[AI Image] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      return c.json({
+        error: "Monthly image generation limit reached",
+        code: "RATE_LIMIT_EXCEEDED",
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+        resetsAt: usageCheck.resetsAt,
+        upgradeUrl: "/subscription",
+      }, 429);
+    }
+
     const requestId = `img-${chatId}-${Date.now()}`;
     console.log(`[AI Image] [${requestId}] Generating image for chat ${chatId}`);
     if (referenceImageUrls && referenceImageUrls.length > 0) {
@@ -918,6 +938,9 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
 
     // If preview mode, return without creating message
     if (preview) {
+      // Increment usage count after successful image generation (preview still counts as generation)
+      await incrementUsage(userId, "image_generation");
+      
       const previewId = `prev-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       console.log("[AI Image] Returning preview response:", { imageUrl, previewId });
       return c.json({
@@ -951,6 +974,9 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
       return c.json({ error: "Failed to create message" }, 500);
     }
 
+    // Increment usage count after successful image generation
+    await incrementUsage(userId, "image_generation");
+
     return c.json({
       id: message.id,
       content: message.content,
@@ -980,6 +1006,22 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
   console.log("[AI Meme] Received request:", { prompt, userId, chatId, hasReference: !!referenceImageUrl, preview });
 
   try {
+    // ============================================================================
+    // RATE LIMIT CHECK - Image generation monthly limit (memes count as images)
+    // ============================================================================
+    const usageCheck = await checkUsageLimit(userId, "image_generation");
+    if (!usageCheck.allowed) {
+      console.log(`[AI Meme] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      return c.json({
+        error: "Monthly image generation limit reached",
+        code: "RATE_LIMIT_EXCEEDED",
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+        resetsAt: usageCheck.resetsAt,
+        upgradeUrl: "/subscription",
+      }, 429);
+    }
+
     const requestId = `meme-${chatId}-${Date.now()}`;
     console.log(`[AI Meme] [${requestId}] Generating meme for chat ${chatId}`);
 
@@ -1310,6 +1352,9 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
 
     // If preview mode, return without creating message
     if (preview) {
+      // Increment usage count after successful meme generation (preview still counts as generation)
+      await incrementUsage(userId, "image_generation");
+      
       const previewId = `prev-meme-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       console.log("[AI Meme] Returning preview response:", { imageUrl, previewId });
       return c.json({
@@ -1342,6 +1387,9 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
       console.error("[AI Meme] Failed to create message:", insertError);
       return c.json({ error: "Failed to create message" }, 500);
     }
+
+    // Increment usage count after successful meme generation
+    await incrementUsage(userId, "image_generation");
 
     return c.json({
       id: message.id,
@@ -1444,6 +1492,22 @@ ai.post("/edit-image", zValidator("json", editImageRequestSchema), async (c) => 
   const { originalImageUrl, editPrompt, userId, chatId, preview } = c.req.valid("json");
 
   try {
+    // ============================================================================
+    // RATE LIMIT CHECK - Image generation monthly limit (edits count as images)
+    // ============================================================================
+    const usageCheck = await checkUsageLimit(userId, "image_generation");
+    if (!usageCheck.allowed) {
+      console.log(`[AI Edit] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      return c.json({
+        error: "Monthly image generation limit reached",
+        code: "RATE_LIMIT_EXCEEDED",
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+        resetsAt: usageCheck.resetsAt,
+        upgradeUrl: "/subscription",
+      }, 429);
+    }
+
     const requestId = `edit-${chatId}-${Date.now()}`;
     console.log(`[AI Edit] [${requestId}] Editing image for chat ${chatId}`);
 
@@ -1549,6 +1613,9 @@ ai.post("/edit-image", zValidator("json", editImageRequestSchema), async (c) => 
     const imageUrl = await uploadFileToStorage(filename, buffer, "image/png");
 
     releaseAIResponseLock(chatId);
+
+    // Increment usage count after successful image edit
+    await incrementUsage(userId, "image_generation");
 
     if (preview) {
       const previewId = `prev-edit-${Date.now()}`;
