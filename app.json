@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vibecodeapp.vibechat",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "associatedDomains": [
         "applinks:vibechat-zdok.onrender.com"
       ],
@@ -35,13 +35,13 @@
         "NSLocationWhenInUseUsageDescription": "VibeChat needs access to your location to attach location data to your photos and videos."
       },
       "entitlements": {
-        "aps-environment": "development"
+        "aps-environment": "production"
       }
     },
     "android": {
       "edgeToEdgeEnabled": true,
       "package": "com.vibecodeapp.vibechat",
-      "versionCode": 8,
+      "versionCode": 9,
       "permissions": [
         "RECORD_AUDIO",
         "FOREGROUND_SERVICE",
