@@ -342,14 +342,16 @@ app.post("/execute", async (c) => {
     // ============================================================================
     // RATE LIMIT CHECK - AI calls monthly limit (custom commands count as AI calls)
     // ============================================================================
-    const usageCheck = await checkUsageLimit(validatedData.userId, "ai_call");
+    const usageCheck = await checkUsageLimit(validatedData.userId, "aiCalls");
     if (!usageCheck.allowed) {
-      console.log(`[CustomCommands] Rate limit exceeded for user ${validatedData.userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      const used = usageCheck.limit === -1 ? 0 : usageCheck.limit - usageCheck.remaining;
+      console.log(`[CustomCommands] Rate limit exceeded for user ${validatedData.userId}. Limit: ${usageCheck.limit}, Used: ${used}, Remaining: ${usageCheck.remaining}`);
       return c.json({
         error: "Monthly AI call limit reached",
         code: "RATE_LIMIT_EXCEEDED",
         limit: usageCheck.limit,
-        used: usageCheck.used,
+        used,
+        remaining: usageCheck.remaining,
         resetsAt: usageCheck.resetsAt,
         upgradeUrl: "/subscription",
       }, 429);
@@ -709,7 +711,7 @@ Please respond according to the command instructions above.`;
     }
 
     // Increment usage count after successful command execution
-    await incrementUsage(validatedData.userId, "ai_call");
+    await incrementUsage(validatedData.userId, "aiCalls");
 
     return c.json(messageResponse);
   } catch (error) {

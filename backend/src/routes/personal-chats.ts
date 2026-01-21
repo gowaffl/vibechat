@@ -1005,14 +1005,16 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
     // ============================================================================
     // RATE LIMIT CHECK - Personal message daily limit
     // ============================================================================
-    const usageCheck = await checkUsageLimit(userId, "personal_message");
+    const usageCheck = await checkUsageLimit(userId, "personalMessages");
     if (!usageCheck.allowed) {
-      console.log(`[PersonalChats] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      const used = usageCheck.limit === -1 ? 0 : usageCheck.limit - usageCheck.remaining;
+      console.log(`[PersonalChats] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${used}, Remaining: ${usageCheck.remaining}`);
       return c.json({
         error: "Daily personal message limit reached",
         code: "RATE_LIMIT_EXCEEDED",
         limit: usageCheck.limit,
-        used: usageCheck.used,
+        used,
+        remaining: usageCheck.remaining,
         resetsAt: usageCheck.resetsAt,
         upgradeUrl: "/subscription",
       }, 429);
@@ -1101,7 +1103,7 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
     }
 
     // Increment usage count after successful message save
-    await incrementUsage(userId, "personal_message");
+    await incrementUsage(userId, "personalMessages");
 
     // Track agent usage if an AI friend is selected
     if (conversation.aiFriendId) {
@@ -1442,14 +1444,16 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
   // ============================================================================
   // RATE LIMIT CHECK - Personal message daily limit
   // ============================================================================
-  const usageCheck = await checkUsageLimit(userId, "personal_message");
+  const usageCheck = await checkUsageLimit(userId, "personalMessages");
   if (!usageCheck.allowed) {
-    console.log(`[PersonalChats] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+    const used = usageCheck.limit === -1 ? 0 : usageCheck.limit - usageCheck.remaining;
+    console.log(`[PersonalChats] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${used}, Remaining: ${usageCheck.remaining}`);
     return c.json({
       error: "Daily personal message limit reached",
       code: "RATE_LIMIT_EXCEEDED",
       limit: usageCheck.limit,
-      used: usageCheck.used,
+      used,
+      remaining: usageCheck.remaining,
       resetsAt: usageCheck.resetsAt,
       upgradeUrl: "/subscription",
     }, 429);
@@ -1593,7 +1597,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
   }
 
   // Increment usage count after successful message save
-  await incrementUsage(userId, "personal_message");
+  await incrementUsage(userId, "personalMessages");
 
   // Track agent usage if AI friend is associated
   if (aiFriend?.id) {

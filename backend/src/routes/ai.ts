@@ -572,14 +572,16 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // ============================================================================
     // RATE LIMIT CHECK - Image generation monthly limit
     // ============================================================================
-    const usageCheck = await checkUsageLimit(userId, "image_generation");
+    const usageCheck = await checkUsageLimit(userId, "imageGenerations");
     if (!usageCheck.allowed) {
-      console.log(`[AI Image] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      const used = usageCheck.limit === -1 ? 0 : usageCheck.limit - usageCheck.remaining;
+      console.log(`[AI Image] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${used}, Remaining: ${usageCheck.remaining}`);
       return c.json({
         error: "Monthly image generation limit reached",
         code: "RATE_LIMIT_EXCEEDED",
         limit: usageCheck.limit,
-        used: usageCheck.used,
+        used,
+        remaining: usageCheck.remaining,
         resetsAt: usageCheck.resetsAt,
         upgradeUrl: "/subscription",
       }, 429);
@@ -939,7 +941,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     // If preview mode, return without creating message
     if (preview) {
       // Increment usage count after successful image generation (preview still counts as generation)
-      await incrementUsage(userId, "image_generation");
+      await incrementUsage(userId, "imageGenerations");
       
       const previewId = `prev-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       console.log("[AI Image] Returning preview response:", { imageUrl, previewId });
@@ -975,7 +977,7 @@ ai.post("/generate-image", zValidator("json", generateImageRequestSchema), async
     }
 
     // Increment usage count after successful image generation
-    await incrementUsage(userId, "image_generation");
+    await incrementUsage(userId, "imageGenerations");
 
     return c.json({
       id: message.id,
@@ -1009,14 +1011,16 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     // ============================================================================
     // RATE LIMIT CHECK - Image generation monthly limit (memes count as images)
     // ============================================================================
-    const usageCheck = await checkUsageLimit(userId, "image_generation");
+    const usageCheck = await checkUsageLimit(userId, "imageGenerations");
     if (!usageCheck.allowed) {
-      console.log(`[AI Meme] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      const used = usageCheck.limit === -1 ? 0 : usageCheck.limit - usageCheck.remaining;
+      console.log(`[AI Meme] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${used}, Remaining: ${usageCheck.remaining}`);
       return c.json({
         error: "Monthly image generation limit reached",
         code: "RATE_LIMIT_EXCEEDED",
         limit: usageCheck.limit,
-        used: usageCheck.used,
+        used,
+        remaining: usageCheck.remaining,
         resetsAt: usageCheck.resetsAt,
         upgradeUrl: "/subscription",
       }, 429);
@@ -1353,7 +1357,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     // If preview mode, return without creating message
     if (preview) {
       // Increment usage count after successful meme generation (preview still counts as generation)
-      await incrementUsage(userId, "image_generation");
+      await incrementUsage(userId, "imageGenerations");
       
       const previewId = `prev-meme-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       console.log("[AI Meme] Returning preview response:", { imageUrl, previewId });
@@ -1389,7 +1393,7 @@ ai.post("/generate-meme", zValidator("json", generateMemeRequestSchema), async (
     }
 
     // Increment usage count after successful meme generation
-    await incrementUsage(userId, "image_generation");
+    await incrementUsage(userId, "imageGenerations");
 
     return c.json({
       id: message.id,
@@ -1495,14 +1499,16 @@ ai.post("/edit-image", zValidator("json", editImageRequestSchema), async (c) => 
     // ============================================================================
     // RATE LIMIT CHECK - Image generation monthly limit (edits count as images)
     // ============================================================================
-    const usageCheck = await checkUsageLimit(userId, "image_generation");
+    const usageCheck = await checkUsageLimit(userId, "imageGenerations");
     if (!usageCheck.allowed) {
-      console.log(`[AI Edit] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${usageCheck.used}`);
+      const used = usageCheck.limit === -1 ? 0 : usageCheck.limit - usageCheck.remaining;
+      console.log(`[AI Edit] Rate limit exceeded for user ${userId}. Limit: ${usageCheck.limit}, Used: ${used}, Remaining: ${usageCheck.remaining}`);
       return c.json({
         error: "Monthly image generation limit reached",
         code: "RATE_LIMIT_EXCEEDED",
         limit: usageCheck.limit,
-        used: usageCheck.used,
+        used,
+        remaining: usageCheck.remaining,
         resetsAt: usageCheck.resetsAt,
         upgradeUrl: "/subscription",
       }, 429);
@@ -1615,7 +1621,7 @@ ai.post("/edit-image", zValidator("json", editImageRequestSchema), async (c) => 
     releaseAIResponseLock(chatId);
 
     // Increment usage count after successful image edit
-    await incrementUsage(userId, "image_generation");
+    await incrementUsage(userId, "imageGenerations");
 
     if (preview) {
       const previewId = `prev-edit-${Date.now()}`;
