@@ -1673,6 +1673,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
     let fullContent = "";
     let generatedImages: Array<{ id: string; base64: string }> = [];
     let metadata: Record<string, any> = { toolsUsed: [] };
+    let keepAliveInterval: NodeJS.Timeout | undefined;
 
     try {
       // Send initial ping to establish connection immediately
@@ -1701,7 +1702,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
       });
 
       // Start a keep-alive interval to prevent proxy timeout (sends ping every 10 seconds)
-      const keepAliveInterval = setInterval(async () => {
+      keepAliveInterval = setInterval(async () => {
         try {
           await stream.writeSSE({
             event: "ping",
@@ -2121,7 +2122,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         
         console.log("[PersonalChats] [Image] All events sent, closing stream");
         // Clear keep-alive and return early
-        clearInterval(keepAliveInterval);
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
         return;
       }
 
@@ -2441,10 +2442,10 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
       }
 
       // Clear the keep-alive interval when streaming completes
-      clearInterval(keepAliveInterval);
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
     } catch (error: any) {
       // Clear the keep-alive interval on error
-      clearInterval(keepAliveInterval);
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
       console.error("[PersonalChats] Streaming error:", error);
       
       // Track LLM failure
