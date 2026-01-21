@@ -1156,14 +1156,14 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
         // Track LLM start for image generation
         estimatedPromptTokens = Math.ceil(content.length / 4);
         trackLLMStart({
-          feature: "image_generation",
-          model: "gemini-3-pro-image-preview",
-          provider: "google",
-          userId: userId,
-          chatId: conversationId,
-          aiFriendId: aiFriend.id,
-          promptLength: content.length,
-          promptTokens: estimatedPromptTokens,
+        feature: "image_generation",
+        model: "gemini-3-pro-image-preview",
+        provider: "google",
+        userId: userId,
+        chatId: conversationId,
+        aiFriendId: aiFriend?.id,
+        promptLength: content.length,
+        promptTokens: estimatedPromptTokens,
           metadata: {
             aspect_ratio: "1:1",
           },
@@ -1193,14 +1193,14 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
             // Track LLM success for image generation
             const latencyMs = Date.now() - startTime;
             trackLLMSuccess({
-              feature: "image_generation",
-              model: "gemini-3-pro-image-preview",
-              provider: "google",
-              userId: userId,
-              chatId: conversationId,
-              aiFriendId: aiFriend.id,
-              promptTokens: estimatedPromptTokens,
-              completionTokens: 0, // Image generation doesn't return text tokens
+            feature: "image_generation",
+            model: "gemini-3-pro-image-preview",
+            provider: "google",
+            userId: userId,
+            chatId: conversationId,
+            aiFriendId: aiFriend?.id,
+            promptTokens: estimatedPromptTokens,
+            completionTokens: 0, // Image generation doesn't return text tokens
               totalTokens: estimatedPromptTokens,
               latencyMs,
               finishReason: "completed",
@@ -1227,14 +1227,14 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
         const startTime = Date.now();
         const estimatedPromptTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
         trackLLMStart({
-          feature: "ai_message",
-          model: "gemini-3-flash-preview",
-          provider: "google",
-          userId: userId,
-          chatId: conversationId,
-          aiFriendId: aiFriend.id,
-          promptLength: systemPrompt.length + userPrompt.length,
-          promptTokens: estimatedPromptTokens,
+        feature: "ai_message",
+        model: "gemini-3-flash-preview",
+        provider: "google",
+        userId: userId,
+        chatId: conversationId,
+        aiFriendId: aiFriend?.id,
+        promptLength: systemPrompt.length + userPrompt.length,
+        promptTokens: estimatedPromptTokens,
           maxTokens: 8192,
           stream: false,
           metadata: {
@@ -1270,18 +1270,18 @@ personalChats.post("/:conversationId/messages", zValidator("json", sendPersonalM
           metadata.thoughtSignature = result.thoughtSignature;
         }
 
-        // Track LLM success
-        const latencyMs = Date.now() - startTime;
-        const completionTokens = Math.ceil(aiResponseContent.length / 4);
-        trackLLMSuccess({
-          feature: "ai_message",
-          model: "gemini-3-flash-preview",
-          provider: "google",
-          userId: userId,
-          chatId: conversationId,
-          aiFriendId: aiFriend.id,
-          promptTokens: estimatedPromptTokens,
-          completionTokens,
+      // Track LLM success
+      const latencyMs = Date.now() - startTime;
+      const completionTokens = Math.ceil(aiResponseContent.length / 4);
+      trackLLMSuccess({
+        feature: "ai_message",
+        model: "gemini-3-flash-preview",
+        provider: "google",
+        userId: userId,
+        chatId: conversationId,
+        aiFriendId: aiFriend?.id,
+        promptTokens: estimatedPromptTokens,
+        completionTokens,
           totalTokens: estimatedPromptTokens + completionTokens,
           latencyMs,
           finishReason: "completed",
@@ -1617,16 +1617,16 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
             lastUsedAt: new Date().toISOString(),
           })
           .eq("id", existingUsage.id);
-      } else {
-        await db
-          .from("user_agent_usage")
-          .insert({
-            userId,
-            aiFriendId: aiFriend.id,
-            usageCount: 1,
-            lastUsedAt: new Date().toISOString(),
-          });
-      }
+    } else {
+      await db
+        .from("user_agent_usage")
+        .insert({
+          userId,
+          aiFriendId: aiFriend?.id,
+          usageCount: 1,
+          lastUsedAt: new Date().toISOString(),
+        });
+    }
     } catch (usageError) {
       console.error("[PersonalChats] Error tracking agent usage:", usageError);
     }
@@ -1892,18 +1892,18 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         }, 2000); // Ping every 2 seconds during image generation
 
         try {
-          // Track LLM start for image generation
-          const imageGenStartTime = Date.now();
-          const imagePromptTokens = Math.ceil(content.length / 4);
-          trackLLMStart({
-            feature: "image_generation",
-            model: "gemini-3-pro-image-preview",
-            provider: "google",
-            userId: userId,
-            chatId: conversationId,
-            aiFriendId: aiFriend.id,
-            promptLength: content.length,
-            promptTokens: imagePromptTokens,
+        // Track LLM start for image generation
+        const imageGenStartTime = Date.now();
+        const imagePromptTokens = Math.ceil(content.length / 4);
+        trackLLMStart({
+          feature: "image_generation",
+          model: "gemini-3-pro-image-preview",
+          provider: "google",
+          userId: userId,
+          chatId: conversationId,
+          aiFriendId: aiFriend?.id,
+          promptLength: content.length,
+          promptTokens: imagePromptTokens,
             metadata: {
               aspect_ratio: "1:1",
               reference_images_count: referenceImages.length,
@@ -1937,17 +1937,17 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
               metadata.generatedImageUrl = savedImages[0];
               console.log("[PersonalChats] [Image] Sending image_generated event with URL:", savedImages[0]);
               
-              // Track LLM success for image generation
-              const imageGenLatency = Date.now() - imageGenStartTime;
-              trackLLMSuccess({
-                feature: "image_generation",
-                model: "gemini-3-pro-image-preview",
-                provider: "google",
-                userId: userId,
-                chatId: conversationId,
-                aiFriendId: aiFriend.id,
-                promptTokens: imagePromptTokens,
-                completionTokens: 0, // Image generation doesn't return text tokens
+            // Track LLM success for image generation
+            const imageGenLatency = Date.now() - imageGenStartTime;
+            trackLLMSuccess({
+              feature: "image_generation",
+              model: "gemini-3-pro-image-preview",
+              provider: "google",
+              userId: userId,
+              chatId: conversationId,
+              aiFriendId: aiFriend?.id,
+              promptTokens: imagePromptTokens,
+              completionTokens: 0, // Image generation doesn't return text tokens
                 totalTokens: imagePromptTokens,
                 latencyMs: imageGenLatency,
                 finishReason: "completed",
@@ -1997,18 +1997,18 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
           clearInterval(imageGenPingInterval);
           console.error("[PersonalChats] Image generation error:", imgError);
           
-          // Track LLM failure for image generation
-          if (typeof imageGenStartTime !== 'undefined' && typeof imagePromptTokens !== 'undefined') {
-            const imageGenLatency = Date.now() - imageGenStartTime;
-            trackLLMFailure({
-              feature: "image_generation",
-              model: "gemini-3-pro-image-preview",
-              provider: "google",
-              userId: userId,
-              chatId: conversationId,
-              aiFriendId: aiFriend.id,
-              promptTokens: imagePromptTokens,
-              latencyMs: imageGenLatency,
+        // Track LLM failure for image generation
+        if (typeof imageGenStartTime !== 'undefined' && typeof imagePromptTokens !== 'undefined') {
+          const imageGenLatency = Date.now() - imageGenStartTime;
+          trackLLMFailure({
+            feature: "image_generation",
+            model: "gemini-3-pro-image-preview",
+            provider: "google",
+            userId: userId,
+            chatId: conversationId,
+            aiFriendId: aiFriend?.id,
+            promptTokens: imagePromptTokens,
+            latencyMs: imageGenLatency,
               errorType: imgError instanceof Error ? imgError.constructor.name : "UnknownError",
               errorMessage: imgError instanceof Error ? imgError.message : String(imgError),
             });
@@ -2151,7 +2151,7 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
         provider: "google",
         userId: userId,
         chatId: conversationId,
-        aiFriendId: aiFriend.id,
+        aiFriendId: aiFriend?.id,
         promptLength: systemPrompt.length + finalUserPrompt.length,
         promptTokens: estimatedPromptTokens,
         maxTokens: 8192,
@@ -2387,18 +2387,18 @@ personalChats.post("/:conversationId/messages/stream", zValidator("json", sendPe
               .update(updateData)
               .eq("id", conversationId);
 
-            // Track LLM success
-            const streamLatencyMs = Date.now() - streamStartTime;
-            const completionTokens = Math.ceil(fullContent.length / 4);
-            trackLLMSuccess({
-              feature: "ai_message",
-              model: "gemini-3-flash-preview",
-              provider: "google",
-              userId: userId,
-              chatId: conversationId,
-              aiFriendId: aiFriend.id,
-              promptTokens: estimatedPromptTokens,
-              completionTokens,
+          // Track LLM success
+          const streamLatencyMs = Date.now() - streamStartTime;
+          const completionTokens = Math.ceil(fullContent.length / 4);
+          trackLLMSuccess({
+            feature: "ai_message",
+            model: "gemini-3-flash-preview",
+            provider: "google",
+            userId: userId,
+            chatId: conversationId,
+            aiFriendId: aiFriend?.id,
+            promptTokens: estimatedPromptTokens,
+            completionTokens,
               totalTokens: estimatedPromptTokens + completionTokens,
               latencyMs: streamLatencyMs,
               finishReason: "completed",
